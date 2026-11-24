@@ -10,6 +10,8 @@ import {
   ShoppingCart,
   Hotel,
   Building2,
+  Car,
+  Factory,
   Check,
   AlertTriangle,
   Waves,
@@ -17,10 +19,12 @@ import {
   Loader2,
   ShieldCheck,
   Ruler,
+  Store,
 } from 'lucide-react';
 import type {
   BusinessBlueprint,
   BusinessTypeId,
+  FranchiseBrand,
   PinLocationInfo,
 } from '../types/game';
 import { BUSINESS_BLUEPRINTS, MIN_BUSINESS_DISTANCE_METERS } from '../game/catalog';
@@ -39,7 +43,12 @@ interface PinDropPanelProps {
   ownBranchCount: number;
   maxBranches: number;
   distanceCheck: DistanceCheckResult;
-  onEstablish: (blueprintId: BusinessTypeId, customName: string) => void;
+  availableFranchises: FranchiseBrand[];
+  onEstablish: (
+    blueprintId: BusinessTypeId,
+    customName: string,
+    franchiseBrand?: FranchiseBrand | null
+  ) => void;
   onClose: () => void;
 }
 
@@ -60,6 +69,10 @@ function BlueprintIcon({ iconKey }: { iconKey: BusinessBlueprint['iconKey'] }) {
       return <ShoppingCart className={cls} />;
     case 'hotel':
       return <Hotel className={cls} />;
+    case 'car':
+      return <Car className={cls} />;
+    case 'factory':
+      return <Factory className={cls} />;
     default:
       return <Building2 className={cls} />;
   }
@@ -72,28 +85,47 @@ export function PinDropPanel({
   ownBranchCount,
   maxBranches,
   distanceCheck,
+  availableFranchises,
   onEstablish,
   onClose,
 }: PinDropPanelProps) {
+  const [mode, setMode] = useState<'independent' | 'franchise'>('independent');
   const [selectedId, setSelectedId] = useState<BusinessTypeId>('kafe');
+  const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>(
+    availableFranchises[0]?.id ?? ''
+  );
   const [customName, setCustomName] = useState<string>(() =>
     suggestBusinessName(location.districtName, BUSINESS_BLUEPRINTS[0].shortName)
   );
   const [nameEdited, setNameEdited] = useState(false);
 
+  const selectedFranchise =
+    mode === 'franchise'
+      ? availableFranchises.find((f) => f.id === selectedFranchiseId) ??
+        availableFranchises[0] ??
+        null
+      : null;
+
+  const effectiveTypeId = selectedFranchise ? selectedFranchise.businessType : selectedId;
   const selectedBlueprint =
-    BUSINESS_BLUEPRINTS.find((b) => b.id === selectedId) ?? BUSINESS_BLUEPRINTS[0];
+    BUSINESS_BLUEPRINTS.find((b) => b.id === effectiveTypeId) ?? BUSINESS_BLUEPRINTS[0];
 
   useEffect(() => {
     if (!nameEdited) {
-      setCustomName(suggestBusinessName(location.districtName, selectedBlueprint.shortName));
+      if (selectedFranchise) {
+        setCustomName(`${selectedFranchise.brandName} · ${location.districtName}`.slice(0, 42));
+      } else {
+        setCustomName(suggestBusinessName(location.districtName, selectedBlueprint.shortName));
+      }
     }
-  }, [location.districtName, selectedBlueprint.shortName, nameEdited]);
+  }, [location.districtName, selectedBlueprint.shortName, selectedFranchise, nameEdited]);
 
-  const cost = calculateEstablishmentCost(selectedBlueprint, location);
+  const baseCost = calculateEstablishmentCost(selectedBlueprint, location);
+  const totalCost = baseCost + (selectedFranchise?.licenseFee ?? 0);
   const affinity = getAffinityMultiplier(selectedBlueprint, location);
-  const estHourly = Math.round((selectedBlueprint.baseHourlyIncome * affinity) / 50) * 50;
-  const estPerSec = Math.round(selectedBlueprint.baseIncomePerSec * affinity);
+  const franchiseBonus = selectedFranchise ? 1.35 * (1 - selectedFranchise.royaltyRate) : 1.0;
+  const estHourly = Math.round((selectedBlueprint.baseHourlyIncome * affinity * franchiseBonus) / 50) * 50;
+  const estPerSec = Math.round(selectedBlueprint.baseIncomePerSec * affinity * franchiseBonus);
 
   const isChecking = location.landStatus === 'checking';
   const isWaterOrInvalid =
@@ -102,8 +134,8 @@ export function PinDropPanel({
     location.landStatus === 'invalid';
   const isTooClose = !distanceCheck.allowed;
   const isQuotaFull = ownBranchCount >= maxBranches;
-  const isLevelLocked = companyLevel < selectedBlueprint.minCompanyLevel;
-  const canAfford = cash >= cost;
+  const isLevelLocked = !selectedFranchise && companyLevel < selectedBlueprint.minCompanyLevel;
+  const canAfford = cash >= totalCost;
 
   const canSubmit =
     !isChecking &&
@@ -112,7 +144,8 @@ export function PinDropPanel({
     !isQuotaFull &&
     !isLevelLocked &&
     canAfford &&
-    Boolean(customName.trim());
+    Boolean(customName.trim()) &&
+    (mode === 'independent' || Boolean(selectedFranchise));
 
   const handleSelectBlueprint = (bp: BusinessBlueprint) => {
     setSelectedId(bp.id);
@@ -124,14 +157,14 @@ export function PinDropPanel({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    onEstablish(selectedBlueprint.id, customName.trim());
+    onEstablish(selectedBlueprint.id, customName.trim(), selectedFranchise);
   };
 
   return (
     <aside
       aria-label="Pin Noktasında İşletme Kur"
       data-testid="pin-drop-panel"
-      className="pointer-events-auto flex h-full w-[clamp(300px,35vw,415px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto flex h-full w-[clamp(305px,36vw,425px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
@@ -143,7 +176,8 @@ export function PinDropPanel({
             </span>
           </div>
           <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
-            {location.resolvedAddress || `${location.regionName} · ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
+            {location.resolvedAddress ||
+              `${location.regionName} · ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
           </p>
         </div>
 
@@ -224,76 +258,162 @@ export function PinDropPanel({
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          {/* 8 Business Sectors List */}
+          {/* Independent vs Franchise Mode Switcher */}
+          <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-950/40">
+            <button
+              type="button"
+              onClick={() => setMode('independent')}
+              className={`rounded-lg py-1.5 text-[11px] font-bold transition-colors ${
+                mode === 'independent'
+                  ? 'bg-amber-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              Bağımsız İşletme (13)
+            </button>
+            <button
+              type="button"
+              data-testid="pin-mode-franchise"
+              onClick={() => setMode('franchise')}
+              className={`flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-bold transition-colors ${
+                mode === 'franchise'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Store className="h-3.5 w-3.5" />
+              <span>Franchise (+%35)</span>
+            </button>
+          </div>
+
+          {/* Sector or Franchise List */}
           <div className="panel-scroll flex-1 space-y-1.5 p-2.5">
-            {BUSINESS_BLUEPRINTS.map((bp) => {
-              const bpCost = calculateEstablishmentCost(bp, location);
-              const bpAff = getAffinityMultiplier(bp, location);
-              const bpHourly = Math.round((bp.baseHourlyIncome * bpAff) / 50) * 50;
-              const locked = companyLevel < bp.minCompanyLevel;
-              const affordable = cash >= bpCost;
-              const isSelected = bp.id === selectedId;
+            {mode === 'independent'
+              ? BUSINESS_BLUEPRINTS.map((bp) => {
+                  const bpCost = calculateEstablishmentCost(bp, location);
+                  const bpAff = getAffinityMultiplier(bp, location);
+                  const bpHourly = Math.round((bp.baseHourlyIncome * bpAff) / 50) * 50;
+                  const locked = companyLevel < bp.minCompanyLevel;
+                  const affordable = cash >= bpCost;
+                  const isSelected = bp.id === selectedId;
 
-              return (
-                <button
-                  key={bp.id}
-                  type="button"
-                  onClick={() => handleSelectBlueprint(bp)}
-                  className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
-                    isSelected
-                      ? 'border-amber-500 bg-amber-50/90 dark:border-amber-500/80 dark:bg-amber-950/35'
-                      : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70'
-                  } ${locked ? 'opacity-70' : ''}`}
-                >
-                  <div
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
-                    style={{ backgroundColor: bp.accentColor }}
-                  >
-                    {locked ? <Lock className="h-4 w-4" /> : <BlueprintIcon iconKey={bp.iconKey} />}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-bold text-slate-900 dark:text-white">
-                        {bp.name}
-                      </span>
-                      <span
-                        className={`shrink-0 font-mono-num text-xs font-bold ${
-                          locked
-                            ? 'text-slate-500 dark:text-slate-400'
-                            : affordable
-                            ? 'text-slate-900 dark:text-amber-300'
-                            : 'text-red-600 dark:text-red-400'
-                        }`}
+                  return (
+                    <button
+                      key={bp.id}
+                      type="button"
+                      onClick={() => handleSelectBlueprint(bp)}
+                      className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
+                        isSelected
+                          ? 'border-amber-500 bg-amber-50/90 dark:border-amber-500/80 dark:bg-amber-950/35'
+                          : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70'
+                      } ${locked ? 'opacity-70' : ''}`}
+                    >
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+                        style={{ backgroundColor: bp.accentColor }}
                       >
-                        {formatTL(bpCost)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
-                      {locked ? (
-                        <span className="font-semibold text-amber-700 dark:text-amber-400">
-                          Şirket Sv.{bp.minCompanyLevel} gerekir
-                        </span>
-                      ) : (
-                        <span className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
-                          {formatTL(bpHourly)}/sa
-                        </span>
-                      )}
-                      <span>
-                        Kapasite: {bp.baseCapacity}
-                        {bp.id === 'avm' ? ' · +%25 Şehir Bonusu' : ''}
-                      </span>
-                    </div>
-                  </div>
+                        {locked ? (
+                          <Lock className="h-4 w-4" />
+                        ) : (
+                          <BlueprintIcon iconKey={bp.iconKey} />
+                        )}
+                      </div>
 
-                  {isSelected && !locked && (
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-600 text-white">
-                      <Check className="h-3 w-3" />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-bold text-slate-900 dark:text-white">
+                            {bp.name}
+                          </span>
+                          <span
+                            className={`shrink-0 font-mono-num text-xs font-bold ${
+                              locked
+                                ? 'text-slate-500 dark:text-slate-400'
+                                : affordable
+                                ? 'text-slate-900 dark:text-amber-300'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}
+                          >
+                            {formatTL(bpCost)}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                          {locked ? (
+                            <span className="font-semibold text-amber-700 dark:text-amber-400">
+                              Şirket Sv.{bp.minCompanyLevel} gerekir
+                            </span>
+                          ) : (
+                            <span className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
+                              {formatTL(bpHourly)}/sa
+                            </span>
+                          )}
+                          <span className="truncate">
+                            {bp.category === 'parking'
+                              ? '250m +%15 Kapasite'
+                              : bp.category === 'factory'
+                              ? '%35 Tedarik İndirimi'
+                              : bp.id === 'avm'
+                              ? '+%25 Şehir Bonusu'
+                              : `Kapasite: ${bp.baseCapacity}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isSelected && !locked && (
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-600 text-white">
+                          <Check className="h-3 w-3" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })
+              : availableFranchises.map((brand) => {
+                  const bp =
+                    BUSINESS_BLUEPRINTS.find((b) => b.id === brand.businessType) ??
+                    BUSINESS_BLUEPRINTS[0];
+                  const fullCost = calculateEstablishmentCost(bp, location) + brand.licenseFee;
+                  const affordable = cash >= fullCost;
+                  const isSel = selectedFranchise?.id === brand.id;
+
+                  return (
+                    <button
+                      key={brand.id}
+                      type="button"
+                      onClick={() => setSelectedFranchiseId(brand.id)}
+                      className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
+                        isSel
+                          ? 'border-emerald-500 bg-emerald-50/90 dark:bg-emerald-950/35'
+                          : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900'
+                      }`}
+                    >
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+                        style={{ backgroundColor: bp.accentColor }}
+                      >
+                        <BlueprintIcon iconKey={bp.iconKey} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-bold">{brand.brandName}</span>
+                          <span
+                            className={`shrink-0 font-mono-num text-xs font-bold ${
+                              affordable ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'
+                            }`}
+                          >
+                            {formatTL(fullCost)}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center justify-between text-[10px] text-slate-500">
+                          <span>
+                            {bp.name} · Lisans {formatTL(brand.licenseFee, true)}
+                          </span>
+                          <span className="font-mono-num font-bold text-amber-700 dark:text-amber-400">
+                            +%35 Ciro · %{Math.round(brand.royaltyRate * 100)} Pay
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
           </div>
 
           {/* Footer Name Input + Establish Button */}
@@ -318,7 +438,7 @@ export function PinDropPanel({
             />
 
             <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-              <span>Saatlik / Canlı Akış:</span>
+              <span>Net Saatlik / Canlı Akış:</span>
               <span className="font-mono-num font-bold text-emerald-700 dark:text-emerald-400">
                 {formatTL(estHourly)}/sa · +{formatTL(estPerSec)}/sn
               </span>
@@ -339,8 +459,10 @@ export function PinDropPanel({
                   : isLevelLocked
                   ? `Şirket Seviyesi ${selectedBlueprint.minCompanyLevel} Gerekli`
                   : canAfford
-                  ? `İşletmeyi Kur · ${formatTL(cost)}`
-                  : `Yetersiz Bakiye (${formatTL(cost)})`}
+                  ? selectedFranchise
+                    ? `Franchise Şube Aç · ${formatTL(totalCost)}`
+                    : `İşletmeyi Kur · ${formatTL(totalCost)}`
+                  : `Yetersiz Bakiye (${formatTL(totalCost)})`}
               </span>
             </button>
           </div>

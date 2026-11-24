@@ -7,9 +7,34 @@ import type {
 } from '../types/game';
 
 export const STARTING_CASH = 250_000;
+export const STARTING_CREDIT_SCORE = 1100;
 export const MIN_BUSINESS_DISTANCE_METERS = 75;
-export const AVM_SYNERGY_MULTIPLIER = 1.25; // +25% customer & income bonus for own businesses in same city with an AVM
+export const AVM_SYNERGY_MULTIPLIER = 1.25; // +25% customer & income bonus in same city with an AVM
+export const PARKING_SYNERGY_RADIUS_METERS = 250; // 250m radius for Otopark / Katlı Otopark
+export const PARKING_CAPACITY_BONUS = 0.15; // +15% customer capacity & throughput within 250m
+export const FACTORY_SUPPLY_DISCOUNT = 0.35; // 35% supply cost reduction -> boosts net margin
+export const SUPERMARKET_CHAIN_MIN_COUNT = 3;
+export const SUPERMARKET_CHAIN_DISCOUNT = 0.2; // 20% bulk procurement discount
+export const FRANCHISE_BRANCH_BONUS_MULTIPLIER = 1.35; // +35% customer & revenue bonus for franchise branches
 export const TAKEOVER_VALUATION_MULTIPLIER = 1.5; // 1.5x market valuation for hostile takeover
+export const IPO_MIN_NET_WORTH = 10_000_000; // ₺10.000.000
+export const BANK_MIN_NET_WORTH = 25_000_000; // ₺25.000.000
+
+export const FACTORY_TYPES: BusinessTypeId[] = [
+  'gida_fabrikasi',
+  'elektronik_fabrikasi',
+  'tekstil_fabrikasi',
+];
+
+export const PARKING_TYPES: BusinessTypeId[] = ['otopark', 'katli_otopark'];
+
+export const FACTORY_SUPPLIED_TYPES: BusinessTypeId[] = [
+  'kafe',
+  'restoran',
+  'supermarket',
+  'internet_kafe',
+  'ps_salonu',
+];
 
 export const BUSINESS_BLUEPRINTS: BusinessBlueprint[] = [
   {
@@ -31,6 +56,27 @@ export const BUSINESS_BLUEPRINTS: BusinessBlueprint[] = [
     accentColor: '#D97706',
     interiorTheme: 'Sıcak Ahşap & Espresso Bar',
     iconKey: 'coffee',
+    zoneAffinity: 'footTraffic',
+  },
+  {
+    id: 'otopark',
+    name: 'Otopark',
+    shortName: 'Otopark',
+    category: 'parking',
+    description: 'Şehir merkezinde düzenli pasif gelir sağlar ve 250m çapındaki kendi işletmelerinize +%15 kapasite verir.',
+    upgradeFocus: 'Otomatik bariyer, plaka tanıma ve EV şarj ünitesi',
+    baseCost: 95_000,
+    baseHourlyIncome: 6_200,
+    baseIncomePerSec: 1_240,
+    baseCapacity: 40,
+    vaultCapacitySec: 210,
+    minCompanyLevel: 1,
+    maxLevel: 10,
+    maxStaff: 5,
+    staffCostBase: 18_000,
+    accentColor: '#475569',
+    interiorTheme: 'Açık & Bariyerli Şehir Otoparkı',
+    iconKey: 'car',
     zoneAffinity: 'footTraffic',
   },
   {
@@ -97,6 +143,27 @@ export const BUSINESS_BLUEPRINTS: BusinessBlueprint[] = [
     zoneAffinity: 'footTraffic',
   },
   {
+    id: 'katli_otopark',
+    name: 'Katlı Otopark',
+    shortName: 'Katlı Otopark',
+    category: 'parking',
+    description: 'Çok katlı şehir otoparkı; yüksek araç geliri ve 250m çapındaki tüm şubelerinize +%15 müşteri kapasitesi bonusu.',
+    upgradeFocus: 'Asansörlü katlar, vale hizmeti ve hızlı şarj',
+    baseCost: 410_000,
+    baseHourlyIncome: 34_000,
+    baseIncomePerSec: 6_400,
+    baseCapacity: 140,
+    vaultCapacitySec: 260,
+    minCompanyLevel: 2,
+    maxLevel: 10,
+    maxStaff: 8,
+    staffCostBase: 62_000,
+    accentColor: '#334155',
+    interiorTheme: 'Çok Katlı Akıllı Otopark Kompleksi',
+    iconKey: 'car',
+    zoneAffinity: 'business',
+  },
+  {
     id: 'restoran',
     name: 'Restoran',
     shortName: 'Restoran',
@@ -122,7 +189,7 @@ export const BUSINESS_BLUEPRINTS: BusinessBlueprint[] = [
     name: 'Süpermarket',
     shortName: 'Süpermarket',
     category: 'retail',
-    description: 'İstikrarlı ve kesintisiz yüksek nakit akışı sağlayan güçlü perakende zinciri.',
+    description: 'İstikrarlı perakende nakit akışı; 3+ şubede Zincir Market Markası kurup toplu tedarik indirimi kazanın.',
     upgradeFocus: 'Akıllı reyonlar, taze gıda ve hızlı kasalar',
     baseCost: 820_000,
     baseHourlyIncome: 72_000,
@@ -136,6 +203,48 @@ export const BUSINESS_BLUEPRINTS: BusinessBlueprint[] = [
     accentColor: '#059669',
     interiorTheme: 'Modern Perakende & Reyon Koridorları',
     iconKey: 'shopping-cart',
+    zoneAffinity: 'business',
+  },
+  {
+    id: 'gida_fabrikasi',
+    name: 'Gıda Fabrikası',
+    shortName: 'Gıda Fabrikası',
+    category: 'factory',
+    description: 'Sanayi üretimi yapar; Kafe, Restoran, Süpermarket, İnternet Kafe ve PS Salonlarınızın tedarik maliyetini %35 düşürür.',
+    upgradeFocus: 'Otomasyon bantları, soğuk zincir ve kalite laboratuvarı',
+    baseCost: 1_250_000,
+    baseHourlyIncome: 118_000,
+    baseIncomePerSec: 21_000,
+    baseCapacity: 95,
+    vaultCapacitySec: 320,
+    minCompanyLevel: 3,
+    maxLevel: 10,
+    maxStaff: 14,
+    staffCostBase: 175_000,
+    accentColor: '#EA580C',
+    interiorTheme: 'Gıda Üretim Hattı & Lojistik Depo',
+    iconKey: 'factory',
+    zoneAffinity: 'business',
+  },
+  {
+    id: 'tekstil_fabrikasi',
+    name: 'Tekstil Fabrikası',
+    shortName: 'Tekstil Fabrikası',
+    category: 'factory',
+    description: 'Yüksek ihracat ve üretim geliri sağlar; tüm perakende ve yeme-içme zincirinize %35 tedarik sinerjisi katar.',
+    upgradeFocus: 'CNC dokuma tezgahları, tasarım stüdyosu ve ihracat hattı',
+    baseCost: 1_450_000,
+    baseHourlyIncome: 138_000,
+    baseIncomePerSec: 24_500,
+    baseCapacity: 110,
+    vaultCapacitySec: 330,
+    minCompanyLevel: 3,
+    maxLevel: 10,
+    maxStaff: 15,
+    staffCostBase: 195_000,
+    accentColor: '#9333EA',
+    interiorTheme: 'Otomatik Dokuma & İhracat Bandı',
+    iconKey: 'factory',
     zoneAffinity: 'business',
   },
   {
@@ -158,6 +267,27 @@ export const BUSINESS_BLUEPRINTS: BusinessBlueprint[] = [
     interiorTheme: 'Lüks Lobi & Süit Konaklama',
     iconKey: 'hotel',
     zoneAffinity: 'tourism',
+  },
+  {
+    id: 'elektronik_fabrikasi',
+    name: 'Elektronik Fabrikası',
+    shortName: 'Elektronik Fabrikası',
+    category: 'factory',
+    description: 'Yüksek teknolojili çip, donanım ve konsol üretimi; şubelerinizin tedarik maliyetini %35 azaltır ve holding değerini katlar.',
+    upgradeFocus: 'Temiz oda montaj robotları ve Ar-Ge çip hattı',
+    baseCost: 2_350_000,
+    baseHourlyIncome: 235_000,
+    baseIncomePerSec: 41_500,
+    baseCapacity: 130,
+    vaultCapacitySec: 360,
+    minCompanyLevel: 4,
+    maxLevel: 10,
+    maxStaff: 18,
+    staffCostBase: 310_000,
+    accentColor: '#0369A1',
+    interiorTheme: 'Robotik Montaj & Temiz Oda Üretim Tesisi',
+    iconKey: 'factory',
+    zoneAffinity: 'business',
   },
   {
     id: 'avm',
@@ -190,7 +320,7 @@ export const COMPANY_TIERS: CompanyTier[] = [
     minNetWorth: 0,
     maxBranches: 3,
     badgeColor: '#64748B',
-    unlocksText: '3 Şube Kotası · Kafe, İnternet Kafe, PS Salonu',
+    unlocksText: '3 Şube Kotası · Kafe, Otopark, İnternet Kafe, PS Salonu',
   },
   {
     level: 2,
@@ -198,39 +328,47 @@ export const COMPANY_TIERS: CompanyTier[] = [
     minNetWorth: 320_000,
     maxBranches: 5,
     badgeColor: '#0284C7',
-    unlocksText: '5 Şube Kotası · Oyun Merkezi & Restoran açılır',
+    unlocksText: '5 Şube Kotası · Oyun Merkezi, Katlı Otopark, Restoran',
   },
   {
     level: 3,
-    title: 'Zincir İşletmeci',
+    title: 'Zincir & Sanayici',
     minNetWorth: 900_000,
     maxBranches: 8,
     badgeColor: '#059669',
-    unlocksText: '8 Şube Kotası · Süpermarket açılır',
+    unlocksText: '8 Şube Kotası · Süpermarket, Gıda & Tekstil Fabrikası',
   },
   {
     level: 4,
     title: 'Büyükşehir Patronu',
     minNetWorth: 2_200_000,
-    maxBranches: 12,
+    maxBranches: 14,
     badgeColor: '#D97706',
-    unlocksText: '12 Şube Kotası · Otel yatırımı açılır',
+    unlocksText: '14 Şube Kotası · Otel & Elektronik Fabrikası',
   },
   {
     level: 5,
     title: 'Anadolu Holdingi',
     minNetWorth: 5_500_000,
-    maxBranches: 18,
+    maxBranches: 22,
     badgeColor: '#DC2626',
-    unlocksText: '18 Şube Kotası · Dev AVM yatırımı açılır',
+    unlocksText: '22 Şube Kotası · Dev AVM & Franchise Ağı',
   },
   {
     level: 6,
-    title: 'Türkiye Mülk İmparatoru',
-    minNetWorth: 15_000_000,
-    maxBranches: 30,
+    title: 'Borsa & Holding Lideri',
+    minNetWorth: 10_000_000,
+    maxBranches: 32,
+    badgeColor: '#7C3AED',
+    unlocksText: '32 Şube Kotası · Halka Arz (IPO) Kilidi Açılır',
+  },
+  {
+    level: 7,
+    title: 'Türkiye Mülk & Banka İmparatoru',
+    minNetWorth: 25_000_000,
+    maxBranches: 50,
     badgeColor: '#CA8A04',
-    unlocksText: '30 Şube Kotası · Tüm Türkiye İmparatorluğu',
+    unlocksText: '50 Şube Kotası · Kendi Bankanı Kurma Yetkisi',
   },
 ];
 
@@ -269,35 +407,35 @@ export const MISSION_CATALOG: MissionDef[] = [
   },
   {
     id: 'hire-five-staff',
-    title: 'Ekip Lideri',
-    description: 'İşletmelerinizde toplam 5 personel istihdam edin.',
-    rewardCash: 150_000,
+    title: 'İK & Otomasyon Lideri',
+    description: 'Aday havuzundan toplam 5 personel veya yönetici istihdam edin.',
+    rewardCash: 160_000,
     targetType: 'staffTotal',
     targetValue: 5,
   },
   {
-    id: 'net-worth-1m',
-    title: 'İlk Milyon Kulübü',
-    description: 'Net şirket değerinizi ₺1.000.000 üzerine çıkarın.',
-    rewardCash: 260_000,
-    targetType: 'netWorth',
-    targetValue: 1_000_000,
+    id: 'first-factory',
+    title: 'Sanayi Hamlesi',
+    description: 'İlk fabrikanızı (Gıda, Tekstil veya Elektronik) kurarak %35 tedarik avantajı kazanın.',
+    rewardCash: 450_000,
+    targetType: 'factoryCount',
+    targetValue: 1,
   },
   {
-    id: 'four-cities',
-    title: 'Anadolu Ağı',
-    description: '4 farklı ilde canlı şube açarak ulusal ağınızı kurun.',
-    rewardCash: 480_000,
-    targetType: 'cityCount',
-    targetValue: 4,
+    id: 'net-worth-10m',
+    title: 'Halka Arz (IPO) Ligi',
+    description: 'Net şirket değerinizi ₺10.000.000 üzerine çıkarıp Borsa Halka Arzına hazırlanın.',
+    rewardCash: 1_500_000,
+    targetType: 'netWorth',
+    targetValue: 10_000_000,
   },
   {
-    id: 'net-worth-5m',
-    title: 'AVM & Holding Ligi',
-    description: 'Net şirket değerinizi ₺5.500.000 seviyesine taşıyıp AVM kilidini açın.',
-    rewardCash: 1_100_000,
+    id: 'net-worth-25m',
+    title: 'Bankacılık İmparatorluğu',
+    description: 'Net şirket değerinizi ₺25.000.000 seviyesine taşıyıp kendi bankanızı kurun.',
+    rewardCash: 3_500_000,
     targetType: 'netWorth',
-    targetValue: 5_500_000,
+    targetValue: 25_000_000,
   },
 ];
 
@@ -322,13 +460,13 @@ export const MARKET_EVENT_TEMPLATES: MarketEventTemplate[] = [
     durationSec: 120,
   },
   {
-    id: 'gastronomi-festivali',
-    title: 'Türkiye Gastronomi Festivali',
-    description: 'Kafe ve restoranlarda kuyruklar oluştu! Yeme-içme gelirleri +%35 yükseldi.',
-    category: 'food',
-    incomeMultiplier: 1.35,
-    valuationMultiplier: 1.1,
-    durationSec: 115,
+    id: 'sanayi-ihracat',
+    title: 'Sanayi & İhracat Rekoru',
+    description: 'Fabrikalar tam kapasite çalışıyor! Üretim ve ihracat gelirleri +%45 yükseldi.',
+    category: 'factory',
+    incomeMultiplier: 1.45,
+    valuationMultiplier: 1.18,
+    durationSec: 125,
   },
   {
     id: 'emlak-canlanmasi',
@@ -351,7 +489,7 @@ export const MARKET_EVENT_TEMPLATES: MarketEventTemplate[] = [
   {
     id: 'perakende-gunleri',
     title: 'Büyük Alışveriş Günleri',
-    description: 'Süpermarket ve AVM cirolarında rekor talep! Gelirler +%35 yükseldi.',
+    description: 'Süpermarket, AVM ve otopark cirolarında rekor talep! Gelirler +%35 yükseldi.',
     category: 'retail',
     incomeMultiplier: 1.35,
     valuationMultiplier: 1.12,
@@ -359,8 +497,8 @@ export const MARKET_EVENT_TEMPLATES: MarketEventTemplate[] = [
   },
   {
     id: 'kahve-festivali',
-    title: 'Kahve & Kafe Günleri',
-    description: 'Kafelerde müşteri trafiği patladı! Kafe gelirleri +%40 arttı.',
+    title: 'Kahve & Gastronomi Günleri',
+    description: 'Kafe ve restoranlarda müşteri trafiği patladı! Gelirler +%40 arttı.',
     category: 'cafe',
     incomeMultiplier: 1.4,
     valuationMultiplier: 1.1,
@@ -374,4 +512,12 @@ export function getBlueprintById(id: string): BusinessBlueprint | undefined {
 
 export function isValidBusinessType(id: string): id is BusinessTypeId {
   return BUSINESS_BLUEPRINTS.some((bp) => bp.id === id);
+}
+
+export function isFactoryType(id: BusinessTypeId): boolean {
+  return FACTORY_TYPES.includes(id);
+}
+
+export function isParkingType(id: BusinessTypeId): boolean {
+  return PARKING_TYPES.includes(id);
 }

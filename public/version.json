@@ -1,10 +1,12 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "buildDate": "2026-11-24",
   "mandatory": false,
   "notes": [
-    "81 ilin tamamı şehir şehir canlı odalar halinde açıldı",
-    "8 yeni işletme türü (Kafe, İnternet Kafe, PS Salonu, Oyun Merkezi, Restoran, Süpermarket, Otel, AVM) eklendi",
-    "Deniz ve göl üzerine inşaat yasağı ve 75m mesafe koruması aktif edildi"
+    "1–5 Yıldızlı Personel Aday Havuzu ve Genel Müdür'e kadar uzanan 5 Kademeli Yönetim Otomasyonu eklendi.",
+    "Yeni sektörler: Otopark & Katlı Otopark (250m +%15 kapasite), Gıda/Elektronik/Tekstil Fabrikaları (%35 tedarik indirimi) ve Zincir Market Ağı açıldı.",
+    "Çok oyunculu Franchise (Bayilik) sistemi: Marka aç, isim hakkı + %10–%25 telif geliri kazan veya +%35 bonusla franchise şube kur.",
+    "Canlı Borsa (BIST Devleri + ₺10 Mn Oyuncu Holdingleri Halka Arz / IPO) ve 0–1900 Kredi Puanlı Oyuncu Bankacılığı + Otomatik Haciz sistemi devreye alındı.",
+    "4 sekmeli Canlı Liderlik Tablosu ve Şehir İçi / Türkiye Geneli Patron Sohbeti eklendi."
   ]
 }

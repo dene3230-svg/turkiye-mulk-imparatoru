@@ -3,23 +3,47 @@ import type {
   BusinessTypeId,
   CompanyTier,
   EmpireState,
+  FranchiseBrand,
   MarketEvent,
   MissionDef,
   OwnedBusiness,
   PinLocationInfo,
   RemoteBusinessRecord,
+  StockQuote,
 } from '../types/game';
 import {
   AVM_SYNERGY_MULTIPLIER,
   BUSINESS_BLUEPRINTS,
   COMPANY_TIERS,
+  FACTORY_SUPPLIED_TYPES,
+  FACTORY_SUPPLY_DISCOUNT,
+  FRANCHISE_BRANCH_BONUS_MULTIPLIER,
   MARKET_EVENT_TEMPLATES,
   MIN_BUSINESS_DISTANCE_METERS,
+  PARKING_CAPACITY_BONUS,
+  PARKING_SYNERGY_RADIUS_METERS,
   STARTING_CASH,
+  STARTING_CREDIT_SCORE,
+  SUPERMARKET_CHAIN_DISCOUNT,
   TAKEOVER_VALUATION_MULTIPLIER,
   getBlueprintById,
+  isFactoryType,
+  isParkingType,
 } from './catalog';
 import { getProvinceByPlate, haversineMeters } from './provinces81';
+import {
+  calculateStaffQualityMultiplier,
+  generateCandidatePool,
+  resolveBusinessAutomation,
+} from './hrEngine';
+import {
+  calculateDividendPerTick,
+  calculatePortfolioMarketValue,
+} from './stockMarket';
+import {
+  enforceOverdueLoans,
+  type LoanEnforcementResult,
+} from './bankingEngine';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 
@@ -29,6 +53,16 @@ export function createInitialEmpireState(now = Date.now()): EmpireState {
     cash: STARTING_CASH,
     totalEarnedLifetime: 0,
     businesses: [],
+    cityManagers: [],
+    candidatePool: generateCandidatePool(now, 'kafe'),
+    supermarketChain: null,
+    ownFranchises: [],
+    franchiseRoyaltiesEarned: 0,
+    stockPortfolio: [],
+    playerIpo: null,
+    creditScore: STARTING_CREDIT_SCORE,
+    ownBank: null,
+    activeLoans: [],
     claimedMissionIds: [],
     activeEvent: {
       ...initialTemplate,
@@ -75,29 +109,87 @@ export function hasAvmSynergyForBusiness(
   );
 }
 
+/**
+ * Checks if an owned Otopark or Katlı Otopark sits within 250m -> +15% customer capacity & throughput.
+ */
+export function hasParkingSynergyForBusiness(
+  business: OwnedBusiness,
+  allOwnBusinesses: OwnedBusiness[]
+): boolean {
+  if (isParkingType(business.blueprintId)) return false;
+  return allOwnBusinesses.some(
+    (other) =>
+      other.id !== business.id &&
+      isParkingType(other.blueprintId) &&
+      haversineMeters(business.lat, business.lng, other.lat, other.lng) <=
+        PARKING_SYNERGY_RADIUS_METERS
+  );
+}
+
+/**
+ * Checks if player owns at least 1 industrial factory AND this business benefits from the 35% supply discount.
+ */
+export function hasFactorySupplySynergy(
+  business: OwnedBusiness,
+  allOwnBusinesses: OwnedBusiness[]
+): boolean {
+  if (!FACTORY_SUPPLIED_TYPES.includes(business.blueprintId)) return false;
+  return allOwnBusinesses.some((other) => isFactoryType(other.blueprintId));
+}
+
 export function calculateBusinessIncomePerSec(
   business: OwnedBusiness,
   activeEvent: MarketEvent | null,
   now = Date.now(),
-  allOwnBusinesses?: OwnedBusiness[]
+  allOwnBusinesses?: OwnedBusiness[],
+  stateContext?: Pick<EmpireState, 'cityManagers' | 'supermarketChain'>
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
 
   const levelMultiplier = 1 + (business.level - 1) * 0.45;
-  const staffMultiplier = 1 + business.staffCount * 0.14;
+  const automation = resolveBusinessAutomation(
+    business,
+    stateContext?.cityManagers ?? [],
+    allOwnBusinesses ?? [business]
+  );
+  const staffMultiplier = calculateStaffQualityMultiplier(business, automation);
   const boostMultiplier = business.boostEndsAt > now ? 2.0 : 1.0;
+
   const avmSynergy =
     allOwnBusinesses && hasAvmSynergyForBusiness(business, allOwnBusinesses)
       ? AVM_SYNERGY_MULTIPLIER
       : 1.0;
+
+  const parkingSynergy =
+    allOwnBusinesses && hasParkingSynergyForBusiness(business, allOwnBusinesses)
+      ? 1 + PARKING_CAPACITY_BONUS
+      : 1.0;
+
+  // Factory 35% supply cost reduction -> translates into strong +22% net profit boost (35% cost saving on ~62% COGS)
+  const factorySynergy =
+    allOwnBusinesses && hasFactorySupplySynergy(business, allOwnBusinesses)
+      ? 1 + FACTORY_SUPPLY_DISCOUNT * 0.65
+      : 1.0;
+
+  // Supermarket chain bulk procurement discount (+14% net margin)
+  const chainSynergy =
+    business.blueprintId === 'supermarket' && stateContext?.supermarketChain
+      ? 1 + SUPERMARKET_CHAIN_DISCOUNT * 0.7
+      : 1.0;
+
+  // Franchise branch +35% customer & revenue bonus (minus royalty share kept by brand owner)
+  const franchiseGrossMult = business.franchiseId ? FRANCHISE_BRANCH_BONUS_MULTIPLIER : 1.0;
+  const royaltyDeduction = business.franchiseId ? 1 - (business.franchiseRoyaltyRate ?? 0.15) : 1.0;
 
   let eventMultiplier = 1.0;
   if (activeEvent && activeEvent.endsAt > now) {
     if (
       activeEvent.category === 'all' ||
       activeEvent.category === bp.category ||
-      (activeEvent.category === 'retail' && bp.category === 'mall')
+      (activeEvent.category === 'retail' &&
+        (bp.category === 'mall' || bp.category === 'parking')) ||
+      (activeEvent.category === 'cafe' && bp.category === 'food')
     ) {
       eventMultiplier = activeEvent.incomeMultiplier;
     }
@@ -110,6 +202,11 @@ export function calculateBusinessIncomePerSec(
       staffMultiplier *
       boostMultiplier *
       avmSynergy *
+      parkingSynergy *
+      factorySynergy *
+      chainSynergy *
+      franchiseGrossMult *
+      royaltyDeduction *
       eventMultiplier
   );
 }
@@ -118,19 +215,39 @@ export function calculateBusinessHourlyIncome(
   business: OwnedBusiness,
   activeEvent: MarketEvent | null,
   now = Date.now(),
-  allOwnBusinesses?: OwnedBusiness[]
+  allOwnBusinesses?: OwnedBusiness[],
+  stateContext?: Pick<EmpireState, 'cityManagers' | 'supermarketChain'>
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
-  const perSec = calculateBusinessIncomePerSec(business, activeEvent, now, allOwnBusinesses);
+  const perSec = calculateBusinessIncomePerSec(
+    business,
+    activeEvent,
+    now,
+    allOwnBusinesses,
+    stateContext
+  );
   const ratio = bp.baseHourlyIncome / Math.max(1, bp.baseIncomePerSec);
   return Math.round((perSec * ratio) / 50) * 50;
 }
 
-export function calculateBusinessCapacity(business: OwnedBusiness): number {
+export function calculateBusinessCapacity(
+  business: OwnedBusiness,
+  allOwnBusinesses?: OwnedBusiness[]
+): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 10;
-  return Math.round(bp.baseCapacity * (1 + (business.level - 1) * 0.35 + business.staffCount * 0.08));
+  const parkingMult =
+    allOwnBusinesses && hasParkingSynergyForBusiness(business, allOwnBusinesses)
+      ? 1 + PARKING_CAPACITY_BONUS
+      : 1.0;
+  const franchiseMult = business.franchiseId ? FRANCHISE_BRANCH_BONUS_MULTIPLIER : 1.0;
+  const starSum = (business.employees ?? []).reduce((s, e) => s + e.stars, 0);
+  const staffBonus = starSum > 0 ? starSum * 0.04 : business.staffCount * 0.08;
+
+  return Math.round(
+    bp.baseCapacity * (1 + (business.level - 1) * 0.35 + staffBonus) * parkingMult * franchiseMult
+  );
 }
 
 export function calculateVaultCapacity(business: OwnedBusiness): number {
@@ -184,7 +301,7 @@ export function calculateTakeoverPrice(valuation: number): number {
 
 export function calculateTotalIncomePerSec(state: EmpireState, now = Date.now()): number {
   return state.businesses.reduce(
-    (sum, b) => sum + calculateBusinessIncomePerSec(b, state.activeEvent, now, state.businesses),
+    (sum, b) => sum + calculateBusinessIncomePerSec(b, state.activeEvent, now, state.businesses, state),
     0
   );
 }
@@ -193,12 +310,24 @@ export function calculateTotalPendingCash(state: EmpireState): number {
   return state.businesses.reduce((sum, b) => sum + Math.floor(b.pendingCash), 0);
 }
 
-export function calculateNetWorth(state: EmpireState, now = Date.now()): number {
+export function calculateNetWorth(
+  state: EmpireState,
+  now = Date.now(),
+  stockQuotes?: StockQuote[]
+): number {
   const assetsValue = state.businesses.reduce(
     (sum, b) => sum + calculateBusinessValuation(b, state.activeEvent, now) + Math.floor(b.pendingCash),
     0
   );
-  return Math.floor(state.cash) + assetsValue;
+  const stocksValue = stockQuotes
+    ? calculatePortfolioMarketValue(state, stockQuotes)
+    : (state.stockPortfolio ?? []).reduce((s, h) => s + Math.round(h.shares * h.avgCost), 0);
+  const bankValue = state.ownBank ? Math.round(state.ownBank.poolCapital + 2_000_000) : 0;
+  const activeDebt = (state.activeLoans ?? [])
+    .filter((l) => l.status === 'active' || l.status === 'garnishing')
+    .reduce((s, l) => s + l.remainingAmount, 0);
+
+  return Math.max(0, Math.floor(state.cash) + assetsValue + stocksValue + bankValue - activeDebt);
 }
 
 export function getCompanyTier(netWorth: number): CompanyTier {
@@ -273,9 +402,11 @@ export function purchaseBusiness(
   customName: string,
   owner: { id: string; name: string },
   nearbyExisting: Array<{ lat: number; lng: number; name: string }> = [],
-  now = Date.now()
+  now = Date.now(),
+  franchiseBrand?: FranchiseBrand | null
 ): ActionResult {
-  const bp = getBlueprintById(blueprintId);
+  const effectiveType = franchiseBrand ? franchiseBrand.businessType : blueprintId;
+  const bp = getBlueprintById(effectiveType);
   if (!bp) {
     return { state, ok: false, error: 'Geçersiz işletme türü.' };
   }
@@ -299,7 +430,7 @@ export function purchaseBusiness(
       error: `Şube kotanız doldu (${state.businesses.length}/${tier.maxBranches}). Şirket seviyenizi yükselterek yeni şube açabilirsiniz.`,
     };
   }
-  if (tier.level < bp.minCompanyLevel) {
+  if (!franchiseBrand && tier.level < bp.minCompanyLevel) {
     return {
       state,
       ok: false,
@@ -320,8 +451,10 @@ export function purchaseBusiness(
     };
   }
 
-  const cost = calculateEstablishmentCost(bp, location);
-  if (state.cash < cost) {
+  const baseCost = calculateEstablishmentCost(bp, location);
+  const licenseFee = franchiseBrand ? franchiseBrand.licenseFee : 0;
+  const totalCost = baseCost + licenseFee;
+  if (state.cash < totalCost) {
     return { state, ok: false, error: 'Yetersiz bakiye.' };
   }
 
@@ -344,7 +477,10 @@ export function purchaseBusiness(
     districtName: location.districtName,
     level: 1,
     staffCount: 0,
-    purchaseCost: cost,
+    employees: [],
+    stockLevel: 100,
+    maintenanceLevel: 100,
+    purchaseCost: baseCost,
     landMultiplier: location.landMultiplier,
     affinityMultiplier,
     pendingCash: 0,
@@ -352,6 +488,10 @@ export function purchaseBusiness(
     boostEndsAt: 0,
     createdAt: now,
     notifiedHighVault: false,
+    franchiseId: franchiseBrand?.id,
+    franchiseBrandName: franchiseBrand?.brandName,
+    franchiseOwnerId: franchiseBrand?.ownerId,
+    franchiseRoyaltyRate: franchiseBrand?.royaltyRate,
   };
 
   return {
@@ -359,7 +499,7 @@ export function purchaseBusiness(
     business: newBusiness,
     state: {
       ...state,
-      cash: state.cash - cost,
+      cash: state.cash - totalCost,
       businesses: [newBusiness, ...state.businesses],
       lastSavedAt: now,
     },
@@ -410,6 +550,9 @@ export function takeoverCompetitorBusiness(
     districtName: target.district || prov.districts[0] || target.city_name,
     level: Math.max(1, target.level),
     staffCount: Math.min(bp.maxStaff, Math.max(1, target.level)),
+    employees: [],
+    stockLevel: 100,
+    maintenanceLevel: 100,
     purchaseCost: Math.max(bp.baseCost, target.valuation),
     landMultiplier: prov.landMultiplier,
     affinityMultiplier: getAffinityMultiplier(bp, prov),
@@ -436,13 +579,16 @@ export interface TickResult {
   state: EmpireState;
   highVaultBusinessIds: string[];
   newMarketEvent: MarketEvent | null;
+  dividendPaid: number;
+  loanEnforcement: LoanEnforcementResult;
 }
 
 export function tickEconomy(
   state: EmpireState,
   elapsedSec: number,
   now = Date.now(),
-  randomIndex?: number
+  randomIndex?: number,
+  stockQuotes?: StockQuote[]
 ): TickResult {
   const safeDt = Math.max(0, Math.min(elapsedSec, 3600));
   const highVaultBusinessIds: string[] = [];
@@ -468,11 +614,28 @@ export function tickEconomy(
   let totalGenerated = 0;
 
   const updatedBusinesses = state.businesses.map((b) => {
-    const incomePerSec = calculateBusinessIncomePerSec(b, activeEvent, now, state.businesses);
+    const automation = resolveBusinessAutomation(b, state.cityManagers ?? [], state.businesses);
+    const incomePerSec = calculateBusinessIncomePerSec(b, activeEvent, now, state.businesses, state);
     const earned = incomePerSec * safeDt;
     const capacity = calculateVaultCapacity(b);
 
-    const autoRate = b.staffCount >= 3 ? 0.35 : 0;
+    // Stock & Maintenance dynamics: automated branches stay full, unmanaged branches decay gradually
+    let nextStock = b.stockLevel ?? 100;
+    let nextMaint = b.maintenanceLevel ?? 100;
+
+    if (automation.autoStock) {
+      nextStock = 100;
+    } else {
+      nextStock = Math.max(15, nextStock - safeDt * 0.22);
+    }
+
+    if (automation.autoMaintenance) {
+      nextMaint = 100;
+    } else {
+      nextMaint = Math.max(20, nextMaint - safeDt * 0.16);
+    }
+
+    const autoRate = automation.fullAutomation ? 0.65 : b.staffCount >= 3 ? 0.35 : 0;
     const directCash = earned * autoRate;
     const vaultGain = earned - directCash;
     autoCollectedCash += directCash;
@@ -488,23 +651,49 @@ export function tickEconomy(
 
     return {
       ...b,
+      stockLevel: Number(nextStock.toFixed(1)),
+      maintenanceLevel: Number(nextMaint.toFixed(1)),
       pendingCash: nextPending,
       totalEarned: b.totalEarned + directCash,
       notifiedHighVault: b.notifiedHighVault || hitHighRatio,
     };
   });
 
+  // Live stock dividends
+  const dividendPaid = stockQuotes
+    ? calculateDividendPerTick(state, stockQuotes, safeDt)
+    : 0;
+
+  // Passive royalty stream if player owns active franchise brands with branches
+  const passiveRoyaltyGain = (state.ownFranchises ?? []).reduce(
+    (sum, f) => sum + f.branchCount * 420 * f.royaltyRate * safeDt,
+    0
+  );
+
+  const preLoanState: EmpireState = {
+    ...state,
+    cash: state.cash + autoCollectedCash + dividendPaid + passiveRoyaltyGain,
+    totalEarnedLifetime:
+      state.totalEarnedLifetime + totalGenerated + dividendPaid + passiveRoyaltyGain,
+    franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
+    businesses: updatedBusinesses,
+    activeEvent,
+    lastSavedAt: now,
+  };
+
+  // Enforce overdue loans (garnishment -> automatic collateral seizure!)
+  const loanEnforcement = enforceOverdueLoans(
+    preLoanState,
+    autoCollectedCash + dividendPaid + passiveRoyaltyGain,
+    now
+  );
+
   return {
-    state: {
-      ...state,
-      cash: state.cash + autoCollectedCash,
-      totalEarnedLifetime: state.totalEarnedLifetime + totalGenerated,
-      businesses: updatedBusinesses,
-      activeEvent,
-      lastSavedAt: now,
-    },
+    state: loanEnforcement.state,
     highVaultBusinessIds,
     newMarketEvent,
+    dividendPaid,
+    loanEnforcement,
   };
 }
 
@@ -669,6 +858,13 @@ export function sellBusiness(
 ): ActionResult {
   const target = state.businesses.find((b) => b.id === businessId);
   if (!target) return { state, ok: false, error: 'İşletme bulunamadı.' };
+  if (target.pledgedLoanId) {
+    return {
+      state,
+      ok: false,
+      error: 'Bu işletme aktif kredi teminatı olarak rehinli! Önce krediyi kapatın.',
+    };
+  }
 
   const valuation = calculateBusinessValuation(target, state.activeEvent, now);
   const pending = Math.floor(target.pendingCash);
@@ -686,20 +882,30 @@ export function sellBusiness(
   };
 }
 
-export function getMissionProgress(state: EmpireState, mission: MissionDef, now = Date.now()): number {
+export function getMissionProgress(
+  state: EmpireState,
+  mission: MissionDef,
+  now = Date.now(),
+  stockQuotes?: StockQuote[]
+): number {
   switch (mission.targetType) {
     case 'businessCount':
       return state.businesses.length;
     case 'cityCount':
       return new Set(state.businesses.map((b) => b.cityPlate)).size;
     case 'netWorth':
-      return calculateNetWorth(state, now);
+      return calculateNetWorth(state, now, stockQuotes);
     case 'maxLevel':
       return state.businesses.reduce((max, b) => Math.max(max, b.level), 0);
     case 'totalEarned':
       return Math.floor(state.totalEarnedLifetime);
     case 'staffTotal':
-      return state.businesses.reduce((sum, b) => sum + b.staffCount, 0);
+      return (
+        state.businesses.reduce((sum, b) => sum + b.staffCount, 0) +
+        (state.cityManagers?.length ?? 0)
+      );
+    case 'factoryCount':
+      return state.businesses.filter((b) => isFactoryType(b.blueprintId)).length;
     default:
       return 0;
   }
@@ -708,12 +914,13 @@ export function getMissionProgress(state: EmpireState, mission: MissionDef, now 
 export function claimMissionReward(
   state: EmpireState,
   mission: MissionDef,
-  now = Date.now()
+  now = Date.now(),
+  stockQuotes?: StockQuote[]
 ): ActionResult {
   if (state.claimedMissionIds.includes(mission.id)) {
     return { state, ok: false, error: 'Ödül zaten alındı.' };
   }
-  const progress = getMissionProgress(state, mission, now);
+  const progress = getMissionProgress(state, mission, now, stockQuotes);
   if (progress < mission.targetValue) {
     return { state, ok: false, error: 'Görev henüz tamamlanmadı.' };
   }

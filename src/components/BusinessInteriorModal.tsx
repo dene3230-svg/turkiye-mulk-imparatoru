@@ -229,6 +229,41 @@ const FLOOR_THEMES: Record<
     label: 'ATRİYUM MEYDANI & DANIŞMA',
     accent: '#FACC15',
   },
+  otopark: {
+    floor: '#1E293B',
+    grid: 'rgba(148,163,184,0.16)',
+    counter: '#334155',
+    label: 'OTOMATİK BARİYER & PLAKA TANIMA',
+    accent: '#94A3B8',
+  },
+  katli_otopark: {
+    floor: '#0F172A',
+    grid: 'rgba(56,189,248,0.14)',
+    counter: '#1E293B',
+    label: 'VALE KONTROL & EV ŞARJ MERKEZİ',
+    accent: '#38BDF8',
+  },
+  gida_fabrikasi: {
+    floor: '#1F1612',
+    grid: 'rgba(251,146,60,0.14)',
+    counter: '#9A3412',
+    label: 'GIDA ÜRETİM BANDI & SOĞUK ZİNCİR',
+    accent: '#FB923C',
+  },
+  elektronik_fabrikasi: {
+    floor: '#081826',
+    grid: 'rgba(14,165,233,0.16)',
+    counter: '#075985',
+    label: 'TEMİZ ODA ROBOTİK MONTAJ HATTI',
+    accent: '#0EA5E9',
+  },
+  tekstil_fabrikasi: {
+    floor: '#1B1126',
+    grid: 'rgba(192,132,252,0.14)',
+    counter: '#6B21A8',
+    label: 'CNC DOKUMA & İHRACAT BANDI',
+    accent: '#C084FC',
+  },
 };
 
 export function BusinessInteriorModal({

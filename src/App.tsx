@@ -12,13 +12,20 @@ import {
   Moon,
   Globe2,
   Radio,
+  Crown,
+  Landmark,
+  BarChart3,
+  Award,
 } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
 import type {
+  BankRecord,
   BusinessTypeId,
+  ChatMessage,
   EmpireState,
+  FranchiseBrand,
   GameSettings,
   MissionDef,
   NotificationItem,
@@ -27,9 +34,15 @@ import type {
   ProvinceInfo,
   RemoteBusinessRecord,
   ScreenState,
+  StockQuote,
   UserProfile,
 } from './types/game';
-import { MISSION_CATALOG, isValidBusinessType } from './game/catalog';
+import {
+  MISSION_CATALOG,
+  STARTING_CREDIT_SCORE,
+  isFactoryType,
+  isValidBusinessType,
+} from './game/catalog';
 import {
   activateMarketingBoost,
   calculateBusinessHourlyIncome,
@@ -52,6 +65,33 @@ import {
   tickEconomy,
   upgradeBusiness,
 } from './game/economy';
+import {
+  dismissStaffMember,
+  generateCandidatePool,
+  hireCandidateFromPool,
+  refreshCandidatePool,
+  resolveBusinessAutomation,
+  restockAndMaintainBusiness,
+} from './game/hrEngine';
+import {
+  SEED_FRANCHISE_BRANDS,
+  createFranchiseBrand,
+  formSupermarketChain,
+} from './game/holdingEngine';
+import {
+  buyStockShares,
+  createInitialStockQuotes,
+  launchPlayerIpo,
+  sellStockShares,
+  tickStockQuotes,
+} from './game/stockMarket';
+import {
+  DEFAULT_SYSTEM_BANKS,
+  createPlayerBank,
+  repayLoan,
+  takeLoanFromBank,
+  updateOwnBankSettings,
+} from './game/bankingEngine';
 import {
   DEFAULT_PROVINCE_PLATE,
   getProvinceByPlate,
@@ -76,6 +116,17 @@ import {
   updateBusinessInRoom,
   type RoomSyncStatus,
 } from './services/cityRoom';
+import {
+  fetchAllBanks,
+  fetchAllFranchises,
+  fetchPlayerIpoListings,
+  incrementFranchiseUsage,
+  publishBankRecord,
+  publishFranchiseBrand,
+  publishLoanRecord,
+  publishPlayerIpoListing,
+  subscribePatronChat,
+} from './services/corporateSync';
 import { applyOtaUpdate, checkForOtaUpdate } from './services/otaUpdate';
 import {
   requestNotificationPermission,
@@ -96,6 +147,12 @@ import { SideDrawer, type DrawerTab } from './components/SideDrawer';
 import { NotificationCenter, NotificationToasts } from './components/NotificationCenter';
 import { SettingsModal } from './components/SettingsModal';
 import { OtaUpdateModal } from './components/OtaUpdateModal';
+import { HrManagementModal } from './components/HrManagementModal';
+import { HoldingFranchiseModal } from './components/HoldingFranchiseModal';
+import { BorsaModal } from './components/BorsaModal';
+import { BankingModal } from './components/BankingModal';
+import { LeaderboardModal } from './components/LeaderboardModal';
+import { PatronChatPanel } from './components/PatronChatPanel';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
 
@@ -122,7 +179,7 @@ function loadSettings(): GameSettings {
   };
 }
 
-// Clean migration for v1.0.0 saved games so players never lose progress on v1.1.0 update
+// Backward-compatible migration for v1.0/v1.1 saved games -> v1.2.0 holding state
 function migrateSavedEmpire(saved: EmpireState | null, owner: UserProfile): EmpireState {
   if (!saved) return createInitialEmpireState();
   const migratedBusinesses = saved.businesses.map((raw) => {
@@ -142,11 +199,28 @@ function migrateSavedEmpire(saved: EmpireState | null, owner: UserProfile): Empi
       cityPlate: plate,
       cityName: (legacy.cityName as string) || prov.name,
       districtName: (legacy.districtName as string) || prov.districts[0] || prov.name,
+      employees: Array.isArray(legacy.employees) ? raw.employees : [],
+      stockLevel: typeof legacy.stockLevel === 'number' ? raw.stockLevel : 100,
+      maintenanceLevel: typeof legacy.maintenanceLevel === 'number' ? raw.maintenanceLevel : 100,
     };
   });
+
   return {
     ...saved,
     businesses: migratedBusinesses,
+    cityManagers: Array.isArray(saved.cityManagers) ? saved.cityManagers : [],
+    candidatePool:
+      Array.isArray(saved.candidatePool) && saved.candidatePool.length > 0
+        ? saved.candidatePool
+        : generateCandidatePool(Date.now(), 'kafe'),
+    supermarketChain: saved.supermarketChain ?? null,
+    ownFranchises: Array.isArray(saved.ownFranchises) ? saved.ownFranchises : [],
+    franchiseRoyaltiesEarned: saved.franchiseRoyaltiesEarned ?? 0,
+    stockPortfolio: Array.isArray(saved.stockPortfolio) ? saved.stockPortfolio : [],
+    playerIpo: saved.playerIpo ?? null,
+    creditScore: typeof saved.creditScore === 'number' ? saved.creditScore : STARTING_CREDIT_SCORE,
+    ownBank: saved.ownBank ?? null,
+    activeLoans: Array.isArray(saved.activeLoans) ? saved.activeLoans : [],
   };
 }
 
@@ -183,11 +257,44 @@ export default function App() {
   const [roomRecords, setRoomRecords] = useState<RemoteBusinessRecord[]>([]);
   const [roomStatus, setRoomStatus] = useState<RoomSyncStatus>('connecting');
 
+  // v1.2.0 Live Corporate World State (Franchises, BIST + IPOs, Banks, Patron Chat)
+  const [remoteFranchises, setRemoteFranchises] = useState<FranchiseBrand[]>(SEED_FRANCHISE_BRANDS);
+  const [remoteBanks, setRemoteBanks] = useState<BankRecord[]>(DEFAULT_SYSTEM_BANKS);
+  const [stockQuotes, setStockQuotes] = useState<StockQuote[]>(() => createInitialStockQuotes());
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => [
+    {
+      id: 'welcome-chat-global',
+      channel: 'global',
+      senderId: 'sys',
+      senderName: 'Borsa & Holding Haberleri',
+      senderBadge: 'Sistem',
+      text: 'Türkiye geneli Patron Sohbetine hoş geldiniz! Franchise, IPO ve banka fırsatlarını paylaşın.',
+      timestamp: Date.now() - 120_000,
+    },
+    {
+      id: 'welcome-chat-34',
+      channel: 'city-34',
+      senderId: 'sys',
+      senderName: 'İstanbul Ticaret Odası',
+      senderBadge: '34 İstanbul',
+      text: '34 İstanbul canlı odası aktif. Otopark, fabrika ve AVM sinerjileriyle kârınızı katlayın!',
+      timestamp: Date.now() - 60_000,
+    },
+  ]);
+
+  // Modals & Inspectors
   const [now, setNow] = useState<number>(() => Date.now());
   const [droppedPin, setDroppedPin] = useState<PinLocationInfo | null>(null);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null);
   const [interiorBusinessId, setInteriorBusinessId] = useState<string | null>(null);
+  const [hrModalOpen, setHrModalOpen] = useState(false);
+  const [hrTargetBusinessId, setHrTargetBusinessId] = useState<string | null>(null);
+  const [holdingModalOpen, setHoldingModalOpen] = useState(false);
+  const [borsaModalOpen, setBorsaModalOpen] = useState(false);
+  const [bankingModalOpen, setBankingModalOpen] = useState(false);
+  const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
+
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [pinDropMode, setPinDropMode] = useState<boolean>(true);
   const [flyTarget, setFlyTarget] = useState<{
@@ -199,9 +306,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v110',
-      title: 'Türkiye Mülk İmparatoru v1.1.0',
-      body: '81 il canlı odalarla açıldı! 34 İstanbul odasındasınız — kara üzerinde bir noktaya pin bırakıp işletmenizi kurun.',
+      id: 'welcome-v120',
+      title: 'Türkiye Mülk İmparatoru v1.2.0',
+      body: '1–5★ İK Otomasyonu, Fabrikalar, Otoparklar, Franchise, Canlı Borsa (IPO) ve Özel Bankacılık aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -220,7 +327,13 @@ export default function App() {
   const prevTierLevelRef = useRef<number | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const stockQuotesRef = useRef(stockQuotes);
+  stockQuotesRef.current = stockQuotes;
   const landCheckAbortRef = useRef<AbortController | null>(null);
+  const chatSendersRef = useRef<{
+    global?: (msg: ChatMessage) => Promise<void>;
+    city?: (msg: ChatMessage) => Promise<void>;
+  }>({});
 
   const activeProvince = useMemo(() => getProvinceByPlate(activePlate), [activePlate]);
 
@@ -352,6 +465,51 @@ export default function App() {
     };
   }, []);
 
+  // Fetch global Supabase corporate tables (franchises, banks, player IPOs) on play
+  useEffect(() => {
+    if (screen !== 'playing') return;
+    let active = true;
+
+    fetchAllFranchises().then((list) => {
+      if (active) setRemoteFranchises(list);
+    });
+    fetchAllBanks().then((list) => {
+      if (active) setRemoteBanks(list);
+    });
+    fetchPlayerIpoListings().then((ipos) => {
+      if (!active) return;
+      setStockQuotes((prev) => {
+        const bist = prev.filter((q) => !q.isPlayerIpo);
+        const existingTickers = new Set(bist.map((b) => b.ticker));
+        const mergedIpos = ipos.filter((i) => !existingTickers.has(i.ticker));
+        return [...bist, ...mergedIpos];
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [screen]);
+
+  // Subscribe to Patron Chat (global + active city channel)
+  useEffect(() => {
+    if (screen !== 'playing') return;
+    const onIncoming = (msg: ChatMessage) => {
+      setChatMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [...prev.slice(-60), msg]
+      );
+    };
+
+    const globalSub = subscribePatronChat('global', onIncoming);
+    const citySub = subscribePatronChat(`city-${activePlate}`, onIncoming);
+    chatSendersRef.current = { global: globalSub.send, city: citySub.send };
+
+    return () => {
+      globalSub.unsubscribe();
+      citySub.unsubscribe();
+    };
+  }, [screen, activePlate]);
+
   // Subscribe to Supabase Realtime city room (`public.businesses`) for the currently selected province
   useEffect(() => {
     if (screen !== 'playing') return;
@@ -401,7 +559,7 @@ export default function App() {
     saveEmpireStateLocal(user.id, empire);
   }, [user, empire]);
 
-  // Live 1Hz Economy Loop while playing
+  // Live 1Hz Economy Loop & Loan Seizure Enforcement
   useEffect(() => {
     if (screen !== 'playing') return;
 
@@ -410,7 +568,7 @@ export default function App() {
       setNow(tickNow);
 
       setEmpire((prev) => {
-        const result = tickEconomy(prev, 1, tickNow);
+        const result = tickEconomy(prev, 1, tickNow, undefined, stockQuotesRef.current);
 
         if (result.highVaultBusinessIds.length > 0) {
           for (const id of result.highVaultBusinessIds) {
@@ -435,6 +593,23 @@ export default function App() {
           );
         }
 
+        if (result.loanEnforcement.seizedLoans.length > 0) {
+          for (const seized of result.loanEnforcement.seizedLoans) {
+            pushNotification(
+              'OTOMATİK HACİZ UYGULANDI!',
+              `${seized.business.customName} ödenmeyen kredi nedeniyle ${seized.loan.bankName} mülkiyetine geçti!`,
+              'finance',
+              true
+            );
+            // Transfer ownership on Supabase public.businesses & update loan status
+            updateBusinessInRoom(seized.business.id, {
+              owner_id: seized.loan.lenderOwnerId,
+              owner_name: seized.loan.bankName,
+            }).catch(() => {});
+            publishLoanRecord(seized.loan).catch(() => {});
+          }
+        }
+
         return result.state;
       });
     }, 1000);
@@ -442,8 +617,26 @@ export default function App() {
     return () => clearInterval(timer);
   }, [screen, pushNotification]);
 
+  // Live 3s Borsa Ticker Loop (BIST Devleri + Player Holding IPOs)
+  useEffect(() => {
+    if (screen !== 'playing') return;
+    const tickerTimer = setInterval(() => {
+      setStockQuotes((prev) => {
+        const ownTicker = empire.playerIpo?.ticker;
+        const ownNw = calculateNetWorth(empire, Date.now(), prev);
+        const ownFactories = empire.businesses.filter((b) => isFactoryType(b.blueprintId)).length;
+        return tickStockQuotes(prev, ownTicker, ownNw, empire.businesses.length, ownFactories);
+      });
+    }, 3000);
+
+    return () => clearInterval(tickerTimer);
+  }, [screen, empire]);
+
   // Derived empire metrics
-  const netWorth = useMemo(() => calculateNetWorth(empire, now), [empire, now]);
+  const netWorth = useMemo(
+    () => calculateNetWorth(empire, now, stockQuotes),
+    [empire, now, stockQuotes]
+  );
   const companyTier = useMemo(() => getCompanyTier(netWorth), [netWorth]);
   const totalIncomePerSec = useMemo(
     () => calculateTotalIncomePerSec(empire, now),
@@ -451,13 +644,25 @@ export default function App() {
   );
   const totalPendingCash = useMemo(() => calculateTotalPendingCash(empire), [empire]);
 
+  // Merged Franchises & Banks (Own + Remote + Seed)
+  const allFranchises = useMemo(() => {
+    const map = new Map<string, FranchiseBrand>();
+    for (const f of remoteFranchises) map.set(f.id, f);
+    for (const f of empire.ownFranchises ?? []) map.set(f.id, f);
+    return Array.from(map.values());
+  }, [remoteFranchises, empire.ownFranchises]);
+
+  const allBanks = useMemo(() => {
+    const map = new Map<string, BankRecord>();
+    for (const b of remoteBanks) map.set(b.id, b);
+    if (empire.ownBank) map.set(empire.ownBank.id, empire.ownBank);
+    return Array.from(map.values());
+  }, [remoteBanks, empire.ownBank]);
+
   // Competitor records in current city room (excluding own businesses)
   const ownIds = useMemo(() => new Set(empire.businesses.map((b) => b.id)), [empire.businesses]);
   const competitorBusinesses = useMemo(
-    () =>
-      roomRecords.filter(
-        (rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id)
-      ),
+    () => roomRecords.filter((rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id)),
     [roomRecords, user?.id, ownIds]
   );
 
@@ -494,9 +699,9 @@ export default function App() {
     return MISSION_CATALOG.filter(
       (m) =>
         !empire.claimedMissionIds.includes(m.id) &&
-        getMissionProgress(empire, m, now) >= m.targetValue
+        getMissionProgress(empire, m, now, stockQuotes) >= m.targetValue
     ).length;
-  }, [empire, now]);
+  }, [empire, now, stockQuotes]);
 
   const unreadNotifCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
@@ -624,7 +829,11 @@ export default function App() {
     [activePlate]
   );
 
-  const handleEstablishBusiness = (blueprintId: BusinessTypeId, customName: string) => {
+  const handleEstablishBusiness = (
+    blueprintId: BusinessTypeId,
+    customName: string,
+    franchiseBrand?: FranchiseBrand | null
+  ) => {
     if (!droppedPin || !user) return;
     const res = purchaseBusiness(
       empire,
@@ -633,7 +842,8 @@ export default function App() {
       customName,
       { id: user.id, name: user.name },
       competitorBusinesses.map((r) => ({ lat: r.lat, lng: r.lng, name: r.business_name })),
-      Date.now()
+      Date.now(),
+      franchiseBrand
     );
     if (!res.ok || !res.business) {
       if (res.error) {
@@ -648,18 +858,31 @@ export default function App() {
     setDroppedPin(null);
     setSelectedBusinessId(created.id);
 
-    // Sync to Supabase public.businesses live city room
     const hourly = calculateBusinessHourlyIncome(
       created,
       res.state.activeEvent,
       Date.now(),
-      res.state.businesses
+      res.state.businesses,
+      res.state
     );
     const valuation = calculateBusinessValuation(created, res.state.activeEvent, Date.now());
     publishBusinessToRoom(ownedToRemoteRecord(created, hourly, valuation)).catch(() => {});
 
+    if (franchiseBrand) {
+      const nextCount = franchiseBrand.branchCount + 1;
+      const nextRoyalty = franchiseBrand.totalRoyaltyEarned + franchiseBrand.licenseFee;
+      incrementFranchiseUsage(franchiseBrand.id, nextCount, nextRoyalty).catch(() => {});
+      setRemoteFranchises((prev) =>
+        prev.map((f) =>
+          f.id === franchiseBrand.id
+            ? { ...f, branchCount: nextCount, totalRoyaltyEarned: nextRoyalty }
+            : f
+        )
+      );
+    }
+
     pushNotification(
-      'Yeni İşletme Açıldı!',
+      franchiseBrand ? 'Franchise Şubesi Açıldı!' : 'Yeni İşletme Açıldı!',
       `${created.customName} (${String(created.cityPlate).padStart(2, '0')} ${created.cityName}) canlı haritada yayında.`,
       'milestone',
       true
@@ -702,9 +925,7 @@ export default function App() {
       Date.now()
     );
     if (!res.ok || !res.business) {
-      if (res.error) {
-        pushNotification('Devralma Başarısız', res.error, 'system', false);
-      }
+      if (res.error) pushNotification('Devralma Başarısız', res.error, 'system', false);
       return;
     }
 
@@ -714,7 +935,6 @@ export default function App() {
     setSelectedCompetitorId(null);
     setSelectedBusinessId(acquired.id);
 
-    // Update ownership in Supabase live room
     updateBusinessInRoom(record.id, {
       owner_id: user.id,
       owner_name: user.name,
@@ -760,7 +980,8 @@ export default function App() {
       res.business,
       res.state.activeEvent,
       Date.now(),
-      res.state.businesses
+      res.state.businesses,
+      res.state
     );
     const valuation = calculateBusinessValuation(res.business, res.state.activeEvent, Date.now());
     updateBusinessInRoom(res.business.id, {
@@ -777,11 +998,279 @@ export default function App() {
     );
   };
 
-  const handleHireStaff = (businessId: string) => {
+  const handleHireStaffQuick = (businessId: string) => {
     const res = hireStaff(empire, businessId, Date.now());
     if (!res.ok) return;
     soundEngine.playPurchase();
     setEmpire(res.state);
+  };
+
+  // --- v1.2.0 HR & 5-Tier Automation Handlers ---
+  const handleHireCandidate = (
+    candidateId: string,
+    businessId: string | null,
+    cityPlate: number
+  ) => {
+    const res = hireCandidateFromPool(empire, candidateId, businessId, cityPlate, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('İşe Alım Başarısız', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification('Yeni Personel / Yönetici Atandı', 'Kadro ve otomasyon güncellendi.', 'milestone', false);
+  };
+
+  const handleDismissStaff = (staffId: string, businessId?: string) => {
+    const res = dismissStaffMember(empire, staffId, businessId, Date.now());
+    if (res.ok) {
+      soundEngine.playClick();
+      setEmpire(res.state);
+    }
+  };
+
+  const handleRefreshCandidatePool = () => {
+    const targetBiz = empire.businesses.find((b) => b.id === hrTargetBusinessId);
+    const res = refreshCandidatePool(empire, targetBiz?.blueprintId ?? 'kafe', Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Havuz Yenilenemedi', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playClick();
+    setEmpire(res.state);
+  };
+
+  const handleRestockBusiness = (businessId: string) => {
+    const target = empire.businesses.find((b) => b.id === businessId);
+    const auto = target
+      ? resolveBusinessAutomation(target, empire.cityManagers ?? [], empire.businesses)
+      : null;
+    const res = restockAndMaintainBusiness(
+      empire,
+      businessId,
+      auto?.bulkSupplyDiscount ?? 0,
+      Date.now()
+    );
+    if (!res.ok) {
+      if (res.error) pushNotification('Tedarik', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playPurchase();
+    setEmpire(res.state);
+  };
+
+  // --- v1.2.0 Holding, Chain & Franchise Handlers ---
+  const handleFormSupermarketChain = (chainName: string) => {
+    const res = formSupermarketChain(empire, chainName, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Zincir Market', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Zincir Market Markası Kuruldu!',
+      `${chainName} markasıyla %20 toplu tedarik indirimi aktif.`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleCreateFranchise = (params: {
+    brandName: string;
+    businessType: BusinessTypeId;
+    licenseFee: number;
+    royaltyRate: number;
+  }) => {
+    if (!user) return;
+    const res = createFranchiseBrand(empire, params, { id: user.id, name: user.name }, Date.now());
+    if (!res.ok || !res.brand) {
+      if (res.error) pushNotification('Franchise Açılamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    publishFranchiseBrand(res.brand).catch(() => {});
+    pushNotification(
+      'Franchise Markası Yayında!',
+      `${res.brand.brandName} artık 81 ilde bayilik başvurularına açık.`,
+      'milestone',
+      true
+    );
+  };
+
+  // --- v1.2.0 Borsa & IPO Handlers ---
+  const handleBuyStock = (ticker: string, qty: number) => {
+    const quote = stockQuotes.find((q) => q.ticker === ticker);
+    if (!quote) return;
+    const res = buyStockShares(empire, quote, qty, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Borsa Emri Reddedildi', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playPurchase();
+    setEmpire(res.state);
+  };
+
+  const handleSellStock = (ticker: string, qty: number) => {
+    const quote = stockQuotes.find((q) => q.ticker === ticker);
+    if (!quote) return;
+    const res = sellStockShares(empire, quote, qty, Date.now());
+    if (!res.ok || !res.proceeds) return;
+    soundEngine.playCashCollect();
+    setEmpire(res.state);
+    spawnCashPopup(res.proceeds);
+  };
+
+  const handleLaunchIpo = (ticker: string, holdingName: string) => {
+    if (!user) return;
+    const res = launchPlayerIpo(
+      empire,
+      ticker,
+      holdingName,
+      netWorth,
+      { id: user.id, name: user.name },
+      stockQuotes.map((q) => q.ticker),
+      Date.now()
+    );
+    if (!res.ok || !res.quote) {
+      if (res.error) pushNotification('Halka Arz Reddedildi', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    setStockQuotes((prev) => [res.quote!, ...prev]);
+    publishPlayerIpoListing(res.quote).catch(() => {});
+    pushNotification(
+      `HALKA ARZ TAMAMLANDI (${res.quote.ticker})!`,
+      `${res.quote.name} Borsa'da işlem görmeye başladı! +${formatTL(
+        res.state.playerIpo?.raisedCapital ?? 0
+      )} sermaye girişi.`,
+      'milestone',
+      true
+    );
+  };
+
+  // --- v1.2.0 Banking & Loans Handlers ---
+  const handleTakeLoan = (bankId: string, amount: number, collateralBusinessId: string) => {
+    if (!user) return;
+    const bank = allBanks.find((b) => b.id === bankId);
+    const biz = empire.businesses.find((b) => b.id === collateralBusinessId) ?? null;
+    if (!bank || !biz) return;
+    const val = calculateBusinessValuation(biz, empire.activeEvent, now);
+    const res = takeLoanFromBank(
+      empire,
+      bank,
+      amount,
+      biz,
+      val,
+      { id: user.id, name: user.name },
+      180,
+      Date.now()
+    );
+    if (!res.ok || !res.loan) {
+      if (res.error) pushNotification('Kredi Reddedildi', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playCashCollect();
+    setEmpire(res.state);
+    spawnCashPopup(amount);
+    publishLoanRecord(res.loan).catch(() => {});
+    pushNotification(
+      'Kredi Hesabınıza Aktarıldı',
+      `${bank.bankName} üzerinden ${formatTL(amount)} kredi kullanıldı. Teminat: ${biz.customName}`,
+      'finance',
+      true
+    );
+  };
+
+  const handleRepayLoan = (loanId: string) => {
+    const res = repayLoan(empire, loanId, undefined, Date.now());
+    if (!res.ok || !res.loan) {
+      if (res.error) pushNotification('Ödeme Başarısız', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    publishLoanRecord(res.loan).catch(() => {});
+    pushNotification(
+      'Kredi Kapatıldı!',
+      `Kredi puanınız ${res.state.creditScore} seviyesine yükseldi ve teminat kaldırıldı.`,
+      'finance',
+      true
+    );
+  };
+
+  const handleCreateBank = (params: {
+    bankName: string;
+    brandColor: string;
+    emblem: string;
+    hqCityPlate: number;
+    hqCityName: string;
+    hqLat: number;
+    hqLng: number;
+    initialPoolCapital: number;
+    baseInterestRate: number;
+    minCreditScore: number;
+  }) => {
+    if (!user) return;
+    const res = createPlayerBank(
+      empire,
+      params,
+      netWorth,
+      { id: user.id, name: user.name },
+      Date.now()
+    );
+    if (!res.ok || !res.bank) {
+      if (res.error) pushNotification('Banka Kurulamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    publishBankRecord(res.bank).catch(() => {});
+    pushNotification(
+      `${res.bank.bankName} Kuruldu!`,
+      'BDDK lisansınız onaylandı. Artık diğer oyunculara kredi verebilirsiniz.',
+      'milestone',
+      true
+    );
+  };
+
+  const handleUpdateBank = (params: {
+    addCapital?: number;
+    baseInterestRate?: number;
+    minCreditScore?: number;
+  }) => {
+    const res = updateOwnBankSettings(empire, params, Date.now());
+    if (!res.ok || !res.bank) {
+      if (res.error) pushNotification('Banka Güncellenemedi', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playClick();
+    setEmpire(res.state);
+    publishBankRecord(res.bank).catch(() => {});
+    pushNotification('Banka Politikası Güncellendi', 'Faiz oranı ve kredi havuzu kaydedildi.', 'finance', false);
+  };
+
+  // --- Patron Chat Handler ---
+  const handleSendChat = (channel: 'global' | string, text: string) => {
+    const msg: ChatMessage = {
+      id: `msg-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      channel,
+      senderId: user?.id ?? 'guest',
+      senderName: user?.name ?? 'Misafir Yatırımcı',
+      senderBadge: empire.playerIpo
+        ? `[${empire.playerIpo.ticker}]`
+        : `Sv.${companyTier.level}`,
+      text,
+      timestamp: Date.now(),
+    };
+    setChatMessages((prev) => [...prev.slice(-60), msg]);
+    if (channel === 'global') {
+      chatSendersRef.current.global?.(msg).catch(() => {});
+    } else {
+      chatSendersRef.current.city?.(msg).catch(() => {});
+    }
   };
 
   const handleBoostBusiness = (businessId: string) => {
@@ -799,7 +1288,10 @@ export default function App() {
 
   const handleSellBusiness = (businessId: string) => {
     const res = sellBusiness(empire, businessId, Date.now());
-    if (!res.ok || !res.collectedAmount) return;
+    if (!res.ok || !res.collectedAmount) {
+      if (res.error) pushNotification('Satış Engellendi', res.error, 'finance', false);
+      return;
+    }
     soundEngine.playCashCollect();
     setEmpire(res.state);
     setSelectedBusinessId(null);
@@ -809,7 +1301,7 @@ export default function App() {
   };
 
   const handleClaimMission = (mission: MissionDef) => {
-    const res = claimMissionReward(empire, mission, Date.now());
+    const res = claimMissionReward(empire, mission, Date.now(), stockQuotes);
     if (!res.ok || !res.collectedAmount) return;
     soundEngine.playUpgrade();
     setEmpire(res.state);
@@ -835,7 +1327,7 @@ export default function App() {
     }
     pushNotification(
       'İmparatorluk Sıfırlandı',
-      'Yeni bir başlangıç yapıldı. ₺250.000 başlangıç sermayesi hesabınızda.',
+      'Yeni bir başlangıç yapıldı. ₺250.000 başlangıç sermayesi ve 1100 kredi puanı hesabınızda.',
       'system',
       false
     );
@@ -854,6 +1346,11 @@ export default function App() {
   const interiorBusiness = useMemo(
     () => empire.businesses.find((b) => b.id === interiorBusinessId) ?? null,
     [empire.businesses, interiorBusinessId]
+  );
+
+  const hrTargetBusiness = useMemo(
+    () => empire.businesses.find((b) => b.id === hrTargetBusinessId) ?? null,
+    [empire.businesses, hrTargetBusinessId]
   );
 
   const menuSavedCount = useMemo(() => {
@@ -946,7 +1443,8 @@ export default function App() {
 
               <div className="hidden pr-1 sm:block">
                 <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Şube {empire.businesses.length}/{companyTier.maxBranches}
+                  Şube {empire.businesses.length}/{companyTier.maxBranches} · Puan{' '}
+                  {empire.creditScore}
                 </div>
                 <div
                   data-testid="hud-income"
@@ -970,7 +1468,6 @@ export default function App() {
 
             {/* Right City Room Switcher & Utility Cluster */}
             <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95">
-              {/* 81-Province Live Room Switcher Button */}
               <button
                 type="button"
                 onClick={() => {
@@ -1049,10 +1546,10 @@ export default function App() {
             </div>
           </header>
 
-          {/* Bottom-Left Compact Dock */}
+          {/* Bottom-Left Compact Holding Navigation Dock */}
           <nav
             aria-label="Oyun Araç Çubuğu"
-            className="pointer-events-auto fixed bottom-[max(10px,var(--safe-bottom))] left-[max(10px,var(--safe-left))] z-[600] flex items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95"
+            className="pointer-events-auto fixed bottom-[max(10px,var(--safe-bottom))] left-[max(10px,var(--safe-left))] z-[600] flex max-w-[calc(100dvw-165px)] items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95"
           >
             <button
               type="button"
@@ -1066,7 +1563,7 @@ export default function App() {
                   handleMapClick(activeProvince.lat, activeProvince.lng);
                 }
               }}
-              className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
                 droppedPin || (!activeDrawer && !selectedBusiness && !selectedCompetitor)
                   ? 'bg-amber-600 text-white shadow-xs'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
@@ -1085,7 +1582,7 @@ export default function App() {
                 setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'portfolio' ? null : 'portfolio'));
               }}
-              className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
                 activeDrawer === 'portfolio'
                   ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
@@ -1099,6 +1596,58 @@ export default function App() {
 
             <button
               type="button"
+              data-testid="dock-holding-btn"
+              onClick={() => {
+                soundEngine.playClick();
+                setHoldingModalOpen(true);
+              }}
+              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-amber-50 hover:text-amber-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+            >
+              <Crown className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>Holding</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="dock-borsa-btn"
+              onClick={() => {
+                soundEngine.playClick();
+                setBorsaModalOpen(true);
+              }}
+              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+            >
+              <BarChart3 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>Borsa</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="dock-banka-btn"
+              onClick={() => {
+                soundEngine.playClick();
+                setBankingModalOpen(true);
+              }}
+              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-sky-50 hover:text-sky-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+            >
+              <Landmark className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+              <span>Banka</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="dock-leaderboard-btn"
+              onClick={() => {
+                soundEngine.playClick();
+                setLeaderboardModalOpen(true);
+              }}
+              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+            >
+              <Award className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>Sıralama</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 soundEngine.playClick();
                 setDroppedPin(null);
@@ -1106,7 +1655,7 @@ export default function App() {
                 setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'missions' ? null : 'missions'));
               }}
-              className={`relative flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`relative flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
                 activeDrawer === 'missions'
                   ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
@@ -1130,7 +1679,7 @@ export default function App() {
                 setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'market' ? null : 'market'));
               }}
-              className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
                 activeDrawer === 'market'
                   ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
@@ -1141,6 +1690,15 @@ export default function App() {
             </button>
           </nav>
 
+          {/* Collapsible Patron Chat Panel (Bottom-Right when no right side panel is covering it, or overlay smoothly) */}
+          {!droppedPin && !selectedBusiness && !selectedCompetitor && !activeDrawer && (
+            <PatronChatPanel
+              activeProvince={activeProvince}
+              messages={chatMessages}
+              onSendMessage={handleSendChat}
+            />
+          )}
+
           {/* Contextual Hint when empty */}
           {empire.businesses.length === 0 &&
             !droppedPin &&
@@ -1150,8 +1708,8 @@ export default function App() {
                 <strong className="text-amber-700 dark:text-amber-400">
                   {activeProvince.code} {activeProvince.name}:
                 </strong>{' '}
-                Kara üzerinde bir caddeye tıklayıp pin bırakın (deniz/göl yasaktır, 75m mesafe
-                korumalı).
+                Kara üzerinde bir caddeye tıklayıp pin bırakın (13 sektör, Franchise, 75m mesafe
+                koruması).
               </div>
             )}
 
@@ -1166,20 +1724,23 @@ export default function App() {
                   ownBranchCount={empire.businesses.length}
                   maxBranches={companyTier.maxBranches}
                   distanceCheck={droppedPinDistanceCheck}
+                  availableFranchises={allFranchises}
                   onEstablish={handleEstablishBusiness}
                   onClose={() => setDroppedPin(null)}
                 />
               ) : selectedBusiness ? (
                 <BusinessInspector
                   business={selectedBusiness}
-                  allOwnBusinesses={empire.businesses}
-                  cash={empire.cash}
-                  activeEvent={empire.activeEvent}
+                  state={empire}
                   now={now}
                   onEnterInterior={(id) => setInteriorBusinessId(id)}
+                  onOpenHrModal={(id) => {
+                    setHrTargetBusinessId(id);
+                    setHrModalOpen(true);
+                  }}
+                  onRestock={handleRestockBusiness}
                   onCollect={handleCollectBusiness}
                   onUpgrade={handleUpgradeBusiness}
-                  onHireStaff={handleHireStaff}
                   onBoost={handleBoostBusiness}
                   onSell={handleSellBusiness}
                   onClose={() => setSelectedBusinessId(null)}
@@ -1231,9 +1792,73 @@ export default function App() {
         now={now}
         onCollect={handleCollectBusiness}
         onUpgrade={handleUpgradeBusiness}
-        onHireStaff={handleHireStaff}
+        onHireStaff={handleHireStaffQuick}
         onBoost={handleBoostBusiness}
         onClose={() => setInteriorBusinessId(null)}
+      />
+
+      <HrManagementModal
+        open={hrModalOpen}
+        business={hrTargetBusiness}
+        state={empire}
+        activeCityPlate={activeProvince.plate}
+        activeCityName={activeProvince.name}
+        onHireCandidate={handleHireCandidate}
+        onDismissStaff={handleDismissStaff}
+        onRefreshPool={handleRefreshCandidatePool}
+        onRestockBusiness={handleRestockBusiness}
+        onClose={() => setHrModalOpen(false)}
+      />
+
+      <HoldingFranchiseModal
+        open={holdingModalOpen}
+        state={empire}
+        allFranchises={allFranchises}
+        onFormSupermarketChain={handleFormSupermarketChain}
+        onCreateFranchise={handleCreateFranchise}
+        onOpenHrCenter={() => {
+          setHoldingModalOpen(false);
+          setHrTargetBusinessId(selectedBusinessId);
+          setHrModalOpen(true);
+        }}
+        onClose={() => setHoldingModalOpen(false)}
+      />
+
+      <BorsaModal
+        open={borsaModalOpen}
+        state={empire}
+        quotes={stockQuotes}
+        netWorth={netWorth}
+        onBuyStock={handleBuyStock}
+        onSellStock={handleSellStock}
+        onLaunchIpo={handleLaunchIpo}
+        onClose={() => setBorsaModalOpen(false)}
+      />
+
+      <BankingModal
+        open={bankingModalOpen}
+        state={empire}
+        allBanks={allBanks}
+        activeProvince={activeProvince}
+        netWorth={netWorth}
+        now={now}
+        onTakeLoan={handleTakeLoan}
+        onRepayLoan={handleRepayLoan}
+        onCreateBank={handleCreateBank}
+        onUpdateBank={handleUpdateBank}
+        onClose={() => setBankingModalOpen(false)}
+      />
+
+      <LeaderboardModal
+        open={leaderboardModalOpen}
+        user={user}
+        state={empire}
+        netWorth={netWorth}
+        activeProvince={activeProvince}
+        roomRecords={roomRecords}
+        allFranchises={allFranchises}
+        allBanks={allBanks}
+        onClose={() => setLeaderboardModalOpen(false)}
       />
 
       <NotificationToasts

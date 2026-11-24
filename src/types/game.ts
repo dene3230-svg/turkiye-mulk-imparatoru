@@ -29,7 +29,12 @@ export type BusinessTypeId =
   | 'restoran'
   | 'supermarket'
   | 'otel'
-  | 'avm';
+  | 'avm'
+  | 'otopark'
+  | 'katli_otopark'
+  | 'gida_fabrikasi'
+  | 'elektronik_fabrikasi'
+  | 'tekstil_fabrikasi';
 
 export type BusinessCategory =
   | 'cafe'
@@ -37,7 +42,9 @@ export type BusinessCategory =
   | 'food'
   | 'retail'
   | 'tourism'
-  | 'mall';
+  | 'mall'
+  | 'parking'
+  | 'factory';
 
 export interface BusinessBlueprint {
   id: BusinessTypeId;
@@ -47,9 +54,9 @@ export interface BusinessBlueprint {
   description: string;
   upgradeFocus: string;
   baseCost: number;
-  baseHourlyIncome: number; // Real-world scale hourly income (displayed prominently)
+  baseHourlyIncome: number; // Real-world scale hourly income
   baseIncomePerSec: number; // Live gameplay income per second
-  baseCapacity: number; // Customer capacity inside the venue
+  baseCapacity: number; // Customer / production capacity
   vaultCapacitySec: number;
   minCompanyLevel: number;
   maxLevel: number;
@@ -65,7 +72,9 @@ export interface BusinessBlueprint {
     | 'utensils'
     | 'shopping-cart'
     | 'hotel'
-    | 'building';
+    | 'building'
+    | 'car'
+    | 'factory';
   zoneAffinity: 'footTraffic' | 'tourism' | 'business';
 }
 
@@ -114,6 +123,44 @@ export interface PinLocationInfo {
   resolvedAddress?: string;
 }
 
+// --- 5-Tier Corporate HR & Automation ---
+export type StaffRole =
+  | 'calisan'
+  | 'mudur_yardimcisi'
+  | 'sube_muduru'
+  | 'bolge_sorumlusu'
+  | 'genel_mudur';
+
+export interface StaffCandidate {
+  id: string;
+  name: string;
+  role: StaffRole;
+  roleTitle: string; // e.g., Barista, Teknisyen, Şube Müdürü, Bölge Sorumlusu, Genel Müdür
+  stars: 1 | 2 | 3 | 4 | 5;
+  speed: number; // 20..100
+  efficiency: number; // 20..100
+  leadership: number; // 20..100
+  hourlySalary: number;
+  hireCost: number;
+}
+
+export interface HiredStaff extends StaffCandidate {
+  hiredAt: number;
+  assignedBusinessId?: string; // for calisan, mudur_yardimcisi, sube_muduru
+  assignedCityPlate?: number; // for bolge_sorumlusu, genel_mudur
+  coveredBusinessIds?: string[]; // up to 4 for bolge_sorumlusu
+}
+
+export interface AutomationStatus {
+  autoStock: boolean;
+  autoMaintenance: boolean;
+  fullAutomation: boolean;
+  bulkSupplyDiscount: number; // 0..0.35
+  efficiencyBonus: number; // e.g. +0.20 from Genel Müdür
+  managerLabel: string | null;
+  managerRole: StaffRole | null;
+}
+
 export interface OwnedBusiness {
   id: string;
   ownerId: string;
@@ -127,6 +174,9 @@ export interface OwnedBusiness {
   districtName: string;
   level: number;
   staffCount: number;
+  employees: HiredStaff[]; // Branch-level staff (calisan, mudur_yardimcisi, sube_muduru)
+  stockLevel: number; // 0..100
+  maintenanceLevel: number; // 0..100
   purchaseCost: number;
   landMultiplier: number;
   affinityMultiplier: number;
@@ -135,6 +185,12 @@ export interface OwnedBusiness {
   boostEndsAt: number;
   createdAt: number;
   notifiedHighVault?: boolean;
+  // Franchise & Chain metadata
+  franchiseId?: string;
+  franchiseBrandName?: string;
+  franchiseOwnerId?: string;
+  franchiseRoyaltyRate?: number; // 0.10 .. 0.25
+  pledgedLoanId?: string; // If currently pledged as collateral
 }
 
 export interface RemoteBusinessRecord {
@@ -152,6 +208,129 @@ export interface RemoteBusinessRecord {
   hourly_income: number;
   valuation: number;
   created_at: string;
+}
+
+// --- Franchise & Chain Brand ---
+export interface FranchiseBrand {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  brandName: string;
+  businessType: BusinessTypeId;
+  licenseFee: number; // One-time fee
+  royaltyRate: number; // 0.10 .. 0.25 (10% - 25%)
+  branchCount: number;
+  totalRoyaltyEarned: number;
+  createdAt: number;
+  isSeed?: boolean;
+}
+
+export interface SupermarketChainBrand {
+  name: string;
+  formedAt: number;
+  discountRate: number; // 0.20 (20% bulk supply discount)
+}
+
+// --- Stock Market (BIST Devleri & Player Holding IPO) ---
+export interface StockQuote {
+  ticker: string;
+  name: string;
+  sector: string;
+  isPlayerIpo: boolean;
+  ownerId?: string;
+  ownerName?: string;
+  price: number;
+  previousPrice: number;
+  openPrice: number;
+  dividendYieldAnnual: number; // e.g., 0.065 = 6.5%
+  history: number[]; // last 24 ticks for sparkline
+  marketCap: number;
+  businessCount?: number;
+  factoryCount?: number;
+}
+
+export interface StockHolding {
+  ticker: string;
+  shares: number;
+  avgCost: number;
+}
+
+export interface PlayerIpoInfo {
+  ticker: string; // 4 letters e.g. FUGM
+  holdingName: string;
+  listedAt: number;
+  initialPrice: number;
+  totalSharesIssued: number;
+  publicFloatShares: number;
+  raisedCapital: number;
+}
+
+// --- Player-Controlled Banking, Credit Score (0-1900) & Auto-Seizure ---
+export type CreditTierKey = 'blacklist' | 'high_risk' | 'standard' | 'good_boss' | 'vip_holding';
+
+export interface CreditTierRule {
+  key: CreditTierKey;
+  label: string;
+  minScore: number;
+  maxScore: number;
+  maxLoanAmount: number;
+  rateSpread: number; // e.g., +0.12, +0.04, 0, -0.03
+  collateralMultiplier: number; // 1.5, 1.2, 1.0, 0.8
+  badgeColor: string;
+}
+
+export interface BankRecord {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  bankName: string;
+  brandColor: string;
+  emblem: string;
+  hqCityPlate: number;
+  hqCityName: string;
+  hqLat: number;
+  hqLng: number;
+  poolCapital: number;
+  baseInterestRate: number; // 0.05 .. 0.30 (5% - 30%)
+  minCreditScore: number; // 700 .. 1600
+  totalLoansIssued: number;
+  totalInterestEarned: number;
+  seizedAssetsCount: number;
+  createdAt: number;
+  isSystemBank?: boolean;
+}
+
+export type LoanStatus = 'active' | 'garnishing' | 'paid' | 'seized';
+
+export interface LoanRecord {
+  id: string;
+  bankId: string;
+  bankName: string;
+  lenderOwnerId: string;
+  borrowerId: string;
+  borrowerName: string;
+  principal: number;
+  interestRate: number; // Effective annual/term rate
+  totalDue: number;
+  remainingAmount: number;
+  collateralBusinessId: string;
+  collateralBusinessName: string;
+  collateralValuation: number;
+  createdAt: number;
+  dueAt: number; // Term end timestamp
+  seizureAt: number; // Grace period end timestamp -> triggers auto-seizure
+  status: LoanStatus;
+}
+
+// --- Patron Chat ---
+export interface ChatMessage {
+  id: string;
+  channel: 'global' | string; // 'global' or 'city-34'
+  senderId: string;
+  senderName: string;
+  senderBadge: string;
+  text: string;
+  timestamp: number;
 }
 
 export interface MarketEvent {
@@ -180,7 +359,14 @@ export interface MissionDef {
   title: string;
   description: string;
   rewardCash: number;
-  targetType: 'businessCount' | 'cityCount' | 'netWorth' | 'maxLevel' | 'totalEarned' | 'staffTotal';
+  targetType:
+    | 'businessCount'
+    | 'cityCount'
+    | 'netWorth'
+    | 'maxLevel'
+    | 'totalEarned'
+    | 'staffTotal'
+    | 'factoryCount';
   targetValue: number;
 }
 
@@ -188,7 +374,7 @@ export interface NotificationItem {
   id: string;
   title: string;
   body: string;
-  category: 'revenue' | 'event' | 'update' | 'milestone' | 'system';
+  category: 'revenue' | 'event' | 'update' | 'milestone' | 'system' | 'finance';
   timestamp: number;
   read: boolean;
 }
@@ -204,6 +390,16 @@ export interface EmpireState {
   cash: number;
   totalEarnedLifetime: number;
   businesses: OwnedBusiness[];
+  cityManagers: HiredStaff[]; // bolge_sorumlusu & genel_mudur executives
+  candidatePool: StaffCandidate[]; // Renewable 1-5 star HR pool
+  supermarketChain: SupermarketChainBrand | null;
+  ownFranchises: FranchiseBrand[];
+  franchiseRoyaltiesEarned: number;
+  stockPortfolio: StockHolding[];
+  playerIpo: PlayerIpoInfo | null;
+  creditScore: number; // 0..1900, default 1100
+  ownBank: BankRecord | null;
+  activeLoans: LoanRecord[]; // Loans borrowed by this player
   claimedMissionIds: string[];
   activeEvent: MarketEvent | null;
   lastSavedAt: number;

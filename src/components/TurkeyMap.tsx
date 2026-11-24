@@ -44,6 +44,11 @@ const TYPE_GLYPHS: Record<BusinessTypeId, string> = {
   supermarket: '🛒',
   otel: '🏨',
   avm: '🏬',
+  otopark: '🅿️',
+  katli_otopark: '🚗',
+  gida_fabrikasi: '🏭',
+  elektronik_fabrikasi: '⚙️',
+  tekstil_fabrikasi: '🧵',
 };
 
 interface MapPinItem {
