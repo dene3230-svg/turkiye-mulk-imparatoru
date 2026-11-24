@@ -33,8 +33,10 @@ jobs:
       - name: Install Capacitor CLI & Android Platform
         run: npm install --no-save --legacy-peer-deps @capacitor/cli @capacitor/android @capacitor/assets
 
-      - name: Add and sync Android platform
+      - name: Add and sync Android platform (using capacitor.config.json)
         run: |
+          test -f capacitor.config.json
+          rm -f capacitor.config.ts
           if [ ! -d "android" ]; then
             npx cap add android
           fi
