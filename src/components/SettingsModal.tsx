@@ -11,6 +11,7 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertCircle,
+  BookOpen,
 } from 'lucide-react';
 import type { GameSettings, OtaCheckResult, UserProfile } from '../types/game';
 import { APP_BUILD_DATE, APP_VERSION } from '../services/otaUpdate';
@@ -25,6 +26,7 @@ interface SettingsModalProps {
   onUpdateSettings: (patch: Partial<GameSettings>) => void;
   onCheckUpdates: () => void;
   onOpenUpdateModal: () => void;
+  onReplayTutorial?: () => void;
   onResetGame: () => void;
 }
 
@@ -38,6 +40,7 @@ export function SettingsModal({
   onUpdateSettings,
   onCheckUpdates,
   onOpenUpdateModal,
+  onReplayTutorial,
   onResetGame,
 }: SettingsModalProps) {
   const [confirmReset, setConfirmReset] = useState(false);
@@ -270,20 +273,35 @@ export function SettingsModal({
               )}
             </div>
 
-            {/* Account & Reset */}
+            {/* Account, Tutorial Replay & Reset */}
             <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-              <div className="text-xs font-bold">Hesap Durumu</div>
+              <div className="text-xs font-bold">Hesap & Rehber</div>
               <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                 {user
                   ? `${user.name} (${user.provider === 'google' ? 'Google OAuth' : 'Misafir'})`
                   : 'Oturum açılmadı'}
               </p>
 
+              {onReplayTutorial && (
+                <button
+                  type="button"
+                  data-testid="replay-tutorial-btn"
+                  onClick={() => {
+                    onClose();
+                    onReplayTutorial();
+                  }}
+                  className="mt-2.5 flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50/80 px-3 text-xs font-bold text-sky-800 transition-colors hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300 dark:hover:bg-sky-900/50"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>Oyun Rehberini Tekrar Göster</span>
+                </button>
+              )}
+
               {!confirmReset ? (
                 <button
                   type="button"
                   onClick={() => setConfirmReset(true)}
-                  className="mt-2.5 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50/70 px-3 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400"
+                  className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50/70 px-3 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>İmparatorluğu Sıfırla</span>

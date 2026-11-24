@@ -8,6 +8,7 @@ import {
   Building2,
   AlertTriangle,
   BarChart3,
+  FileSpreadsheet,
 } from 'lucide-react';
 import type {
   BankRecord,
@@ -50,6 +51,7 @@ interface BankingModalProps {
     minCreditScore?: number;
   }) => void;
   onSwitchToBorsa?: () => void;
+  onSwitchToAccounting?: () => void;
   onClose: () => void;
 }
 
@@ -68,6 +70,7 @@ export function BankingModal({
   onCreateBank,
   onUpdateBank,
   onSwitchToBorsa,
+  onSwitchToAccounting,
   onClose,
 }: BankingModalProps) {
   const [tab, setTab] = useState<'loans' | 'own-bank'>('loans');
@@ -147,17 +150,19 @@ export function BankingModal({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            {onSwitchToBorsa && (
+            {(onSwitchToBorsa || onSwitchToAccounting) && (
               <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
-                <button
-                  type="button"
-                  data-testid="finance-switch-borsa"
-                  onClick={onSwitchToBorsa}
-                  className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
-                >
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  <span>Borsa</span>
-                </button>
+                {onSwitchToBorsa && (
+                  <button
+                    type="button"
+                    data-testid="finance-switch-borsa"
+                    onClick={onSwitchToBorsa}
+                    className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    <span>Borsa</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   data-testid="finance-switch-banka"
@@ -166,6 +171,17 @@ export function BankingModal({
                   <Landmark className="h-3.5 w-3.5" />
                   <span>Banka</span>
                 </button>
+                {onSwitchToAccounting && (
+                  <button
+                    type="button"
+                    data-testid="finance-switch-accounting"
+                    onClick={onSwitchToAccounting}
+                    className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    <span>Muhasebe</span>
+                  </button>
+                )}
               </div>
             )}
             <button

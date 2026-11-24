@@ -151,10 +151,13 @@ export interface HiredStaff extends StaffCandidate {
   coveredBusinessIds?: string[]; // up to 4 for bolge_sorumlusu
 }
 
+export type GameSpeed = 0 | 1 | 2 | 4;
+
 export interface AutomationStatus {
   autoStock: boolean;
   autoMaintenance: boolean;
   fullAutomation: boolean;
+  autoCollectRevenue: boolean; // Bölge Sorumlusu (4 şube) & Genel Müdür (il geneli)
   bulkSupplyDiscount: number; // 0..0.35
   efficiencyBonus: number; // e.g. +0.20 from Genel Müdür
   managerLabel: string | null;
@@ -354,20 +357,73 @@ export interface CompanyTier {
   unlocksText: string;
 }
 
+export type MissionTargetType =
+  | 'businessCount'
+  | 'cityCount'
+  | 'netWorth'
+  | 'maxLevel'
+  | 'totalEarned'
+  | 'staffTotal'
+  | 'factoryCount'
+  | 'kafeCount'
+  | 'parkingCount'
+  | 'autoCollectManagerCount'
+  | 'stockSharesTotal'
+  | 'creditScore';
+
 export interface MissionDef {
   id: string;
   title: string;
   description: string;
   rewardCash: number;
-  targetType:
-    | 'businessCount'
-    | 'cityCount'
-    | 'netWorth'
-    | 'maxLevel'
-    | 'totalEarned'
-    | 'staffTotal'
-    | 'factoryCount';
+  rewardXp?: number;
+  targetType: MissionTargetType;
   targetValue: number;
+  tier?: number;
+}
+
+export interface AccountingSectorBreakdown {
+  sectorId: BusinessTypeId;
+  sectorName: string;
+  branchCount: number;
+  hourlyGross: number;
+}
+
+export interface AccountingBranchRow {
+  businessId: string;
+  name: string;
+  cityLabel: string;
+  sectorName: string;
+  level: number;
+  hourlyGross: number;
+  hourlyExpenses: number;
+  hourlyNet: number;
+  marginPct: number;
+  autoCollectActive: boolean;
+}
+
+export interface AccountingReport {
+  // Revenue items (hourly)
+  hourlyBranchGross: number;
+  hourlySectorBreakdown: AccountingSectorBreakdown[];
+  hourlyFranchiseRoyaltyIncome: number;
+  hourlyBankInterestIncome: number;
+  hourlyStockDividendIncome: number;
+  hourlyTotalRevenue: number;
+  // Expense items (hourly)
+  hourlyStaffPayroll: number;
+  hourlySupplyGross: number;
+  hourlySupplyDiscountSaved: number;
+  hourlySupplyNet: number;
+  hourlyFranchiseRoyaltyPaid: number;
+  hourlyLoanInstallments: number;
+  hourlyMaintenanceCost: number;
+  hourlyTotalExpenses: number;
+  // Summary
+  hourlyNetProfit: number;
+  profitMarginPct: number;
+  // Per-branch profitability comparison
+  branches: AccountingBranchRow[];
 }
 
 export interface NotificationItem {
@@ -389,6 +445,8 @@ export interface GameSettings {
 export interface EmpireState {
   cash: number;
   totalEarnedLifetime: number;
+  companyXp: number;
+  gameMinutes: number; // In-game clock in minutes (starts at 540 = Day 1 09:00)
   businesses: OwnedBusiness[];
   cityManagers: HiredStaff[]; // bolge_sorumlusu & genel_mudur executives
   candidatePool: StaffCandidate[]; // Renewable 1-5 star HR pool
@@ -400,7 +458,9 @@ export interface EmpireState {
   creditScore: number; // 0..1900, default 1100
   ownBank: BankRecord | null;
   activeLoans: LoanRecord[]; // Loans borrowed by this player
+  activeMissions: MissionDef[]; // Self-renewing dynamic mission pool (always 4 active)
   claimedMissionIds: string[];
+  completedMissionsCount: number;
   activeEvent: MarketEvent | null;
   lastSavedAt: number;
 }

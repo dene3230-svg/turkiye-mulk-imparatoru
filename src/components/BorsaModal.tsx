@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   BarChart3,
   Landmark,
+  FileSpreadsheet,
 } from 'lucide-react';
 import type { EmpireState, StockQuote } from '../types/game';
 import {
@@ -25,6 +26,7 @@ interface BorsaModalProps {
   onSellStock: (ticker: string, qty: number) => void;
   onLaunchIpo: (ticker: string, holdingName: string) => void;
   onSwitchToBanking?: () => void;
+  onSwitchToAccounting?: () => void;
   onClose: () => void;
 }
 
@@ -66,6 +68,7 @@ export function BorsaModal({
   onSellStock,
   onLaunchIpo,
   onSwitchToBanking,
+  onSwitchToAccounting,
   onClose,
 }: BorsaModalProps) {
   const [tab, setTab] = useState<'bist' | 'ipo'>('bist');
@@ -190,7 +193,7 @@ export function BorsaModal({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            {onSwitchToBanking && (
+            {(onSwitchToBanking || onSwitchToAccounting) && (
               <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
                 <button
                   type="button"
@@ -200,15 +203,28 @@ export function BorsaModal({
                   <BarChart3 className="h-3.5 w-3.5" />
                   <span>Borsa</span>
                 </button>
-                <button
-                  type="button"
-                  data-testid="finance-switch-banka"
-                  onClick={onSwitchToBanking}
-                  className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
-                >
-                  <Landmark className="h-3.5 w-3.5" />
-                  <span>Banka</span>
-                </button>
+                {onSwitchToBanking && (
+                  <button
+                    type="button"
+                    data-testid="finance-switch-banka"
+                    onClick={onSwitchToBanking}
+                    className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
+                  >
+                    <Landmark className="h-3.5 w-3.5" />
+                    <span>Banka</span>
+                  </button>
+                )}
+                {onSwitchToAccounting && (
+                  <button
+                    type="button"
+                    data-testid="finance-switch-accounting"
+                    onClick={onSwitchToAccounting}
+                    className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    <span>Muhasebe</span>
+                  </button>
+                )}
               </div>
             )}
             <button

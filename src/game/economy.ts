@@ -44,14 +44,46 @@ import {
   enforceOverdueLoans,
   type LoanEnforcementResult,
 } from './bankingEngine';
+import {
+  createInitialDynamicMissions,
+  evaluateDynamicMissionProgress,
+  generateNextDynamicMission,
+} from './missionEngine';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
+export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
+export const GAME_MINUTES_PER_REAL_SEC = 10; // 1x -> 6 real sec = 1 game hour
+
+export function formatGameClock(gameMinutes: number): {
+  day: number;
+  hour: number;
+  minute: number;
+  label: string;
+  compactLabel: string;
+} {
+  const safeMin = Math.max(0, Math.floor(gameMinutes));
+  const day = Math.floor(safeMin / 1440) + 1;
+  const rem = safeMin % 1440;
+  const hour = Math.floor(rem / 60);
+  const minute = Math.floor((rem % 60) / 10) * 10;
+  const hh = String(hour).padStart(2, '0');
+  const mm = String(minute).padStart(2, '0');
+  return {
+    day,
+    hour,
+    minute,
+    label: `Gün ${day} • ${hh}:${mm}`,
+    compactLabel: `G${day} ${hh}:${mm}`,
+  };
+}
 
 export function createInitialEmpireState(now = Date.now()): EmpireState {
   const initialTemplate = MARKET_EVENT_TEMPLATES[2]; // Ticari Emlak Canlanması
   return {
     cash: STARTING_CASH,
     totalEarnedLifetime: 0,
+    companyXp: 0,
+    gameMinutes: STARTING_GAME_MINUTES,
     businesses: [],
     cityManagers: [],
     candidatePool: generateCandidatePool(now, 'kafe'),
@@ -63,7 +95,9 @@ export function createInitialEmpireState(now = Date.now()): EmpireState {
     creditScore: STARTING_CREDIT_SCORE,
     ownBank: null,
     activeLoans: [],
+    activeMissions: createInitialDynamicMissions(),
     claimedMissionIds: [],
+    completedMissionsCount: 0,
     activeEvent: {
       ...initialTemplate,
       startedAt: now,
@@ -580,6 +614,8 @@ export interface TickResult {
   highVaultBusinessIds: string[];
   newMarketEvent: MarketEvent | null;
   dividendPaid: number;
+  autoCollectedHourlyAmount: number;
+  hoursPassed: number;
   loanEnforcement: LoanEnforcementResult;
 }
 
@@ -591,6 +627,26 @@ export function tickEconomy(
   stockQuotes?: StockQuote[]
 ): TickResult {
   const safeDt = Math.max(0, Math.min(elapsedSec, 3600));
+  if (safeDt === 0) {
+    return {
+      state,
+      highVaultBusinessIds: [],
+      newMarketEvent: null,
+      dividendPaid: 0,
+      autoCollectedHourlyAmount: 0,
+      hoursPassed: 0,
+      loanEnforcement: {
+        state,
+        garnishedTotal: 0,
+        seizedLoans: [],
+      },
+    };
+  }
+
+  const prevMinutes = state.gameMinutes ?? STARTING_GAME_MINUTES;
+  const nextMinutes = prevMinutes + safeDt * GAME_MINUTES_PER_REAL_SEC;
+  const hoursPassed = Math.floor(nextMinutes / 60) - Math.floor(prevMinutes / 60);
+
   const highVaultBusinessIds: string[] = [];
 
   let activeEvent = state.activeEvent;
@@ -610,8 +666,7 @@ export function tickEconomy(
     newMarketEvent = activeEvent;
   }
 
-  let autoCollectedCash = 0;
-  let totalGenerated = 0;
+  let autoCollectedHourlyAmount = 0;
 
   const updatedBusinesses = state.businesses.map((b) => {
     const automation = resolveBusinessAutomation(b, state.cityManagers ?? [], state.businesses);
@@ -635,15 +690,24 @@ export function tickEconomy(
       nextMaint = Math.max(20, nextMaint - safeDt * 0.16);
     }
 
-    const autoRate = automation.fullAutomation ? 0.65 : b.staffCount >= 3 ? 0.35 : 0;
-    const directCash = earned * autoRate;
-    const vaultGain = earned - directCash;
-    autoCollectedCash += directCash;
-    totalGenerated += directCash;
+    // Strict Auto-Collect Revenue rule:
+    // Only Bölge Sorumlusu (up to 4 branches) & Genel Müdür (all city branches) auto-transfer
+    // accumulated branch revenue straight into the main holding treasury every in-game hour!
+    // Unmanaged branches & Şube Müdürü-only branches accumulate in pendingCash for manual "Topla".
+    let nextPending = Math.min(capacity, b.pendingCash + earned);
+    let directTransfer = 0;
 
-    const nextPending = Math.min(capacity, b.pendingCash + vaultGain);
+    if (automation.autoCollectRevenue && hoursPassed > 0) {
+      directTransfer = Math.floor(b.pendingCash + earned);
+      nextPending = b.pendingCash + earned - directTransfer;
+      autoCollectedHourlyAmount += directTransfer;
+    }
+
     const hitHighRatio =
-      capacity > 0 && nextPending / capacity >= HIGH_VAULT_NOTIFY_RATIO && !b.notifiedHighVault;
+      !automation.autoCollectRevenue &&
+      capacity > 0 &&
+      nextPending / capacity >= HIGH_VAULT_NOTIFY_RATIO &&
+      !b.notifiedHighVault;
 
     if (hitHighRatio) {
       highVaultBusinessIds.push(b.id);
@@ -654,8 +718,10 @@ export function tickEconomy(
       stockLevel: Number(nextStock.toFixed(1)),
       maintenanceLevel: Number(nextMaint.toFixed(1)),
       pendingCash: nextPending,
-      totalEarned: b.totalEarned + directCash,
-      notifiedHighVault: b.notifiedHighVault || hitHighRatio,
+      totalEarned: b.totalEarned + directTransfer,
+      notifiedHighVault: automation.autoCollectRevenue
+        ? false
+        : b.notifiedHighVault || hitHighRatio,
     };
   });
 
@@ -672,9 +738,10 @@ export function tickEconomy(
 
   const preLoanState: EmpireState = {
     ...state,
-    cash: state.cash + autoCollectedCash + dividendPaid + passiveRoyaltyGain,
+    gameMinutes: nextMinutes,
+    cash: state.cash + autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
     totalEarnedLifetime:
-      state.totalEarnedLifetime + totalGenerated + dividendPaid + passiveRoyaltyGain,
+      state.totalEarnedLifetime + autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
     franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
     businesses: updatedBusinesses,
     activeEvent,
@@ -684,7 +751,7 @@ export function tickEconomy(
   // Enforce overdue loans (garnishment -> automatic collateral seizure!)
   const loanEnforcement = enforceOverdueLoans(
     preLoanState,
-    autoCollectedCash + dividendPaid + passiveRoyaltyGain,
+    autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
     now
   );
 
@@ -693,6 +760,8 @@ export function tickEconomy(
     highVaultBusinessIds,
     newMarketEvent,
     dividendPaid,
+    autoCollectedHourlyAmount,
+    hoursPassed,
     loanEnforcement,
   };
 }
@@ -888,27 +957,7 @@ export function getMissionProgress(
   now = Date.now(),
   stockQuotes?: StockQuote[]
 ): number {
-  switch (mission.targetType) {
-    case 'businessCount':
-      return state.businesses.length;
-    case 'cityCount':
-      return new Set(state.businesses.map((b) => b.cityPlate)).size;
-    case 'netWorth':
-      return calculateNetWorth(state, now, stockQuotes);
-    case 'maxLevel':
-      return state.businesses.reduce((max, b) => Math.max(max, b.level), 0);
-    case 'totalEarned':
-      return Math.floor(state.totalEarnedLifetime);
-    case 'staffTotal':
-      return (
-        state.businesses.reduce((sum, b) => sum + b.staffCount, 0) +
-        (state.cityManagers?.length ?? 0)
-      );
-    case 'factoryCount':
-      return state.businesses.filter((b) => isFactoryType(b.blueprintId)).length;
-    default:
-      return 0;
-  }
+  return evaluateDynamicMissionProgress(state, mission, now, stockQuotes);
 }
 
 export function claimMissionReward(
@@ -925,14 +974,34 @@ export function claimMissionReward(
     return { state, ok: false, error: 'Görev henüz tamamlanmadı.' };
   }
 
+  const nextCompletedCount = (state.completedMissionsCount ?? 0) + 1;
+  const rewardXp = mission.rewardXp ?? 150;
+  const remainingMissions = (state.activeMissions ?? []).filter((m) => m.id !== mission.id);
+
+  const interimState: EmpireState = {
+    ...state,
+    cash: state.cash + mission.rewardCash,
+    companyXp: (state.companyXp ?? 0) + rewardXp,
+    claimedMissionIds: [...state.claimedMissionIds, mission.id],
+    completedMissionsCount: nextCompletedCount,
+    lastSavedAt: now,
+  };
+
+  // Automatically generate a fresh tailored replacement mission
+  const replacement = generateNextDynamicMission(
+    interimState,
+    remainingMissions,
+    nextCompletedCount + remainingMissions.length + 1,
+    now,
+    stockQuotes
+  );
+
   return {
     ok: true,
     collectedAmount: mission.rewardCash,
     state: {
-      ...state,
-      cash: state.cash + mission.rewardCash,
-      claimedMissionIds: [...state.claimedMissionIds, mission.id],
-      lastSavedAt: now,
+      ...interimState,
+      activeMissions: [...remainingMissions, replacement],
     },
   };
 }

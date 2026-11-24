@@ -7,12 +7,15 @@ import {
   STARTING_CREDIT_SCORE,
 } from './catalog.ts';
 import {
+  STARTING_GAME_MINUTES,
   calculateBusinessCapacity,
   calculateBusinessIncomePerSec,
   calculateNetWorth,
   calculateTakeoverPrice,
   checkMinDistance75m,
+  claimMissionReward,
   createInitialEmpireState,
+  formatGameClock,
   getCompanyTier,
   hasAvmSynergyForBusiness,
   hasFactorySupplySynergy,
@@ -21,6 +24,8 @@ import {
   takeoverCompetitorBusiness,
   tickEconomy,
 } from './economy.ts';
+import { calculateAccountingReport } from './accountingEngine.ts';
+import { ACTIVE_MISSION_SLOTS, ensureDynamicMissions } from './missionEngine.ts';
 import {
   GEOGRAPHIC_REGIONS,
   TURKEY_PROVINCES,
@@ -447,8 +452,157 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.2.1');
-  assert.equal(compareSemver('1.2.0', '1.2.1'), 1);
-  assert.equal(compareSemver('1.2.1', '1.2.1'), 0);
+  assert.equal(APP_VERSION, '1.2.2');
+  assert.equal(compareSemver('1.2.1', '1.2.2'), 1);
+  assert.equal(compareSemver('1.2.2', '1.2.2'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
+
+test('v1.2.2 Time & Speed controls: pause freezes clock/income, 1x/2x/4x scale clock and hours accurately', () => {
+  const now = 300_000;
+  let state = createInitialEmpireState(now);
+  assert.equal(state.gameMinutes, STARTING_GAME_MINUTES);
+  assert.equal(formatGameClock(STARTING_GAME_MINUTES).label, 'Gün 1 • 09:00');
+
+  const owner = { id: 'p1', name: 'Patron' };
+  const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Saat Kafe', owner, [], now);
+  assert.equal(built.ok, true);
+  state = built.state;
+
+  // Pause (elapsedSec = 0) completely freezes gameMinutes & pendingCash
+  const pausedTick = tickEconomy(state, 0, now);
+  assert.equal(pausedTick.state.gameMinutes, STARTING_GAME_MINUTES);
+  assert.equal(pausedTick.state.businesses[0].pendingCash, 0);
+  assert.equal(pausedTick.hoursPassed, 0);
+
+  // 1x tick (1 sec = +10 game minutes) vs 4x tick (4 sec = +40 game minutes)
+  const tick1x = tickEconomy(state, 1, now + 1000);
+  assert.equal(tick1x.state.gameMinutes, STARTING_GAME_MINUTES + 10);
+  const tick4x = tickEconomy(state, 4, now + 4000);
+  assert.equal(tick4x.state.gameMinutes, STARTING_GAME_MINUTES + 40);
+  assert.ok(tick4x.state.businesses[0].pendingCash > tick1x.state.businesses[0].pendingCash * 3.5);
+
+  // 6 seconds at 1x = 60 game minutes -> 1 full in-game hour (Gün 1 • 10:00)
+  const tickHour = tickEconomy(state, 6, now + 6000);
+  assert.equal(tickHour.hoursPassed, 1);
+  assert.equal(formatGameClock(tickHour.state.gameMinutes).label, 'Gün 1 • 10:00');
+});
+
+test('v1.2.2 Auto-Collect Revenue: strictly Bölge Sorumlusu (4 branches) & Genel Müdür (all city), NOT Şube Müdürü', () => {
+  const now = 400_000;
+  let state = createInitialEmpireState(now);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  // Build 2 cafes in Istanbul (34) and 1 cafe in Ankara (6)
+  const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'İstanbul Kafe 1', owner, [], now);
+  const b2 = purchaseBusiness(b1.state, 'kafe', landPin(41.0522, 29.0067, 34), 'İstanbul Kafe 2', owner, [], now + 10);
+  const b3 = purchaseBusiness(b2.state, 'kafe', landPin(39.9208, 32.8541, 6), 'Ankara Kafe', owner, [], now + 20);
+  state = b3.state;
+
+  const pool = generateCandidatePool(54321, 'kafe');
+  state = { ...state, candidatePool: pool };
+
+  // Hire Şube Müdürü on Ankara Kafe -> fullAutomation true, autoCollectRevenue MUST be FALSE
+  const bm = pool.find((c) => c.role === 'sube_muduru')!;
+  const hiredBm = hireCandidateFromPool(state, bm.id, b3.business!.id, 6, now + 30);
+  assert.equal(hiredBm.ok, true);
+  const ankaraAuto = resolveBusinessAutomation(
+    hiredBm.state.businesses.find((b) => b.id === b3.business!.id)!,
+    hiredBm.state.cityManagers,
+    hiredBm.state.businesses
+  );
+  assert.equal(ankaraAuto.fullAutomation, true);
+  assert.equal(ankaraAuto.autoCollectRevenue, false);
+
+  // Hire Bölge Sorumlusu in Istanbul -> covers Istanbul branches with autoCollectRevenue = TRUE
+  const rm = hiredBm.state.candidatePool.find((c) => c.role === 'bolge_sorumlusu')!;
+  const hiredRm = hireCandidateFromPool(hiredBm.state, rm.id, null, 34, now + 40);
+  assert.equal(hiredRm.ok, true);
+  const istAuto = resolveBusinessAutomation(
+    hiredRm.state.businesses.find((b) => b.id === b1.business!.id)!,
+    hiredRm.state.cityManagers,
+    hiredRm.state.businesses
+  );
+  assert.equal(istAuto.autoCollectRevenue, true);
+
+  // Tick 6 seconds (= 1 full in-game hour): Istanbul branches auto-transfer cash straight into state.cash,
+  // while Ankara (Şube Müdürü only) keeps revenue in pendingCash!
+  const cashBefore = hiredRm.state.cash;
+  const hourTick = tickEconomy(hiredRm.state, 6, now + 6040);
+  assert.equal(hourTick.hoursPassed, 1);
+  assert.ok(hourTick.autoCollectedHourlyAmount > 0);
+  assert.ok(hourTick.state.cash > cashBefore);
+
+  const ist1After = hourTick.state.businesses.find((b) => b.id === b1.business!.id)!;
+  const ankaraAfter = hourTick.state.businesses.find((b) => b.id === b3.business!.id)!;
+  assert.ok(ist1After.pendingCash < 1, 'Bölge Sorumlusu branch should auto-empty vault hourly');
+  assert.ok(ankaraAfter.pendingCash > 100, 'Şube Müdürü branch should remain manual pendingCash');
+});
+
+test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply savings, net profit & margin', () => {
+  const now = 500_000;
+  let state = createInitialEmpireState(now);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Holding' };
+
+  const kafe = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Merkez Kafe', owner, [], now);
+  const reportBeforeFactory = calculateAccountingReport(kafe.state, [], now);
+  assert.ok(reportBeforeFactory.hourlyTotalRevenue > 0);
+  assert.ok(reportBeforeFactory.hourlyTotalExpenses > 0);
+  assert.equal(reportBeforeFactory.branches.length, 1);
+  assert.equal(reportBeforeFactory.hourlySupplyDiscountSaved, 0);
+
+  // Adding a Gıda Fabrikası creates real supply discount savings in Accounting Report
+  const withFac = purchaseBusiness(
+    kafe.state,
+    'gida_fabrikasi',
+    landPin(41.06, 29.02, 34),
+    'Anadolu Gıda',
+    owner,
+    [],
+    now + 10
+  );
+  const reportWithFactory = calculateAccountingReport(withFac.state, [], now + 10);
+  assert.ok(reportWithFactory.hourlySupplyDiscountSaved > 0);
+  assert.equal(reportWithFactory.branches.length, 2);
+  assert.equal(
+    reportWithFactory.hourlyNetProfit,
+    reportWithFactory.hourlyTotalRevenue - reportWithFactory.hourlyTotalExpenses
+  );
+  assert.ok(reportWithFactory.hourlySectorBreakdown.length === 2);
+});
+
+test('v1.2.2 Self-Renewing Dynamic Missions award Cash + XP and immediately replace claimed mission', () => {
+  const now = 600_000;
+  let state = createInitialEmpireState(now);
+  const initialMissions = ensureDynamicMissions(state, now);
+  assert.equal(initialMissions.length, ACTIVE_MISSION_SLOTS);
+  assert.equal(initialMissions[0].id, 'dyn-starter-kafe-1');
+
+  // Build first cafe to complete 'dyn-starter-kafe-1'
+  const built = purchaseBusiness(
+    state,
+    'kafe',
+    landPin(41.0422, 29.0067, 34),
+    'İlk Kafe',
+    { id: 'p1', name: 'Patron' },
+    [],
+    now
+  );
+  assert.equal(built.ok, true);
+  state = built.state;
+
+  const cashBefore = state.cash;
+  const claim = claimMissionReward(state, initialMissions[0], now + 100);
+  assert.equal(claim.ok, true);
+  assert.equal(claim.state.cash, cashBefore + initialMissions[0].rewardCash);
+  assert.ok(claim.state.companyXp > 0);
+  assert.equal(claim.state.completedMissionsCount, 1);
+  assert.equal(claim.state.activeMissions.length, ACTIVE_MISSION_SLOTS);
+  assert.ok(
+    !claim.state.activeMissions.some((m) => m.id === 'dyn-starter-kafe-1'),
+    'Claimed mission must be replaced by a brand new mission'
+  );
+});
+

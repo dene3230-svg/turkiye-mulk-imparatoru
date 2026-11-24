@@ -172,6 +172,20 @@ export function BusinessInspector({
           )}
         </div>
 
+        {/* Automatic Hourly Revenue Collection Badge (Bölge Sorumlusu / Genel Müdür) */}
+        {automation.autoCollectRevenue && (
+          <div
+            data-testid="auto-collect-badge"
+            className="flex items-center justify-between gap-2 rounded-xl border border-emerald-400/80 bg-emerald-500/15 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+          >
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span>Otomatik Tahsilat Aktif</span>
+            </span>
+            <span className="text-[10px] font-medium opacity-85">Her oyun saatinde kasaya</span>
+          </div>
+        )}
+
         {/* Active Synergies */}
         {(hasAvmBonus || hasParkingBonus || hasFactoryBonus || business.franchiseBrandName) && (
           <div className="flex flex-wrap gap-1 text-[10px] font-bold">

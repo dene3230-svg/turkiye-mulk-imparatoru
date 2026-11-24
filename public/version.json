@@ -1,11 +1,11 @@
 {
-  "version": "1.2.1",
+  "version": "1.2.2",
   "buildDate": "2026-11-24",
   "mandatory": false,
   "notes": [
-    "Küçük telefon ekranları için ferah ve sıkışmayan mobil menü düzeni eklendi.",
-    "Alt aksiyon çubuğu 4 ana hızlı erişim butonuna (Pin Bırak, Portföy, Finans ve Menü) sadeleştirildi; Borsa & Banka tek Finans merkezinde birleştirildi.",
-    "Üst bilgi barı, harita yakınlaştırma butonları ve Patron Sohbeti güvenli ekran boşluklarıyla (safe-area-inset) yeniden hizalandı.",
-    "1–5 Yıldızlı Personel Aday Havuzu, 5 Kademeli Yönetim Otomasyonu, Fabrikalar, Otoparklar, Franchise, BIST/IPO ve Özel Bankacılık sistemleri aktif."
+    "Zaman akışı ve hız kontrolü (Durdur, 1x, 2x, 4x) eklendi.",
+    "Gelir-gider muhasebe raporu ve şube bazlı kârlılık bilançosu eklendi.",
+    "Kendini yenileyen dinamik görev sistemi ve atlanabilir oyun rehberi eklendi.",
+    "Bölge Sorumlusu ve Genel Müdür için saatlik otomatik gelir toplama özelliği aktif edildi."
   ]
 }

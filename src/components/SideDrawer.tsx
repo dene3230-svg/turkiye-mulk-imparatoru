@@ -1,6 +1,18 @@
-import { X, MapPin, Coins, Trophy, TrendingUp, Crown, CheckCircle2, DoorOpen, Users } from 'lucide-react';
-import type { EmpireState, MissionDef } from '../types/game';
-import { COMPANY_TIERS, MISSION_CATALOG, getBlueprintById } from '../game/catalog';
+import {
+  X,
+  MapPin,
+  Coins,
+  Trophy,
+  TrendingUp,
+  Crown,
+  CheckCircle2,
+  DoorOpen,
+  Users,
+  Zap,
+  Sparkles,
+} from 'lucide-react';
+import type { EmpireState, MissionDef, StockQuote } from '../types/game';
+import { COMPANY_TIERS, getBlueprintById } from '../game/catalog';
 import {
   calculateBusinessHourlyIncome,
   calculateNetWorth,
@@ -8,12 +20,15 @@ import {
   getCompanyTier,
   getMissionProgress,
 } from '../game/economy';
+import { resolveBusinessAutomation } from '../game/hrEngine';
+import { ensureDynamicMissions } from '../game/missionEngine';
 
 export type DrawerTab = 'portfolio' | 'missions' | 'market';
 
 interface SideDrawerProps {
   tab: DrawerTab;
   state: EmpireState;
+  stockQuotes?: StockQuote[];
   now: number;
   onClose: () => void;
   onSelectBusiness: (businessId: string) => void;
@@ -27,6 +42,7 @@ interface SideDrawerProps {
 export function SideDrawer({
   tab,
   state,
+  stockQuotes,
   now,
   onClose,
   onSelectBusiness,
@@ -36,9 +52,10 @@ export function SideDrawer({
   onClaimMission,
   onEnablePinMode,
 }: SideDrawerProps) {
-  const netWorth = calculateNetWorth(state, now);
+  const netWorth = calculateNetWorth(state, now, stockQuotes);
   const currentTier = getCompanyTier(netWorth);
   const uniqueCities = new Set(state.businesses.map((b) => b.cityPlate)).size;
+  const dynamicMissions = ensureDynamicMissions(state, now, stockQuotes);
 
   const titles: Record<DrawerTab, string> = {
     portfolio: 'Portföy & İK',
@@ -66,7 +83,7 @@ export function SideDrawer({
             {tab === 'portfolio' &&
               `${state.businesses.length}/${currentTier.maxBranches} şube · ${uniqueCities} il · Net: ${formatTL(netWorth, true)}`}
             {tab === 'missions' &&
-              `${state.claimedMissionIds.length}/${MISSION_CATALOG.length} görev tamamlandı`}
+              `${state.completedMissionsCount ?? state.claimedMissionIds.length} tamamlandı · ${(state.companyXp ?? 0).toLocaleString('tr-TR')} XP · Otomatik yenilenir`}
             {tab === 'market' &&
               `Şirket Sv.${currentTier.level} (${currentTier.title}) · ${currentTier.maxBranches} Şube Kotası`}
           </p>
@@ -123,6 +140,11 @@ export function SideDrawer({
               <div className="space-y-2">
                 {state.businesses.map((biz) => {
                   const bp = getBlueprintById(biz.blueprintId);
+                  const automation = resolveBusinessAutomation(
+                    biz,
+                    state.cityManagers ?? [],
+                    state.businesses
+                  );
                   const hourly = calculateBusinessHourlyIncome(
                     biz,
                     state.activeEvent,
@@ -143,8 +165,18 @@ export function SideDrawer({
                           onClick={() => onSelectBusiness(biz.id)}
                           className="min-w-0 flex-1 text-left"
                         >
-                          <div className="truncate text-xs font-bold text-slate-900 hover:text-amber-700 dark:text-white dark:hover:text-amber-400">
-                            {biz.customName}
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-xs font-bold text-slate-900 hover:text-amber-700 dark:text-white dark:hover:text-amber-400">
+                              {biz.customName}
+                            </span>
+                            {automation.autoCollectRevenue && (
+                              <span
+                                data-testid="portfolio-auto-collect-badge"
+                                className="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                              >
+                                <Zap className="h-2.5 w-2.5" /> Otomatik Tahsilat Aktif
+                              </span>
+                            )}
                           </div>
                           <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                             {String(biz.cityPlate).padStart(2, '0')} {biz.cityName} ·{' '}
@@ -207,19 +239,29 @@ export function SideDrawer({
 
         {tab === 'missions' && (
           <div className="space-y-2.5">
-            {MISSION_CATALOG.map((mission) => {
-              const progress = getMissionProgress(state, mission, now);
-              const claimed = state.claimedMissionIds.includes(mission.id);
+            {/* Dynamic XP & Infinite Renewal Banner */}
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-[11px] dark:border-amber-800/60 dark:bg-amber-950/30">
+              <span className="flex min-w-0 items-center gap-1.5 font-bold text-amber-900 dark:text-amber-300">
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Dinamik Görevler</span>
+              </span>
+              <span className="shrink-0 font-mono-num font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                {(state.companyXp ?? 0).toLocaleString('tr-TR')} XP ·{' '}
+                {state.completedMissionsCount ?? state.claimedMissionIds.length} Tamam
+              </span>
+            </div>
+
+            {dynamicMissions.map((mission) => {
+              const progress = getMissionProgress(state, mission, now, stockQuotes);
               const completed = progress >= mission.targetValue;
-              const pct = Math.min(100, Math.round((progress / mission.targetValue) * 100));
+              const pct = Math.min(100, Math.round((progress / Math.max(1, mission.targetValue)) * 100));
 
               return (
                 <div
                   key={mission.id}
+                  data-testid="dynamic-mission-card"
                   className={`rounded-xl border p-3 ${
-                    claimed
-                      ? 'border-emerald-200/70 bg-emerald-50/40 opacity-75 dark:border-emerald-900/40 dark:bg-emerald-950/20'
-                      : completed
+                    completed
                       ? 'border-amber-400 bg-amber-50/80 dark:border-amber-600/80 dark:bg-amber-950/35'
                       : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
                   }`}
@@ -227,7 +269,7 @@ export function SideDrawer({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
-                        {claimed ? (
+                        {completed ? (
                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                         ) : (
                           <Trophy className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -238,9 +280,14 @@ export function SideDrawer({
                         {mission.description}
                       </p>
                     </div>
-                    <span className="shrink-0 font-mono-num text-xs font-bold text-amber-700 dark:text-amber-400">
-                      +{formatTL(mission.rewardCash, true)}
-                    </span>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono-num text-xs font-bold text-amber-700 dark:text-amber-400">
+                        +{formatTL(mission.rewardCash, true)}
+                      </div>
+                      <div className="font-mono-num text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                        +{mission.rewardXp ?? 150} XP
+                      </div>
+                    </div>
                   </div>
 
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
@@ -254,22 +301,19 @@ export function SideDrawer({
 
                   <div className="mt-1.5 flex items-center justify-between text-[11px]">
                     <span className="font-mono-num text-slate-500 dark:text-slate-400">
-                      {mission.targetType === 'netWorth'
+                      {mission.targetType === 'netWorth' || mission.targetType === 'totalEarned'
                         ? `${formatTL(progress, true)} / ${formatTL(mission.targetValue, true)}`
                         : `${Math.min(progress, mission.targetValue)} / ${mission.targetValue}`}
                     </span>
 
-                    {claimed ? (
-                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                        Ödül Alındı
-                      </span>
-                    ) : completed ? (
+                    {completed ? (
                       <button
                         type="button"
+                        data-testid="claim-mission-btn"
                         onClick={() => onClaimMission(mission)}
                         className="rounded-lg bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-700"
                       >
-                        Ödülü Al
+                        Ödülü Al & Yenile
                       </button>
                     ) : (
                       <span className="text-slate-400 dark:text-slate-500">Devam Ediyor</span>

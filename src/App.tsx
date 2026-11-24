@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   Building2,
+  Clock,
   Coins,
   Home,
   MapPin,
+  Pause,
   Settings,
   Sun,
   Moon,
@@ -23,6 +25,7 @@ import type {
   EmpireState,
   FranchiseBrand,
   GameSettings,
+  GameSpeed,
   MissionDef,
   NotificationItem,
   OtaCheckResult,
@@ -34,12 +37,12 @@ import type {
   UserProfile,
 } from './types/game';
 import {
-  MISSION_CATALOG,
   STARTING_CREDIT_SCORE,
   isFactoryType,
   isValidBusinessType,
 } from './game/catalog';
 import {
+  STARTING_GAME_MINUTES,
   activateMarketingBoost,
   calculateBusinessHourlyIncome,
   calculateBusinessValuation,
@@ -51,6 +54,7 @@ import {
   collectAllCash,
   collectBusinessCash,
   createInitialEmpireState,
+  formatGameClock,
   formatTL,
   getCompanyTier,
   getMissionProgress,
@@ -61,6 +65,7 @@ import {
   tickEconomy,
   upgradeBusiness,
 } from './game/economy';
+import { ensureDynamicMissions } from './game/missionEngine';
 import {
   dismissStaffMember,
   generateCandidatePool,
@@ -150,8 +155,19 @@ import { BankingModal } from './components/BankingModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { PatronChatPanel } from './components/PatronChatPanel';
 import { GameHubMenuModal } from './components/GameHubMenuModal';
+import { AccountingModal } from './components/AccountingModal';
+import { GameTutorialOverlay } from './components/GameTutorialOverlay';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
+const TUTORIAL_STORAGE_KEY = 'tmi_tutorial_done_v122';
+
+function isTutorialCompleted(): boolean {
+  try {
+    return localStorage.getItem(TUTORIAL_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 function loadSettings(): GameSettings {
   try {
@@ -202,7 +218,7 @@ function migrateSavedEmpire(saved: EmpireState | null, owner: UserProfile): Empi
     };
   });
 
-  return {
+  const baseMigrated: EmpireState = {
     ...saved,
     businesses: migratedBusinesses,
     cityManagers: Array.isArray(saved.cityManagers) ? saved.cityManagers : [],
@@ -218,6 +234,19 @@ function migrateSavedEmpire(saved: EmpireState | null, owner: UserProfile): Empi
     creditScore: typeof saved.creditScore === 'number' ? saved.creditScore : STARTING_CREDIT_SCORE,
     ownBank: saved.ownBank ?? null,
     activeLoans: Array.isArray(saved.activeLoans) ? saved.activeLoans : [],
+    companyXp: typeof saved.companyXp === 'number' ? saved.companyXp : 0,
+    gameMinutes:
+      typeof saved.gameMinutes === 'number' ? saved.gameMinutes : STARTING_GAME_MINUTES,
+    completedMissionsCount:
+      typeof saved.completedMissionsCount === 'number'
+        ? saved.completedMissionsCount
+        : saved.claimedMissionIds?.length ?? 0,
+    activeMissions: Array.isArray(saved.activeMissions) ? saved.activeMissions : [],
+  };
+
+  return {
+    ...baseMigrated,
+    activeMissions: ensureDynamicMissions(baseMigrated, Date.now()),
   };
 }
 
@@ -279,8 +308,10 @@ export default function App() {
     },
   ]);
 
-  // Modals & Inspectors
+  // Modals, Time Speed & Inspectors
+  const [gameSpeed, setGameSpeed] = useState<GameSpeed>(1);
   const [now, setNow] = useState<number>(() => Date.now());
+  const simNowRef = useRef<number>(now);
   const [droppedPin, setDroppedPin] = useState<PinLocationInfo | null>(null);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null);
@@ -290,8 +321,10 @@ export default function App() {
   const [holdingModalOpen, setHoldingModalOpen] = useState(false);
   const [borsaModalOpen, setBorsaModalOpen] = useState(false);
   const [bankingModalOpen, setBankingModalOpen] = useState(false);
+  const [accountingModalOpen, setAccountingModalOpen] = useState(false);
   const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
   const [hubMenuOpen, setHubMenuOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => !isTutorialCompleted());
 
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [pinDropMode, setPinDropMode] = useState<boolean>(true);
@@ -304,9 +337,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v121',
-      title: 'Türkiye Mülk İmparatoru v1.2.1',
-      body: 'Küçük telefon ekranları için ferah mobil menü düzeni, birleşik Finans (Borsa & Banka) ve tam Holding simülasyonu aktif!',
+      id: 'welcome-v122',
+      title: 'Türkiye Mülk İmparatoru v1.2.2',
+      body: 'Zaman hızı (Durdur/1x/2x/4x), Muhasebe & Gelir-Gider bilançosu, kendini yenileyen dinamik görevler ve üst yönetici saatlik otomatik tahsilatı aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -327,6 +360,8 @@ export default function App() {
   settingsRef.current = settings;
   const stockQuotesRef = useRef(stockQuotes);
   stockQuotesRef.current = stockQuotes;
+  const empireRef = useRef(empire);
+  empireRef.current = empire;
   const landCheckAbortRef = useRef<AbortController | null>(null);
   const chatSendersRef = useRef<{
     global?: (msg: ChatMessage) => Promise<void>;
@@ -557,16 +592,21 @@ export default function App() {
     saveEmpireStateLocal(user.id, empire);
   }, [user, empire]);
 
-  // Live 1Hz Economy Loop & Loan Seizure Enforcement
+  // Live Economy Loop (respects Pause / 1x / 2x / 4x gameSpeed & Hourly Auto-Collection)
   useEffect(() => {
-    if (screen !== 'playing') return;
+    if (screen !== 'playing' || gameSpeed === 0) return;
 
     const timer = setInterval(() => {
-      const tickNow = Date.now();
+      simNowRef.current += 1000 * gameSpeed;
+      const tickNow = simNowRef.current;
       setNow(tickNow);
 
       setEmpire((prev) => {
-        const result = tickEconomy(prev, 1, tickNow, undefined, stockQuotesRef.current);
+        const result = tickEconomy(prev, gameSpeed, tickNow, undefined, stockQuotesRef.current);
+
+        if (result.autoCollectedHourlyAmount > 0) {
+          spawnCashPopup(result.autoCollectedHourlyAmount);
+        }
 
         if (result.highVaultBusinessIds.length > 0) {
           for (const id of result.highVaultBusinessIds) {
@@ -613,22 +653,32 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [screen, pushNotification]);
+  }, [screen, gameSpeed, pushNotification, spawnCashPopup]);
 
-  // Live 3s Borsa Ticker Loop (BIST Devleri + Player Holding IPOs)
+  // Live Borsa Ticker Loop (freezes on Pause, flows 2x/4x faster on high speed)
   useEffect(() => {
-    if (screen !== 'playing') return;
+    if (screen !== 'playing' || gameSpeed === 0) return;
+    const intervalMs = Math.max(750, Math.round(3000 / gameSpeed));
     const tickerTimer = setInterval(() => {
       setStockQuotes((prev) => {
-        const ownTicker = empire.playerIpo?.ticker;
-        const ownNw = calculateNetWorth(empire, Date.now(), prev);
-        const ownFactories = empire.businesses.filter((b) => isFactoryType(b.blueprintId)).length;
-        return tickStockQuotes(prev, ownTicker, ownNw, empire.businesses.length, ownFactories);
+        const currentEmpire = empireRef.current;
+        const ownTicker = currentEmpire.playerIpo?.ticker;
+        const ownNw = calculateNetWorth(currentEmpire, simNowRef.current, prev);
+        const ownFactories = currentEmpire.businesses.filter((b) =>
+          isFactoryType(b.blueprintId)
+        ).length;
+        return tickStockQuotes(
+          prev,
+          ownTicker,
+          ownNw,
+          currentEmpire.businesses.length,
+          ownFactories
+        );
       });
-    }, 3000);
+    }, intervalMs);
 
     return () => clearInterval(tickerTimer);
-  }, [screen, empire]);
+  }, [screen, gameSpeed]);
 
   // Derived empire metrics
   const netWorth = useMemo(
@@ -693,13 +743,23 @@ export default function App() {
     prevTierLevelRef.current = companyTier.level;
   }, [companyTier, screen, pushNotification]);
 
+  const activeMissions = useMemo(
+    () => ensureDynamicMissions(empire, now, stockQuotes),
+    [empire, now, stockQuotes]
+  );
+
   const claimableMissionCount = useMemo(() => {
-    return MISSION_CATALOG.filter(
+    return activeMissions.filter(
       (m) =>
         !empire.claimedMissionIds.includes(m.id) &&
         getMissionProgress(empire, m, now, stockQuotes) >= m.targetValue
     ).length;
-  }, [empire, now, stockQuotes]);
+  }, [activeMissions, empire, now, stockQuotes]);
+
+  const gameClock = useMemo(
+    () => formatGameClock(empire.gameMinutes ?? STARTING_GAME_MINUTES),
+    [empire.gameMinutes]
+  );
 
   const unreadNotifCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
@@ -1299,22 +1359,63 @@ export default function App() {
   };
 
   const handleClaimMission = (mission: MissionDef) => {
-    const res = claimMissionReward(empire, mission, Date.now(), stockQuotes);
+    const res = claimMissionReward(empire, mission, simNowRef.current, stockQuotes);
     if (!res.ok || !res.collectedAmount) return;
     soundEngine.playUpgrade();
     setEmpire(res.state);
     spawnCashPopup(res.collectedAmount);
+    const xpGain = mission.rewardXp ?? 150;
     pushNotification(
-      'Görev Ödülü Alındı!',
-      `"${mission.title}" görevi tamamlandı: +${formatTL(res.collectedAmount)}`,
+      'Görev Tamamlandı & Yenilendi!',
+      `"${mission.title}" ödülü: +${formatTL(res.collectedAmount)} ve +${xpGain} XP. Yeni bir görev açıldı!`,
       'milestone',
       true
     );
   };
 
+  const handleSetGameSpeed = (nextSpeed: GameSpeed) => {
+    soundEngine.playClick();
+    setGameSpeed(nextSpeed);
+  };
+
+  const handleCompleteTutorial = () => {
+    soundEngine.playUpgrade();
+    try {
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, '1');
+    } catch {
+      // ignore storage errors
+    }
+    setTutorialOpen(false);
+  };
+
+  const handleSkipTutorial = () => {
+    soundEngine.playClick();
+    try {
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, '1');
+    } catch {
+      // ignore storage errors
+    }
+    setTutorialOpen(false);
+  };
+
+  const handleReplayTutorial = () => {
+    soundEngine.playClick();
+    setSettingsOpen(false);
+    if (screen !== 'playing') {
+      if (!user) {
+        const guest = createOrLoadGuestProfile();
+        setUser(guest);
+        setEmpire(migrateSavedEmpire(loadEmpireStateLocal(guest.id), guest));
+      }
+      setScreen('playing');
+    }
+    setTutorialOpen(true);
+  };
+
   const handleResetGame = () => {
     const fresh = createInitialEmpireState();
     setEmpire(fresh);
+    setGameSpeed(1);
     setDroppedPin(null);
     setSelectedBusinessId(null);
     setSelectedCompetitorId(null);
@@ -1421,17 +1522,17 @@ export default function App() {
               </div>
 
               <div className="relative min-w-0 pr-0.5">
-                <div className="max-w-[clamp(96px,16vw,175px)] truncate text-[clamp(9px,1.2vw,10.5px)] font-semibold leading-none text-amber-700 dark:text-amber-400">
+                <div className="max-w-[clamp(86px,13vw,165px)] truncate text-[clamp(9px,1.15vw,10.5px)] font-semibold leading-none text-amber-700 dark:text-amber-400">
                   Sv.{companyTier.level} · {companyTier.title}
                 </div>
                 <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
                   <span
                     data-testid="hud-cash"
-                    className="font-mono-num text-[clamp(12px,1.65vw,16px)] font-extrabold leading-none text-slate-900 dark:text-white"
+                    className="font-mono-num text-[clamp(11.5px,1.55vw,15.5px)] font-extrabold leading-none text-slate-900 dark:text-white"
                   >
                     {formatTL(empire.cash)}
                   </span>
-                  <span className="font-mono-num text-[10px] font-bold leading-none text-emerald-700 dark:text-emerald-400 min-[760px]:hidden">
+                  <span className="font-mono-num text-[9.5px] font-bold leading-none text-emerald-700 dark:text-emerald-400 min-[960px]:hidden">
                     +{formatTL(totalIncomePerSec, true)}/sn
                   </span>
                 </div>
@@ -1446,9 +1547,9 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="hidden h-7 w-px shrink-0 bg-slate-200 dark:bg-slate-700 min-[760px]:block" />
+              <div className="hidden h-7 w-px shrink-0 bg-slate-200 dark:bg-slate-700 min-[960px]:block" />
 
-              <div className="hidden shrink-0 pr-0.5 min-[760px]:block whitespace-nowrap">
+              <div className="hidden shrink-0 pr-0.5 min-[960px]:block whitespace-nowrap">
                 <div className="text-[clamp(9px,1.15vw,10.5px)] text-slate-500 dark:text-slate-400">
                   Şube {empire.businesses.length}/{companyTier.maxBranches} · Puan{' '}
                   {empire.creditScore}
@@ -1466,7 +1567,7 @@ export default function App() {
                   type="button"
                   data-testid="hud-collect-btn"
                   onClick={handleCollectAll}
-                  className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-[clamp(7px,1.1vw,10px)] text-[clamp(10px,1.3vw,12px)] font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 whitespace-nowrap"
+                  className="flex min-h-[32px] shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-[clamp(6px,1vw,10px)] text-[clamp(10px,1.2vw,12px)] font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 whitespace-nowrap"
                 >
                   <Coins className="h-3.5 w-3.5 shrink-0" />
                   <span className="font-mono-num">
@@ -1476,10 +1577,74 @@ export default function App() {
               )}
             </div>
 
+            {/* Center Compact Time & Speed Control Capsule (Durdur / 1x / 2x / 4x) */}
+            <div
+              data-testid="time-speed-capsule"
+              className={`pointer-events-auto flex shrink-0 items-center gap-1 rounded-2xl border px-1.5 py-1 shadow-lg transition-colors ${
+                gameSpeed === 0
+                  ? 'border-amber-400/90 bg-amber-50/95 dark:border-amber-500/70 dark:bg-amber-950/90'
+                  : 'border-slate-200/95 bg-white/95 dark:border-slate-700/90 dark:bg-slate-900/95'
+              }`}
+            >
+              <div
+                data-testid="hud-game-clock"
+                className="flex items-center gap-1 pl-1 pr-0.5 whitespace-nowrap"
+              >
+                <Clock
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    gameSpeed === 0
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                />
+                <span className="hidden font-mono-num text-[clamp(10.5px,1.25vw,12px)] font-extrabold text-slate-900 dark:text-white min-[760px]:inline">
+                  {gameClock.label}
+                </span>
+                <span className="font-mono-num text-[10.5px] font-extrabold text-slate-900 dark:text-white min-[760px]:hidden">
+                  {gameClock.compactLabel}
+                </span>
+              </div>
+
+              <div className="h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
+
+              <div role="group" aria-label="Oyun Zaman Hızı" className="flex items-center gap-0.5">
+                {(
+                  [
+                    { speed: 0 as GameSpeed, label: 'Durdur', short: '⏸' },
+                    { speed: 1 as GameSpeed, label: 'Normal 1x', short: '1x' },
+                    { speed: 2 as GameSpeed, label: 'Hızlı 2x', short: '2x' },
+                    { speed: 4 as GameSpeed, label: 'Çok Hızlı 4x', short: '4x' },
+                  ] as const
+                ).map((item) => {
+                  const active = gameSpeed === item.speed;
+                  return (
+                    <button
+                      key={item.speed}
+                      type="button"
+                      data-testid={`speed-btn-${item.speed}`}
+                      aria-label={item.label}
+                      aria-pressed={active}
+                      title={item.label}
+                      onClick={() => handleSetGameSpeed(item.speed)}
+                      className={`flex h-7 min-w-[26px] items-center justify-center rounded-lg px-1.5 font-mono-num text-[10.5px] font-extrabold transition-colors sm:h-8 sm:min-w-[30px] sm:text-[11px] whitespace-nowrap ${
+                        active
+                          ? item.speed === 0
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-slate-900 text-white shadow-xs dark:bg-amber-500 dark:text-slate-950'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+                      }`}
+                    >
+                      {item.speed === 0 ? <Pause className="h-3 w-3" /> : item.short}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Right City Room Switcher & Utility Cluster */}
             <div
               data-testid="hud-right-cluster"
-              className="pointer-events-auto flex shrink-0 items-center gap-[clamp(4px,0.7vw,6px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95 sm:p-1.5"
+              className="pointer-events-auto flex shrink-0 items-center gap-[clamp(3px,0.6vw,6px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95 sm:p-1.5"
             >
               <button
                 type="button"
@@ -1720,6 +1885,7 @@ export default function App() {
                 <SideDrawer
                   tab={activeDrawer}
                   state={empire}
+                  stockQuotes={stockQuotes}
                   now={now}
                   onClose={() => setActiveDrawer(null)}
                   onSelectBusiness={handleSelectOwnBusiness}
@@ -1803,6 +1969,11 @@ export default function App() {
           setBorsaModalOpen(false);
           setBankingModalOpen(true);
         }}
+        onSwitchToAccounting={() => {
+          soundEngine.playClick();
+          setBorsaModalOpen(false);
+          setAccountingModalOpen(true);
+        }}
         onClose={() => setBorsaModalOpen(false)}
       />
 
@@ -1822,7 +1993,30 @@ export default function App() {
           setBankingModalOpen(false);
           setBorsaModalOpen(true);
         }}
+        onSwitchToAccounting={() => {
+          soundEngine.playClick();
+          setBankingModalOpen(false);
+          setAccountingModalOpen(true);
+        }}
         onClose={() => setBankingModalOpen(false)}
+      />
+
+      <AccountingModal
+        open={accountingModalOpen}
+        state={empire}
+        quotes={stockQuotes}
+        now={now}
+        onSwitchToBorsa={() => {
+          soundEngine.playClick();
+          setAccountingModalOpen(false);
+          setBorsaModalOpen(true);
+        }}
+        onSwitchToBanking={() => {
+          soundEngine.playClick();
+          setAccountingModalOpen(false);
+          setBankingModalOpen(true);
+        }}
+        onClose={() => setAccountingModalOpen(false)}
       />
 
       <GameHubMenuModal
@@ -1833,6 +2027,7 @@ export default function App() {
         activeCityLabel={`${activeProvince.code} ${activeProvince.name}`}
         claimableMissionCount={claimableMissionCount}
         onOpenHolding={() => setHoldingModalOpen(true)}
+        onOpenAccounting={() => setAccountingModalOpen(true)}
         onOpenLeaderboard={() => setLeaderboardModalOpen(true)}
         onOpenMissions={() => {
           setDroppedPin(null);
@@ -1895,7 +2090,14 @@ export default function App() {
           setSettingsOpen(false);
           setOtaModalOpen(true);
         }}
+        onReplayTutorial={handleReplayTutorial}
         onResetGame={handleResetGame}
+      />
+
+      <GameTutorialOverlay
+        open={screen === 'playing' && tutorialOpen}
+        onComplete={handleCompleteTutorial}
+        onSkip={handleSkipTutorial}
       />
 
       <OtaUpdateModal

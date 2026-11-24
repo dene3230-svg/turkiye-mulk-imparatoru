@@ -8,6 +8,7 @@ import {
   Users,
   Home,
   ChevronRight,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { formatTL } from '../game/economy';
 
@@ -19,6 +20,7 @@ interface GameHubMenuModalProps {
   activeCityLabel: string;
   claimableMissionCount: number;
   onOpenHolding: () => void;
+  onOpenAccounting: () => void;
   onOpenLeaderboard: () => void;
   onOpenMissions: () => void;
   onOpenMarket: () => void;
@@ -36,6 +38,7 @@ export function GameHubMenuModal({
   activeCityLabel,
   claimableMissionCount,
   onOpenHolding,
+  onOpenAccounting,
   onOpenLeaderboard,
   onOpenMissions,
   onOpenMarket,
@@ -58,6 +61,19 @@ export function GameHubMenuModal({
       onClick: () => {
         onClose();
         onOpenHolding();
+      },
+    },
+    {
+      id: 'accounting',
+      testId: 'hub-item-accounting',
+      title: 'Muhasebe & Gelir-Gider',
+      subtitle: 'Saatlik/günlük bilanço, net kâr marjı & şube kârlılığı',
+      icon: FileSpreadsheet,
+      accent: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+      badge: null as number | null,
+      onClick: () => {
+        onClose();
+        onOpenAccounting();
       },
     },
     {
