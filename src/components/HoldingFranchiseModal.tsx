@@ -87,10 +87,10 @@ export function HoldingFranchiseModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full max-h-[600px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-2xl lg:max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
+        <div className="compact-short-pad flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
               <Crown className="h-5 w-5" />
@@ -155,7 +155,7 @@ export function HoldingFranchiseModal({
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-slate-200 px-4 py-2 dark:border-slate-800">
+        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-200 px-3.5 py-1.5 dark:border-slate-800 sm:px-4 sm:py-2">
           {[
             { id: 'franchise' as const, label: 'Markanı Franchise Aç' },
             { id: 'chain' as const, label: `Zincir Market (${smCount}/${SUPERMARKET_CHAIN_MIN_COUNT})` },
@@ -165,7 +165,7 @@ export function HoldingFranchiseModal({
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+              className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold transition-colors whitespace-nowrap ${
                 tab === t.id
                   ? 'bg-amber-600 text-white'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
@@ -177,7 +177,7 @@ export function HoldingFranchiseModal({
         </div>
 
         {/* Content */}
-        <div className="panel-scroll flex-1 p-4">
+        <div className="panel-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4">
           {tab === 'franchise' && (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <form

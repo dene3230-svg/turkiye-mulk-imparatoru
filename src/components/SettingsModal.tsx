@@ -58,13 +58,13 @@ export function SettingsModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-lg lg:max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5 dark:border-slate-800">
+        <div className="compact-short-pad flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-2.5 dark:border-slate-800 sm:px-5 sm:py-3">
           <div>
-            <h2 className="text-base font-bold">Ayarlar ve Canlı Güncelleme</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <h2 className="text-sm font-bold sm:text-base">Ayarlar ve Canlı Güncelleme</h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Türkiye Mülk İmparatoru · Sürüm {APP_VERSION} ({APP_BUILD_DATE})
             </p>
           </div>
@@ -79,7 +79,7 @@ export function SettingsModal({
         </div>
 
         {/* Two-column landscape body */}
-        <div className="panel-scroll grid flex-1 grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+        <div className="panel-scroll grid flex-1 min-h-0 grid-cols-1 gap-3.5 overflow-y-auto overscroll-contain p-3.5 sm:grid-cols-2 sm:p-4">
           {/* Left Column: Appearance & Preferences */}
           <div className="space-y-3">
             {/* Theme Switch */}

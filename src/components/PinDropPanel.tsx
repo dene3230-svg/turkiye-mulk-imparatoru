@@ -53,7 +53,7 @@ interface PinDropPanelProps {
 }
 
 function BlueprintIcon({ iconKey }: { iconKey: BusinessBlueprint['iconKey'] }) {
-  const cls = 'h-4 w-4 shrink-0';
+  const cls = 'h-3.5 w-3.5 shrink-0';
   switch (iconKey) {
     case 'coffee':
       return <Coffee className={cls} />;
@@ -124,7 +124,8 @@ export function PinDropPanel({
   const totalCost = baseCost + (selectedFranchise?.licenseFee ?? 0);
   const affinity = getAffinityMultiplier(selectedBlueprint, location);
   const franchiseBonus = selectedFranchise ? 1.35 * (1 - selectedFranchise.royaltyRate) : 1.0;
-  const estHourly = Math.round((selectedBlueprint.baseHourlyIncome * affinity * franchiseBonus) / 50) * 50;
+  const estHourly =
+    Math.round((selectedBlueprint.baseHourlyIncome * affinity * franchiseBonus) / 50) * 50;
   const estPerSec = Math.round(selectedBlueprint.baseIncomePerSec * affinity * franchiseBonus);
 
   const isChecking = location.landStatus === 'checking';
@@ -164,18 +165,18 @@ export function PinDropPanel({
     <aside
       aria-label="Pin Noktasında İşletme Kur"
       data-testid="pin-drop-panel"
-      className="pointer-events-auto flex h-full w-[clamp(305px,36vw,425px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto flex h-full max-h-full w-[clamp(300px,42vw,440px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
+      {/* Fixed Header (shrink-0) */}
+      <div className="compact-short-pad flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-400">
             <MapPin className="h-3.5 w-3.5 shrink-0" />
-            <span>
+            <span className="truncate">
               {location.cityCode} {location.cityName} · {location.districtName}
             </span>
           </div>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+          <p className="truncate text-[10px] text-slate-500 dark:text-slate-400 [@media(max-height:420px)]:hidden">
             {location.resolvedAddress ||
               `${location.regionName} · ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
           </p>
@@ -185,29 +186,29 @@ export function PinDropPanel({
           type="button"
           onClick={onClose}
           aria-label="Pin Panelini Kapat"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white sm:h-8 sm:w-8"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Land Verification + Quota + Distance Status Banner */}
-      <div className="border-b border-slate-200 bg-slate-50/90 px-3.5 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+      {/* Fixed Land Verification + Quota Banner (shrink-0) */}
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50/90 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-950/60">
         {isChecking ? (
           <div
             data-testid="land-checking"
-            className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400"
+            className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400"
           >
-            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
             <span>Kara ve adres doğrulaması yapılıyor...</span>
           </div>
         ) : isWaterOrInvalid ? (
           <div
             role="alert"
             data-testid="water-block-alert"
-            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
           >
-            <Waves className="mt-0.5 h-4 w-4 shrink-0" />
+            <Waves className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               {location.landMessage ||
                 'Deniz, boğaz veya göl üzerine inşaat yasaktır! Lütfen kara üzerinde bir nokta seçin.'}
@@ -217,28 +218,30 @@ export function PinDropPanel({
           <div
             role="alert"
             data-testid="distance-block-alert"
-            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
           >
-            <Ruler className="mt-0.5 h-4 w-4 shrink-0" />
+            <Ruler className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              Mevcut "{distanceCheck.nearestName}" işletmesine {distanceCheck.nearestMeters}m
-              mesafede! En az {MIN_BUSINESS_DISTANCE_METERS}m mesafe kuralı gereklidir.
+              "{distanceCheck.nearestName}" işletmesine {distanceCheck.nearestMeters}m mesafede! En
+              az {MIN_BUSINESS_DISTANCE_METERS}m kuralı geçerlidir.
             </span>
           </div>
         ) : (
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+          <div className="flex items-center justify-between gap-2 text-[10.5px]">
+            <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-emerald-700 dark:text-emerald-400">
               <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-              Kara Doğrulandı · Arsa x{location.landMultiplier.toFixed(2)}
+              <span className="truncate">
+                Kara Doğrulandı · Arsa x{location.landMultiplier.toFixed(2)}
+              </span>
             </span>
             <span
-              className={`font-mono-num font-bold ${
+              className={`shrink-0 font-mono-num font-bold whitespace-nowrap ${
                 isQuotaFull
                   ? 'text-red-600 dark:text-red-400'
                   : 'text-slate-700 dark:text-slate-300'
               }`}
             >
-              Şube: {ownBranchCount}/{maxBranches}
+              Şube {ownBranchCount}/{maxBranches}
             </span>
           </div>
         )}
@@ -246,26 +249,26 @@ export function PinDropPanel({
 
       {/* Main Content */}
       {isWaterOrInvalid ? (
-        <div className="flex flex-1 flex-col items-center justify-center p-5 text-center">
-          <AlertTriangle className="h-10 w-10 text-red-500" />
-          <h3 className="mt-3 text-sm font-bold text-slate-900 dark:text-white">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-4 text-center">
+          <AlertTriangle className="h-9 w-9 text-red-500" />
+          <h3 className="mt-2 text-sm font-bold text-slate-900 dark:text-white">
             İnşaat İzni Reddedildi
           </h3>
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
             Su kütleleri (deniz, boğaz, göl, nehir) ve Türkiye dışı koordinatlar üzerine pin
             bırakılamaz. Lütfen haritada cadde veya yerleşim alanı üzerine tıklayın.
           </p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          {/* Independent vs Franchise Mode Switcher */}
-          <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-950/40">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {/* Fixed Mode Tabs (shrink-0) */}
+          <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/70 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-950/40">
             <button
               type="button"
               onClick={() => setMode('independent')}
-              className={`rounded-lg py-1.5 text-[11px] font-bold transition-colors ${
+              className={`rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
                 mode === 'independent'
-                  ? 'bg-amber-600 text-white'
+                  ? 'bg-amber-600 text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
               }`}
             >
@@ -275,21 +278,25 @@ export function PinDropPanel({
               type="button"
               data-testid="pin-mode-franchise"
               onClick={() => setMode('franchise')}
-              className={`flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-bold transition-colors ${
+              className={`flex items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
                 mode === 'franchise'
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
               }`}
             >
-              <Store className="h-3.5 w-3.5" />
+              <Store className="h-3.5 w-3.5 shrink-0" />
               <span>Franchise (+%35)</span>
             </button>
           </div>
 
-          {/* Sector or Franchise List */}
-          <div className="panel-scroll flex-1 space-y-1.5 p-2.5">
-            {mode === 'independent'
-              ? BUSINESS_BLUEPRINTS.map((bp) => {
+          {/* Scrollable 2-Column Sector / Franchise Grid (flex-1 min-h-0 overflow-y-auto overscroll-contain) */}
+          <div
+            data-testid="pin-sector-list"
+            className="panel-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+          >
+            {mode === 'independent' ? (
+              <div className="grid grid-cols-2 gap-1.5">
+                {BUSINESS_BLUEPRINTS.map((bp) => {
                   const bpCost = calculateEstablishmentCost(bp, location);
                   const bpAff = getAffinityMultiplier(bp, location);
                   const bpHourly = Math.round((bp.baseHourlyIncome * bpAff) / 50) * 50;
@@ -301,31 +308,39 @@ export function PinDropPanel({
                     <button
                       key={bp.id}
                       type="button"
+                      data-testid={`sector-card-${bp.id}`}
                       onClick={() => handleSelectBlueprint(bp)}
-                      className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
+                      className={`relative flex items-center gap-1.5 rounded-xl border p-1.5 text-left transition-colors ${
                         isSelected
-                          ? 'border-amber-500 bg-amber-50/90 dark:border-amber-500/80 dark:bg-amber-950/35'
-                          : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70'
+                          ? 'border-amber-500 bg-amber-50/90 ring-1 ring-amber-400/50 dark:border-amber-500/80 dark:bg-amber-950/40'
+                          : 'border-slate-200/85 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70'
                       } ${locked ? 'opacity-70' : ''}`}
                     >
                       <div
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
                         style={{ backgroundColor: bp.accentColor }}
                       >
                         {locked ? (
-                          <Lock className="h-4 w-4" />
+                          <Lock className="h-3 w-3" />
                         ) : (
                           <BlueprintIcon iconKey={bp.iconKey} />
                         )}
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-xs font-bold text-slate-900 dark:text-white">
-                            {bp.name}
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="truncate text-[11px] font-bold leading-tight text-slate-900 dark:text-white">
+                            {bp.shortName}
                           </span>
+                          {isSelected && !locked && (
+                            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-amber-600 text-white">
+                              <Check className="h-2.5 w-2.5" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 flex items-baseline justify-between gap-1 leading-tight">
                           <span
-                            className={`shrink-0 font-mono-num text-xs font-bold ${
+                            className={`truncate font-mono-num text-[10px] font-extrabold ${
                               locked
                                 ? 'text-slate-500 dark:text-slate-400'
                                 : affordable
@@ -333,40 +348,28 @@ export function PinDropPanel({
                                 : 'text-red-600 dark:text-red-400'
                             }`}
                           >
-                            {formatTL(bpCost)}
+                            {formatTL(bpCost, true)}
                           </span>
-                        </div>
-                        <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
-                          {locked ? (
-                            <span className="font-semibold text-amber-700 dark:text-amber-400">
-                              Şirket Sv.{bp.minCompanyLevel} gerekir
-                            </span>
-                          ) : (
-                            <span className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
-                              {formatTL(bpHourly)}/sa
-                            </span>
-                          )}
-                          <span className="truncate">
-                            {bp.category === 'parking'
-                              ? '250m +%15 Kapasite'
-                              : bp.category === 'factory'
-                              ? '%35 Tedarik İndirimi'
-                              : bp.id === 'avm'
-                              ? '+%25 Şehir Bonusu'
-                              : `Kapasite: ${bp.baseCapacity}`}
+                          <span className="shrink-0 truncate text-[9px]">
+                            {locked ? (
+                              <span className="font-semibold text-amber-700 dark:text-amber-400">
+                                Sv.{bp.minCompanyLevel}
+                              </span>
+                            ) : (
+                              <span className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
+                                {formatTL(bpHourly, true)}/sa
+                              </span>
+                            )}
                           </span>
                         </div>
                       </div>
-
-                      {isSelected && !locked && (
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-600 text-white">
-                          <Check className="h-3 w-3" />
-                        </div>
-                      )}
                     </button>
                   );
-                })
-              : availableFranchises.map((brand) => {
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-1.5">
+                {availableFranchises.map((brand) => {
                   const bp =
                     BUSINESS_BLUEPRINTS.find((b) => b.id === brand.businessType) ??
                     BUSINESS_BLUEPRINTS[0];
@@ -379,75 +382,78 @@ export function PinDropPanel({
                       key={brand.id}
                       type="button"
                       onClick={() => setSelectedFranchiseId(brand.id)}
-                      className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
+                      className={`flex w-full items-center gap-2 rounded-xl border p-2 text-left transition-colors ${
                         isSel
                           ? 'border-emerald-500 bg-emerald-50/90 dark:bg-emerald-950/35'
                           : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900'
                       }`}
                     >
                       <div
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white"
                         style={{ backgroundColor: bp.accentColor }}
                       >
                         <BlueprintIcon iconKey={bp.iconKey} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-1.5">
                           <span className="truncate text-xs font-bold">{brand.brandName}</span>
                           <span
-                            className={`shrink-0 font-mono-num text-xs font-bold ${
+                            className={`shrink-0 font-mono-num text-[11px] font-bold ${
                               affordable ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'
                             }`}
                           >
-                            {formatTL(fullCost)}
+                            {formatTL(fullCost, true)}
                           </span>
                         </div>
                         <div className="mt-0.5 flex items-center justify-between text-[10px] text-slate-500">
-                          <span>
-                            {bp.name} · Lisans {formatTL(brand.licenseFee, true)}
+                          <span className="truncate">
+                            {bp.shortName} · Lisans {formatTL(brand.licenseFee, true)}
                           </span>
-                          <span className="font-mono-num font-bold text-amber-700 dark:text-amber-400">
-                            +%35 Ciro · %{Math.round(brand.royaltyRate * 100)} Pay
+                          <span className="shrink-0 font-mono-num font-bold text-amber-700 dark:text-amber-400">
+                            +%35 · %{Math.round(brand.royaltyRate * 100)} Pay
                           </span>
                         </div>
                       </div>
                     </button>
                   );
                 })}
+              </div>
+            )}
           </div>
 
-          {/* Footer Name Input + Establish Button */}
-          <div className="border-t border-slate-200 bg-slate-50/90 p-3 dark:border-slate-800 dark:bg-slate-950/70">
-            <label
-              htmlFor="business-name-input"
-              className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300"
-            >
-              İşletme Adı
-            </label>
-            <input
-              id="business-name-input"
-              type="text"
-              maxLength={42}
-              value={customName}
-              onChange={(e) => {
-                setCustomName(e.target.value);
-                setNameEdited(true);
-              }}
-              placeholder="Örn: Beşiktaş Altın Kafe"
-              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            />
-
-            <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-              <span>Net Saatlik / Canlı Akış:</span>
-              <span className="font-mono-num font-bold text-emerald-700 dark:text-emerald-400">
-                {formatTL(estHourly)}/sa · +{formatTL(estPerSec)}/sn
-              </span>
+          {/* Fixed Bottom Name + Establish Action Footer (shrink-0) */}
+          <div className="compact-short-pad shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/80">
+            <div className="flex items-center gap-2">
+              <label htmlFor="business-name-input" className="sr-only">
+                İşletme Adı
+              </label>
+              <input
+                id="business-name-input"
+                type="text"
+                maxLength={42}
+                value={customName}
+                onChange={(e) => {
+                  setCustomName(e.target.value);
+                  setNameEdited(true);
+                }}
+                placeholder="İşletme Adı (Örn: Beşiktaş Altın Kafe)"
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+              <div className="shrink-0 text-right leading-tight">
+                <div className="font-mono-num text-[10.5px] font-extrabold text-emerald-700 dark:text-emerald-400">
+                  {formatTL(estHourly, true)}/sa
+                </div>
+                <div className="font-mono-num text-[9.5px] text-slate-500 dark:text-slate-400">
+                  +{formatTL(estPerSec, true)}/sn
+                </div>
+              </div>
             </div>
 
             <button
               type="submit"
+              data-testid="establish-business-btn"
               disabled={!canSubmit}
-              className="mt-2 flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
+              className="compact-short-btn mt-1.5 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
             >
               <span>
                 {isChecking

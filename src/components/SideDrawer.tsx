@@ -113,7 +113,7 @@ export function SideDrawer({
       </div>
 
       {/* Tab Content */}
-      <div className="panel-scroll flex-1 p-3">
+      <div className="panel-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 sm:p-3">
         {tab === 'portfolio' && (
           <>
             {state.businesses.length === 0 ? (

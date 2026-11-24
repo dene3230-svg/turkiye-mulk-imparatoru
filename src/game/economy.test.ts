@@ -62,6 +62,11 @@ import {
   takeLoanFromBank,
 } from './bankingEngine.ts';
 import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
+import {
+  generateEdgeToEdgeMainActivity,
+  patchAndroidManifest,
+  patchAndroidStyles,
+} from '../../scripts/patch-android.js';
 import type { PinLocationInfo, RemoteBusinessRecord } from '../types/game.ts';
 
 function landPin(lat: number, lng: number, plate = 34): PinLocationInfo {
@@ -452,9 +457,9 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.2.2');
-  assert.equal(compareSemver('1.2.1', '1.2.2'), 1);
-  assert.equal(compareSemver('1.2.2', '1.2.2'), 0);
+  assert.equal(APP_VERSION, '1.2.3');
+  assert.equal(compareSemver('1.2.2', '1.2.3'), 1);
+  assert.equal(compareSemver('1.2.3', '1.2.3'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
 
@@ -605,4 +610,24 @@ test('v1.2.2 Self-Renewing Dynamic Missions award Cash + XP and immediately repl
     'Claimed mission must be replaced by a brand new mission'
   );
 });
+
+test('v1.2.3 Android Edge-to-Edge Immersive & Display Cutout (shortEdges) native patches work', () => {
+  const sampleManifest = `<manifest><application><activity android:name=".MainActivity"></activity></application></manifest>`;
+  const patchedManifest = patchAndroidManifest(sampleManifest);
+  assert.ok(patchedManifest.includes('android:screenOrientation="sensorLandscape"'));
+  assert.ok(patchedManifest.includes('android:windowLayoutInDisplayCutoutMode="shortEdges"'));
+  assert.ok(patchedManifest.includes('android:scheme="com.fugames.turkiyemulkimparatoru"'));
+
+  const sampleStyles = `<resources><style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar"><item name="windowActionBar">false</item></style></resources>`;
+  const patchedStyles = patchAndroidStyles(sampleStyles);
+  assert.ok(patchedStyles.includes('android:windowLayoutInDisplayCutoutMode">shortEdges</item>'));
+  assert.ok(patchedStyles.includes('android:statusBarColor">@android:color/transparent</item>'));
+
+  const mainActivity = generateEdgeToEdgeMainActivity();
+  assert.ok(mainActivity.includes('WindowCompat.setDecorFitsSystemWindows(getWindow(), false)'));
+  assert.ok(mainActivity.includes('WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE'));
+  assert.ok(mainActivity.includes('LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES'));
+  assert.ok(mainActivity.includes('controller.hide(WindowInsetsCompat.Type.systemBars())'));
+});
+
 

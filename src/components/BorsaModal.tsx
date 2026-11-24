@@ -175,10 +175,10 @@ export function BorsaModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full max-h-[610px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl lg:max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
-        {/* Header with Unified Finance Switcher (Borsa | Banka) */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
+        {/* Header with Unified Finance Switcher (Borsa | Banka | Muhasebe) */}
+        <div className="compact-short-pad flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
           <div className="min-w-0">
             <h2 className="truncate text-[clamp(0.84rem,1.6vw,1rem)] font-bold">
               Finans Merkezi · Borsa & Halka Arz (IPO)
@@ -269,7 +269,7 @@ export function BorsaModal({
         </div>
 
         {/* Body */}
-        <div className="panel-scroll flex-1 p-3.5">
+        <div className="panel-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-3.5">
           {tab === 'bist' ? (
             <div className="space-y-2">{bistQuotes.map(renderQuoteRow)}</div>
           ) : (

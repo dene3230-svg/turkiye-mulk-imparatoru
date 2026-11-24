@@ -123,10 +123,10 @@ export function AccountingModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full max-h-[620px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl lg:max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
         {/* Header with 3-Tab Unified Finance Switcher */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
+        <div className="compact-short-pad flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 sm:flex">
               <FileSpreadsheet className="h-5 w-5" />
@@ -188,7 +188,7 @@ export function AccountingModal({
         </div>
 
         {/* Period Switcher + Top 4 KPI Cards */}
-        <div className="border-b border-slate-200 bg-slate-50/90 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-950/60 sm:px-4">
+        <div className="compact-short-pad shrink-0 border-b border-slate-200 bg-slate-50/90 px-3.5 py-2 dark:border-slate-800 dark:bg-slate-950/60 sm:px-4 sm:py-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
               <button
@@ -294,7 +294,7 @@ export function AccountingModal({
         </div>
 
         {/* Scrollable Body: Itemized Revenue & Expense + Sector Breakdown + Branch P&L */}
-        <div className="panel-scroll flex-1 space-y-3 p-3.5 sm:p-4">
+        <div className="panel-scroll flex-1 min-h-0 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-4">
           {/* Two-Column Revenue & Expense Ledger */}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {/* Revenue Ledger */}

@@ -42,7 +42,7 @@ jobs:
           fi
           npx cap sync android
 
-      - name: Patch AndroidManifest.xml (Landscape lock, permissions & Google OAuth deep link)
+      - name: Patch AndroidManifest.xml, styles.xml & MainActivity.java (Edge-to-Edge, Notch shortEdges, Landscape & OAuth)
         run: node scripts/patch-android.js
 
       - name: Generate Android icons & splash screens from icon.png

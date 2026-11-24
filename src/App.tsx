@@ -337,9 +337,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v122',
-      title: 'Türkiye Mülk İmparatoru v1.2.2',
-      body: 'Zaman hızı (Durdur/1x/2x/4x), Muhasebe & Gelir-Gider bilançosu, kendini yenileyen dinamik görevler ve üst yönetici saatlik otomatik tahsilatı aktif!',
+      id: 'welcome-v123',
+      title: 'Türkiye Mülk İmparatoru v1.2.3',
+      body: 'Tüm telefon ve tablet ekranları için evrensel responsive panel düzeni ve kenardan kenara tam ekran modu aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -1501,16 +1501,16 @@ export default function App() {
             onSelectCompetitor={handleSelectCompetitor}
           />
 
-          {/* Top Compact Landscape HUD Overlay (Responsive for 640px-850px phones & tablets) */}
+          {/* Top Compact Landscape HUD Overlay (Universal Edge-to-Edge for Phones & Tablets) */}
           <header
             aria-label="Oyun Durum Çubuğu"
             data-testid="top-hud"
-            className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex items-center justify-between gap-1.5 pl-[max(14px,calc(var(--safe-left)+10px))] pr-[max(14px,calc(var(--safe-right)+10px))] pt-[max(10px,calc(var(--safe-top)+6px))]"
+            className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex items-center justify-between gap-1.5 pl-[var(--hud-left-gap)] pr-[var(--hud-right-gap)] pt-[var(--hud-top-gap)]"
           >
             {/* Left Economy & Quota Cluster */}
             <div
               data-testid="hud-left-cluster"
-              className="pointer-events-auto flex min-w-0 items-center gap-[clamp(6px,1vw,10px)] rounded-2xl border border-slate-200/95 bg-white/95 px-[clamp(7px,1.2vw,12px)] py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95"
+              className="compact-short-hud pointer-events-auto flex min-w-0 items-center gap-[clamp(6px,1vw,10px)] rounded-2xl border border-slate-200/95 bg-white/95 px-[clamp(7px,1.2vw,12px)] py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95"
             >
               <div className="h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-amber-500/50 bg-[#0B1426] sm:h-8 sm:w-8">
                 <img
@@ -1726,13 +1726,13 @@ export default function App() {
             </div>
           </header>
 
-          {/* Bottom Centered 4-Button Quick Action Dock (Spacious & Mobile-First Landscape) */}
+          {/* Bottom Centered 4-Button Quick Action Dock (Universal Mobile & Tablet Landscape) */}
           <nav
             aria-label="Oyun Araç Çubuğu"
             data-testid="bottom-action-dock"
-            className={`pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] z-[600] flex items-center gap-[clamp(4px,0.9vw,8px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95 ${
+            className={`compact-short-hud pointer-events-auto fixed bottom-[var(--hud-bottom-gap)] z-[600] flex items-center gap-[clamp(4px,0.9vw,8px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95 ${
               droppedPin || selectedBusiness || selectedCompetitor || activeDrawer
-                ? 'left-[max(14px,calc(var(--safe-left)+10px))] lg:left-1/2 lg:-translate-x-1/2'
+                ? 'left-[var(--hud-left-gap)] lg:left-1/2 lg:-translate-x-1/2'
                 : 'left-1/2 -translate-x-1/2'
             }`}
           >
@@ -1750,7 +1750,7 @@ export default function App() {
                   handleMapClick(activeProvince.lat, activeProvince.lng);
                 }
               }}
-              className={`flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.8vw,16px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
+              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.8vw,16px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
                 droppedPin || (!activeDrawer && !selectedBusiness && !selectedCompetitor)
                   ? 'bg-amber-600 text-white shadow-sm hover:bg-amber-700'
                   : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
@@ -1771,7 +1771,7 @@ export default function App() {
                 setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'portfolio' ? null : 'portfolio'));
               }}
-              className={`flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
+              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
                 activeDrawer === 'portfolio'
                   ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
@@ -1784,7 +1784,7 @@ export default function App() {
               </span>
             </button>
 
-            {/* 3) Finans (Unified Borsa + Banka) */}
+            {/* 3) Finans (Unified Borsa + Banka + Muhasebe) */}
             <button
               type="button"
               data-testid="dock-finance-btn"
@@ -1792,13 +1792,13 @@ export default function App() {
                 soundEngine.playClick();
                 setBorsaModalOpen(true);
               }}
-              className="flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+              className="compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
             >
               <Landmark className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               <span>Finans</span>
             </button>
 
-            {/* 4) Menü (Holding & Franchise, Liderlik Tablosu, Görevler, Piyasa Haberleri, Ayarlar) */}
+            {/* 4) Menü (Holding & Franchise, Muhasebe, Liderlik Tablosu, Görevler, Piyasa Haberleri, Ayarlar) */}
             <button
               type="button"
               data-testid="dock-menu-btn"
@@ -1806,7 +1806,7 @@ export default function App() {
                 soundEngine.playClick();
                 setHubMenuOpen(true);
               }}
-              className="relative flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+              className="compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
             >
               <LayoutGrid className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>Menü</span>
@@ -1832,7 +1832,7 @@ export default function App() {
             !droppedPin &&
             !activeDrawer &&
             !selectedCompetitor && (
-              <div className="pointer-events-none fixed bottom-[max(72px,calc(var(--safe-bottom)+68px))] left-1/2 z-[500] w-[min(90vw,410px)] -translate-x-1/2 rounded-xl border border-amber-300/80 bg-white/95 px-3 py-1.5 text-center text-[clamp(10.5px,1.3vw,12px)] text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
+              <div className="pointer-events-none fixed bottom-[calc(var(--panel-bottom-offset)+4px)] left-1/2 z-[500] w-[min(90vw,410px)] -translate-x-1/2 rounded-xl border border-amber-300/80 bg-white/95 px-3 py-1.5 text-center text-[clamp(10.5px,1.3vw,12px)] text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
                 <strong className="text-amber-700 dark:text-amber-400">
                   {activeProvince.code} {activeProvince.name}:
                 </strong>{' '}
@@ -1840,9 +1840,12 @@ export default function App() {
               </div>
             )}
 
-          {/* Right Contextual Side Panel Container */}
+          {/* Right Contextual Side Panel Container — pinned cleanly between Top HUD & Bottom Dock */}
           {(droppedPin || selectedBusiness || selectedCompetitor || activeDrawer) && (
-            <div className="pointer-events-none fixed bottom-[max(12px,calc(var(--safe-bottom)+8px))] right-[max(14px,calc(var(--safe-right)+10px))] top-[calc(62px+var(--safe-top))] z-[650] flex justify-end">
+            <div
+              data-testid="right-panel-container"
+              className="pointer-events-none fixed bottom-[var(--panel-bottom-offset)] right-[var(--hud-right-gap)] top-[var(--panel-top-offset)] z-[650] flex justify-end overflow-hidden"
+            >
               {droppedPin ? (
                 <PinDropPanel
                   location={droppedPin}

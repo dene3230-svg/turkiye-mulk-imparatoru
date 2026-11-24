@@ -32,7 +32,7 @@ export function CompetitorInspector({
       data-testid="competitor-inspector"
       className="pointer-events-auto flex h-full w-[clamp(290px,34vw,390px)] flex-col overflow-hidden rounded-2xl border border-red-200/90 bg-white/98 text-slate-900 shadow-2xl dark:border-red-900/70 dark:bg-slate-900/98 dark:text-slate-100"
     >
-      <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+      <div className="compact-short-pad flex shrink-0 items-start justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-red-600 dark:text-red-400">
             <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
@@ -60,7 +60,7 @@ export function CompetitorInspector({
         </button>
       </div>
 
-      <div className="panel-scroll flex-1 space-y-3 p-4">
+      <div className="panel-scroll flex-1 min-h-0 space-y-2.5 overflow-y-auto overscroll-contain p-3 sm:p-4">
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
           <div
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"

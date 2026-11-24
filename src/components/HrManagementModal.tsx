@@ -81,10 +81,10 @@ export function HrManagementModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full max-h-[600px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl lg:max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
+        <div className="compact-short-pad flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
               <Users className="h-5 w-5" />
@@ -124,9 +124,9 @@ export function HrManagementModal({
         </div>
 
         {/* Body: Left Current Team & Automation Status | Right Renewable 1-5 Star Candidate Pool */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 md:grid-cols-12">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden p-2.5 min-[620px]:grid-cols-12 sm:p-3">
           {/* Left Column: Current Branch / City Automation */}
-          <div className="panel-scroll flex flex-col gap-2.5 md:col-span-5">
+          <div className="panel-scroll min-h-0 flex flex-col gap-2.5 overflow-y-auto overscroll-contain min-[620px]:col-span-5">
             {business && automation ? (
               <div
                 className={`rounded-xl border p-3 ${
@@ -310,9 +310,9 @@ export function HrManagementModal({
           </div>
 
           {/* Right Column: Renewable 1-5 Star Candidate Pool */}
-          <div className="flex min-h-0 flex-col md:col-span-7">
+          <div className="flex min-h-0 flex-col min-[620px]:col-span-7">
             {/* 5-Tier Filter Pills */}
-            <div className="mb-2 flex items-center gap-1 overflow-x-auto pb-1">
+            <div className="mb-1.5 flex shrink-0 items-center gap-1 overflow-x-auto pb-1">
               {ROLE_FILTERS.map((f) => (
                 <button
                   key={f.id}
@@ -329,7 +329,7 @@ export function HrManagementModal({
               ))}
             </div>
 
-            <div className="panel-scroll flex-1 space-y-2 pr-1">
+            <div className="panel-scroll flex-1 min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-1">
               {candidates.map((cand) => {
                 const meta = ROLE_META[cand.role];
                 const isCityRole = meta.scope === 'city';

@@ -11,6 +11,48 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+
+  /* Universal fluid HUD & drawer offsets (tablets & tall landscape screens) */
+  --hud-top-gap: max(10px, calc(var(--safe-top) + 6px));
+  --hud-bottom-gap: max(12px, calc(var(--safe-bottom) + 8px));
+  --hud-left-gap: max(14px, calc(var(--safe-left) + 10px));
+  --hud-right-gap: max(14px, calc(var(--safe-right) + 10px));
+  --panel-top-offset: calc(58px + var(--safe-top));
+  --panel-bottom-offset: calc(64px + var(--safe-bottom));
+}
+
+/* Automatic Compact Mode for short-height landscape phones (max-height: 450px) */
+@media (max-height: 450px) {
+  :root {
+    --hud-top-gap: max(4px, calc(var(--safe-top) + 4px));
+    --hud-bottom-gap: max(4px, calc(var(--safe-bottom) + 4px));
+    --hud-left-gap: max(8px, calc(var(--safe-left) + 6px));
+    --hud-right-gap: max(8px, calc(var(--safe-right) + 6px));
+    --panel-top-offset: calc(52px + var(--safe-top));
+    --panel-bottom-offset: calc(54px + var(--safe-bottom));
+  }
+
+  .compact-short-hud {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .compact-short-pad {
+    padding-top: 0.375rem !important;
+    padding-bottom: 0.375rem !important;
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
+  }
+
+  .compact-short-btn {
+    min-height: 34px !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    font-size: 0.75rem !important;
+  }
 }
 
 html,
@@ -27,6 +69,16 @@ body,
   -webkit-tap-highlight-color: transparent;
   font-family: var(--font-sans);
   overscroll-behavior: none;
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
 }
 
 .font-display {
@@ -42,18 +94,19 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
-/* Safe area utility padding for notches & camera cutouts */
+/* Safe area utility padding for notches, punch-hole cameras & gesture bars */
 .safe-inset {
-  padding-top: var(--safe-top);
-  padding-right: var(--safe-right);
-  padding-bottom: var(--safe-bottom);
-  padding-left: var(--safe-left);
+  padding-top: max(8px, var(--safe-top));
+  padding-right: max(8px, var(--safe-right));
+  padding-bottom: max(8px, var(--safe-bottom));
+  padding-left: max(8px, var(--safe-left));
 }
 
-/* Custom sleek scrollbar for drawers */
+/* Custom sleek scrollbar for drawers & modals */
 .panel-scroll {
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
 }

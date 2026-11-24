@@ -56,10 +56,10 @@ export function CityPickerModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full max-h-[600px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-2xl lg:max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
         {/* Header + Search */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+        <div className="compact-short-pad flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
           <div>
             <h2 className="text-sm font-bold sm:text-base">81 İl Canlı Oda Seçimi</h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -93,11 +93,11 @@ export function CityPickerModal({
         </div>
 
         {/* 7 Geographical Regions Filter Bar */}
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/90 px-4 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/90 px-3.5 py-1.5 dark:border-slate-800 dark:bg-slate-950/60 sm:px-4 sm:py-2">
           <button
             type="button"
             onClick={() => setRegionFilter('all')}
-            className={`min-h-[32px] shrink-0 rounded-lg px-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+            className={`min-h-[30px] shrink-0 rounded-lg px-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
               regionFilter === 'all'
                 ? 'bg-amber-600 text-white'
                 : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
@@ -110,7 +110,7 @@ export function CityPickerModal({
               key={region}
               type="button"
               onClick={() => setRegionFilter(region)}
-              className={`min-h-[32px] shrink-0 rounded-lg px-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`min-h-[30px] shrink-0 rounded-lg px-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
                 regionFilter === region
                   ? 'bg-amber-600 text-white'
                   : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
@@ -122,7 +122,7 @@ export function CityPickerModal({
         </div>
 
         {/* 81 Provinces Grid */}
-        <div className="panel-scroll flex-1 p-3">
+        <div className="panel-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 sm:p-3">
           {filteredProvinces.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center py-10 text-center text-xs text-slate-500 dark:text-slate-400">
               <MapPin className="mb-2 h-7 w-7 opacity-40" />

@@ -107,7 +107,7 @@ export function BusinessInspector({
       className="pointer-events-auto flex h-full w-[clamp(295px,35vw,405px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
+      <div className="compact-short-pad flex shrink-0 items-start justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
             <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -135,7 +135,7 @@ export function BusinessInspector({
       </div>
 
       {/* Scrollable Body */}
-      <div className="panel-scroll flex-1 space-y-2.5 p-3">
+      <div className="panel-scroll flex-1 min-h-0 space-y-2.5 overflow-y-auto overscroll-contain p-2.5 sm:p-3">
         {/* Automation & Ops Badge */}
         <div
           data-testid="automation-status-badge"

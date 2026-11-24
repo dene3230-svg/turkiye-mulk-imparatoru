@@ -154,10 +154,10 @@ export function GameHubMenuModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-lg lg:max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
+        <div className="compact-short-pad flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
           <div className="min-w-0">
             <h2 className="truncate text-[clamp(0.88rem,1.8vw,1rem)] font-bold">
               İmparatorluk Yönetim Menüsü
@@ -195,7 +195,7 @@ export function GameHubMenuModal({
         </div>
 
         {/* 2-Column Landscape Grid of Spacious Touch Cards */}
-        <div className="panel-scroll grid grid-cols-1 gap-2 p-3 sm:grid-cols-2">
+        <div className="panel-scroll flex-1 min-h-0 grid grid-cols-1 gap-2 overflow-y-auto overscroll-contain p-2.5 sm:grid-cols-2 sm:p-3">
           {items.map((item) => {
             const Icon = item.icon;
             return (
