@@ -1,4 +1,4 @@
-import { X, MapPin, Coins, Trophy, TrendingUp, Crown, CheckCircle2, DoorOpen } from 'lucide-react';
+import { X, MapPin, Coins, Trophy, TrendingUp, Crown, CheckCircle2, DoorOpen, Users } from 'lucide-react';
 import type { EmpireState, MissionDef } from '../types/game';
 import { COMPANY_TIERS, MISSION_CATALOG, getBlueprintById } from '../game/catalog';
 import {
@@ -18,6 +18,7 @@ interface SideDrawerProps {
   onClose: () => void;
   onSelectBusiness: (businessId: string) => void;
   onEnterInterior: (businessId: string) => void;
+  onOpenHrModal?: (businessId: string | null) => void;
   onCollectBusiness: (businessId: string) => void;
   onClaimMission: (mission: MissionDef) => void;
   onEnablePinMode: () => void;
@@ -30,6 +31,7 @@ export function SideDrawer({
   onClose,
   onSelectBusiness,
   onEnterInterior,
+  onOpenHrModal,
   onCollectBusiness,
   onClaimMission,
   onEnablePinMode,
@@ -39,7 +41,7 @@ export function SideDrawer({
   const uniqueCities = new Set(state.businesses.map((b) => b.cityPlate)).size;
 
   const titles: Record<DrawerTab, string> = {
-    portfolio: 'Mülk Portföyü',
+    portfolio: 'Portföy & İK',
     missions: 'İmparatorluk Görevleri',
     market: 'Piyasa & Şirket Seviyesi',
   };
@@ -52,13 +54,15 @@ export function SideDrawer({
     <aside
       aria-label={titles[tab]}
       data-testid={`drawer-${tab}`}
-      className="pointer-events-auto flex h-full w-[clamp(290px,34vw,405px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto flex h-full w-[clamp(275px,36vw,395px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-        <div>
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{titles[tab]}</h2>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2.5 dark:border-slate-800">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-bold text-slate-900 dark:text-white">
+            {titles[tab]}
+          </h2>
+          <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
             {tab === 'portfolio' &&
               `${state.businesses.length}/${currentTier.maxBranches} şube · ${uniqueCities} il · Net: ${formatTL(netWorth, true)}`}
             {tab === 'missions' &&
@@ -68,14 +72,27 @@ export function SideDrawer({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Paneli Kapat"
-          className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {tab === 'portfolio' && onOpenHrModal && (
+            <button
+              type="button"
+              data-testid="portfolio-open-hr-btn"
+              onClick={() => onOpenHrModal(state.businesses[0]?.id ?? null)}
+              className="flex min-h-[34px] items-center gap-1 rounded-xl bg-sky-600 px-2.5 text-[11px] font-bold text-white transition-colors hover:bg-sky-700 whitespace-nowrap"
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>İK Havuzu</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Paneli Kapat"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -110,7 +127,8 @@ export function SideDrawer({
                     biz,
                     state.activeEvent,
                     now,
-                    state.businesses
+                    state.businesses,
+                    state
                   );
                   const pending = Math.floor(biz.pendingCash);
 
@@ -140,29 +158,39 @@ export function SideDrawer({
                       </div>
 
                       <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200/70 pt-2 dark:border-slate-800">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5">
                           <button
                             type="button"
                             onClick={() => onSelectBusiness(biz.id)}
-                            className="text-[11px] font-semibold text-amber-700 hover:underline dark:text-amber-400"
+                            className="text-[11px] font-semibold text-amber-700 hover:underline dark:text-amber-400 whitespace-nowrap"
                           >
                             Haritada Gör
                           </button>
                           <button
                             type="button"
                             onClick={() => onEnterInterior(biz.id)}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:underline dark:text-sky-400"
+                            className="flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:underline dark:text-sky-400 whitespace-nowrap"
                           >
                             <DoorOpen className="h-3 w-3" />
                             <span>İçeri Gir</span>
                           </button>
+                          {onOpenHrModal && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenHrModal(biz.id)}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:underline dark:text-indigo-400 whitespace-nowrap"
+                            >
+                              <Users className="h-3 w-3" />
+                              <span>İK</span>
+                            </button>
+                          )}
                         </div>
 
                         {pending > 0 && (
                           <button
                             type="button"
                             onClick={() => onCollectBusiness(biz.id)}
-                            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 whitespace-nowrap"
                           >
                             <Coins className="h-3 w-3" />
                             <span>{formatTL(pending)}</span>

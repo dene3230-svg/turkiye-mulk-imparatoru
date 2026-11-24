@@ -447,8 +447,8 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.2.0');
-  assert.equal(compareSemver('1.1.0', '1.2.0'), 1);
-  assert.equal(compareSemver('1.2.0', '1.2.0'), 0);
+  assert.equal(APP_VERSION, '1.2.1');
+  assert.equal(compareSemver('1.2.0', '1.2.1'), 1);
+  assert.equal(compareSemver('1.2.1', '1.2.1'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });

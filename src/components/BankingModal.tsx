@@ -7,6 +7,7 @@ import {
   Coins,
   Building2,
   AlertTriangle,
+  BarChart3,
 } from 'lucide-react';
 import type {
   BankRecord,
@@ -48,6 +49,7 @@ interface BankingModalProps {
     baseInterestRate?: number;
     minCreditScore?: number;
   }) => void;
+  onSwitchToBorsa?: () => void;
   onClose: () => void;
 }
 
@@ -65,6 +67,7 @@ export function BankingModal({
   onRepayLoan,
   onCreateBank,
   onUpdateBank,
+  onSwitchToBorsa,
   onClose,
 }: BankingModalProps) {
   const [tab, setTab] = useState<'loans' | 'own-bank'>('loans');
@@ -127,30 +130,53 @@ export function BankingModal({
         onClick={(e) => e.stopPropagation()}
         className="flex h-full max-h-[615px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+        {/* Header with Unified Finance Switcher (Borsa | Banka) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 sm:flex">
               <Landmark className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-sm font-bold sm:text-base">
-                Finans, Kredi Piyasası & Özel Bankacılık
+            <div className="min-w-0">
+              <h2 className="truncate text-[clamp(0.84rem,1.6vw,1rem)] font-bold">
+                Finans Merkezi · Banka & Kredi Piyasası
               </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                0–1900 Dinamik Kredi Puanı · Teminatlı Krediler · Otomatik El Koyma & Haciz
+              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                0–1900 Kredi Puanı · Teminatlı Kredi · Özel Banka & Haciz
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Banka Penceresini Kapat"
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {onSwitchToBorsa && (
+              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
+                <button
+                  type="button"
+                  data-testid="finance-switch-borsa"
+                  onClick={onSwitchToBorsa}
+                  className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  <span>Borsa</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="finance-switch-banka"
+                  className="flex min-h-[34px] items-center gap-1 rounded-lg bg-sky-600 px-2.5 text-xs font-bold text-white shadow-xs whitespace-nowrap"
+                >
+                  <Landmark className="h-3.5 w-3.5" />
+                  <span>Banka</span>
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Banka Penceresini Kapat"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Credit Score Strip (0-1900) */}

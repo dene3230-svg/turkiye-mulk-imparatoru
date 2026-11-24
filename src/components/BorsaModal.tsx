@@ -6,6 +6,8 @@ import {
   Rocket,
   Briefcase,
   CheckCircle2,
+  BarChart3,
+  Landmark,
 } from 'lucide-react';
 import type { EmpireState, StockQuote } from '../types/game';
 import {
@@ -22,6 +24,7 @@ interface BorsaModalProps {
   onBuyStock: (ticker: string, qty: number) => void;
   onSellStock: (ticker: string, qty: number) => void;
   onLaunchIpo: (ticker: string, holdingName: string) => void;
+  onSwitchToBanking?: () => void;
   onClose: () => void;
 }
 
@@ -62,6 +65,7 @@ export function BorsaModal({
   onBuyStock,
   onSellStock,
   onLaunchIpo,
+  onSwitchToBanking,
   onClose,
 }: BorsaModalProps) {
   const [tab, setTab] = useState<'bist' | 'ipo'>('bist');
@@ -170,29 +174,52 @@ export function BorsaModal({
         onClick={(e) => e.stopPropagation()}
         className="flex h-full max-h-[610px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
-          <div>
-            <h2 className="text-sm font-bold sm:text-base">
-              İstanbul Borsa & Oyuncu Holding Halka Arz (IPO)
+        {/* Header with Unified Finance Switcher (Borsa | Banka) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
+          <div className="min-w-0">
+            <h2 className="truncate text-[clamp(0.84rem,1.6vw,1rem)] font-bold">
+              Finans Merkezi · Borsa & Halka Arz (IPO)
             </h2>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
               Nakit: <strong className="font-mono-num">{formatTL(state.cash)}</strong> · Hisse
               Portföyü:{' '}
               <strong className="font-mono-num text-emerald-700 dark:text-emerald-400">
                 {formatTL(portfolioValue)}
-              </strong>{' '}
-              · Canlı temettü otomatik ödenir
+              </strong>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Borsa Penceresini Kapat"
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <X className="h-4 w-4" />
-          </button>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            {onSwitchToBanking && (
+              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
+                <button
+                  type="button"
+                  data-testid="finance-switch-borsa"
+                  className="flex min-h-[34px] items-center gap-1 rounded-lg bg-emerald-600 px-2.5 text-xs font-bold text-white shadow-xs whitespace-nowrap"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  <span>Borsa</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="finance-switch-banka"
+                  onClick={onSwitchToBanking}
+                  className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
+                >
+                  <Landmark className="h-3.5 w-3.5" />
+                  <span>Banka</span>
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Borsa Penceresini Kapat"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* 2 Exact Requested Tabs */}

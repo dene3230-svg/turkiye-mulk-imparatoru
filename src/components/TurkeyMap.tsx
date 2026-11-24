@@ -425,8 +425,11 @@ export function TurkeyMap({
     >
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* Compact Left-Side Map Controls */}
-      <div className="pointer-events-auto absolute left-[max(12px,var(--safe-left))] top-1/2 z-[400] flex -translate-y-1/2 flex-col gap-1.5">
+      {/* Compact Left-Side Map Controls with Safe-Area Margin */}
+      <div
+        data-testid="map-zoom-controls"
+        className="pointer-events-auto absolute left-[max(14px,calc(var(--safe-left)+12px))] top-1/2 z-[400] flex -translate-y-1/2 flex-col gap-1.5"
+      >
         <button
           type="button"
           onClick={handleZoomIn}

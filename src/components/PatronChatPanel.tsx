@@ -35,10 +35,11 @@ export function PatronChatPanel({
         data-testid="patron-chat-toggle"
         onClick={() => setOpen(true)}
         aria-label="Patron Sohbetini Aç"
-        className="pointer-events-auto fixed bottom-[max(12px,var(--safe-bottom))] right-[max(12px,var(--safe-right))] z-[610] flex h-10 items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 px-3 text-xs font-bold text-slate-800 shadow-lg transition-colors hover:bg-amber-50 dark:border-slate-700/90 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
+        className="pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] right-[max(14px,calc(var(--safe-right)+10px))] z-[610] flex min-h-[42px] items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 px-3 text-[clamp(11px,1.4vw,12px)] font-bold text-slate-800 shadow-lg transition-colors hover:bg-amber-50 dark:border-slate-700/90 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800 whitespace-nowrap"
       >
-        <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-        <span>Patron Sohbeti</span>
+        <MessageSquare className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="hidden min-[800px]:inline">Patron Sohbeti</span>
+        <span className="inline min-[800px]:hidden">Sohbet</span>
       </button>
     );
   }
@@ -47,7 +48,7 @@ export function PatronChatPanel({
     <aside
       aria-label="Patron Sohbeti"
       data-testid="patron-chat-panel"
-      className="pointer-events-auto fixed bottom-[max(12px,var(--safe-bottom))] right-[max(12px,var(--safe-right))] z-[640] flex h-[min(360px,55dvh)] w-[clamp(270px,30vw,340px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] right-[max(14px,calc(var(--safe-right)+10px))] z-[640] flex h-[min(340px,56dvh)] w-[clamp(260px,34vw,340px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">

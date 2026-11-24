@@ -1,12 +1,11 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "buildDate": "2026-11-24",
   "mandatory": false,
   "notes": [
-    "1–5 Yıldızlı Personel Aday Havuzu ve Genel Müdür'e kadar uzanan 5 Kademeli Yönetim Otomasyonu eklendi.",
-    "Yeni sektörler: Otopark & Katlı Otopark (250m +%15 kapasite), Gıda/Elektronik/Tekstil Fabrikaları (%35 tedarik indirimi) ve Zincir Market Ağı açıldı.",
-    "Çok oyunculu Franchise (Bayilik) sistemi: Marka aç, isim hakkı + %10–%25 telif geliri kazan veya +%35 bonusla franchise şube kur.",
-    "Canlı Borsa (BIST Devleri + ₺10 Mn Oyuncu Holdingleri Halka Arz / IPO) ve 0–1900 Kredi Puanlı Oyuncu Bankacılığı + Otomatik Haciz sistemi devreye alındı.",
-    "4 sekmeli Canlı Liderlik Tablosu ve Şehir İçi / Türkiye Geneli Patron Sohbeti eklendi."
+    "Küçük telefon ekranları için ferah ve sıkışmayan mobil menü düzeni eklendi.",
+    "Alt aksiyon çubuğu 4 ana hızlı erişim butonuna (Pin Bırak, Portföy, Finans ve Menü) sadeleştirildi; Borsa & Banka tek Finans merkezinde birleştirildi.",
+    "Üst bilgi barı, harita yakınlaştırma butonları ve Patron Sohbeti güvenli ekran boşluklarıyla (safe-area-inset) yeniden hizalandı.",
+    "1–5 Yıldızlı Personel Aday Havuzu, 5 Kademeli Yönetim Otomasyonu, Fabrikalar, Otoparklar, Franchise, BIST/IPO ve Özel Bankacılık sistemleri aktif."
   ]
 }

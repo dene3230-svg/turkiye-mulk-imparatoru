@@ -6,16 +6,12 @@ import {
   Home,
   MapPin,
   Settings,
-  TrendingUp,
-  Trophy,
   Sun,
   Moon,
   Globe2,
   Radio,
-  Crown,
   Landmark,
-  BarChart3,
-  Award,
+  LayoutGrid,
 } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -153,6 +149,7 @@ import { BorsaModal } from './components/BorsaModal';
 import { BankingModal } from './components/BankingModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { PatronChatPanel } from './components/PatronChatPanel';
+import { GameHubMenuModal } from './components/GameHubMenuModal';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
 
@@ -294,6 +291,7 @@ export default function App() {
   const [borsaModalOpen, setBorsaModalOpen] = useState(false);
   const [bankingModalOpen, setBankingModalOpen] = useState(false);
   const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
+  const [hubMenuOpen, setHubMenuOpen] = useState(false);
 
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [pinDropMode, setPinDropMode] = useState<boolean>(true);
@@ -306,9 +304,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v120',
-      title: 'Türkiye Mülk İmparatoru v1.2.0',
-      body: '1–5★ İK Otomasyonu, Fabrikalar, Otoparklar, Franchise, Canlı Borsa (IPO) ve Özel Bankacılık aktif!',
+      id: 'welcome-v121',
+      title: 'Türkiye Mülk İmparatoru v1.2.1',
+      body: 'Küçük telefon ekranları için ferah mobil menü düzeni, birleşik Finans (Borsa & Banka) ve tam Holding simülasyonu aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -1402,14 +1400,18 @@ export default function App() {
             onSelectCompetitor={handleSelectCompetitor}
           />
 
-          {/* Top Compact Landscape HUD Overlay */}
+          {/* Top Compact Landscape HUD Overlay (Responsive for 640px-850px phones & tablets) */}
           <header
             aria-label="Oyun Durum Çubuğu"
-            className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex items-center justify-between gap-2 px-[max(10px,var(--safe-left))] pr-[max(10px,var(--safe-right))] pt-[max(8px,var(--safe-top))]"
+            data-testid="top-hud"
+            className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex items-center justify-between gap-1.5 pl-[max(14px,calc(var(--safe-left)+10px))] pr-[max(14px,calc(var(--safe-right)+10px))] pt-[max(10px,calc(var(--safe-top)+6px))]"
           >
             {/* Left Economy & Quota Cluster */}
-            <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-slate-200/95 bg-white/95 px-2.5 py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95">
-              <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-amber-500/50 bg-[#0B1426]">
+            <div
+              data-testid="hud-left-cluster"
+              className="pointer-events-auto flex min-w-0 items-center gap-[clamp(6px,1vw,10px)] rounded-2xl border border-slate-200/95 bg-white/95 px-[clamp(7px,1.2vw,12px)] py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95"
+            >
+              <div className="h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-amber-500/50 bg-[#0B1426] sm:h-8 sm:w-8">
                 <img
                   src="./icon.png"
                   alt="Türkiye Mülk İmparatoru"
@@ -1418,37 +1420,42 @@ export default function App() {
                 />
               </div>
 
-              <div className="relative pr-1">
-                <div className="text-[10px] font-semibold leading-none text-amber-700 dark:text-amber-400">
+              <div className="relative min-w-0 pr-0.5">
+                <div className="max-w-[clamp(96px,16vw,175px)] truncate text-[clamp(9px,1.2vw,10.5px)] font-semibold leading-none text-amber-700 dark:text-amber-400">
                   Sv.{companyTier.level} · {companyTier.title}
                 </div>
-                <div
-                  data-testid="hud-cash"
-                  className="mt-0.5 font-mono-num text-[clamp(0.86rem,1.4vw,1.08rem)] font-extrabold leading-none text-slate-900 dark:text-white"
-                >
-                  {formatTL(empire.cash)}
+                <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
+                  <span
+                    data-testid="hud-cash"
+                    className="font-mono-num text-[clamp(12px,1.65vw,16px)] font-extrabold leading-none text-slate-900 dark:text-white"
+                  >
+                    {formatTL(empire.cash)}
+                  </span>
+                  <span className="font-mono-num text-[10px] font-bold leading-none text-emerald-700 dark:text-emerald-400 min-[760px]:hidden">
+                    +{formatTL(totalIncomePerSec, true)}/sn
+                  </span>
                 </div>
 
                 {cashPopups.map((p) => (
                   <span
                     key={p.id}
-                    className="animate-float-cash pointer-events-none absolute -bottom-5 left-0 font-mono-num text-xs font-extrabold text-emerald-600 dark:text-emerald-400"
+                    className="animate-float-cash pointer-events-none absolute -bottom-5 left-0 font-mono-num text-xs font-extrabold text-emerald-600 dark:text-emerald-400 whitespace-nowrap"
                   >
                     +{formatTL(p.amount)}
                   </span>
                 ))}
               </div>
 
-              <div className="hidden h-7 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+              <div className="hidden h-7 w-px shrink-0 bg-slate-200 dark:bg-slate-700 min-[760px]:block" />
 
-              <div className="hidden pr-1 sm:block">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">
+              <div className="hidden shrink-0 pr-0.5 min-[760px]:block whitespace-nowrap">
+                <div className="text-[clamp(9px,1.15vw,10.5px)] text-slate-500 dark:text-slate-400">
                   Şube {empire.businesses.length}/{companyTier.maxBranches} · Puan{' '}
                   {empire.creditScore}
                 </div>
                 <div
                   data-testid="hud-income"
-                  className="font-mono-num text-xs font-bold leading-none text-emerald-700 dark:text-emerald-400"
+                  className="font-mono-num text-[clamp(11px,1.35vw,12px)] font-bold leading-none text-emerald-700 dark:text-emerald-400"
                 >
                   +{formatTL(totalIncomePerSec)}/sn
                 </div>
@@ -1457,17 +1464,23 @@ export default function App() {
               {totalPendingCash > 0 && (
                 <button
                   type="button"
+                  data-testid="hud-collect-btn"
                   onClick={handleCollectAll}
-                  className="flex min-h-[34px] items-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 whitespace-nowrap"
+                  className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-[clamp(7px,1.1vw,10px)] text-[clamp(10px,1.3vw,12px)] font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 whitespace-nowrap"
                 >
                   <Coins className="h-3.5 w-3.5 shrink-0" />
-                  <span className="font-mono-num">Topla {formatTL(totalPendingCash, true)}</span>
+                  <span className="font-mono-num">
+                    Topla {formatTL(totalPendingCash, true)}
+                  </span>
                 </button>
               )}
             </div>
 
             {/* Right City Room Switcher & Utility Cluster */}
-            <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95">
+            <div
+              data-testid="hud-right-cluster"
+              className="pointer-events-auto flex shrink-0 items-center gap-[clamp(4px,0.7vw,6px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95 sm:p-1.5"
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -1476,11 +1489,13 @@ export default function App() {
                 }}
                 aria-label="Şehir Seç veya Değiştir"
                 data-testid="city-switcher-btn"
-                className="flex h-9 items-center gap-1.5 rounded-xl border border-amber-300/80 bg-amber-50/90 px-2.5 text-xs font-bold text-slate-900 transition-colors hover:bg-amber-100 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/50 whitespace-nowrap"
+                className="flex h-9 items-center gap-1 rounded-xl border border-amber-300/80 bg-amber-50/90 px-[clamp(7px,1.2vw,10px)] text-[clamp(10.5px,1.35vw,12px)] font-bold text-slate-900 transition-colors hover:bg-amber-100 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/50 whitespace-nowrap"
               >
                 <Globe2 className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
                 <span className="font-mono-num">{activeProvince.code}</span>
-                <span>{activeProvince.name}</span>
+                <span className="max-w-[82px] truncate sm:max-w-[120px]">
+                  {activeProvince.name}
+                </span>
                 <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 lg:inline-flex">
                   · <Radio className="h-3 w-3" />
                   {roomStatus === 'live' ? 'Canlı' : 'Oda'}
@@ -1538,21 +1553,28 @@ export default function App() {
                 }}
                 aria-label="Ana Menü"
                 title="Ana Menü"
-                className="flex h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 whitespace-nowrap"
+                className="hidden h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 min-[740px]:flex whitespace-nowrap"
               >
-                <Home className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">Ana Menü</span>
+                <Home className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden lg:inline">Ana Menü</span>
               </button>
             </div>
           </header>
 
-          {/* Bottom-Left Compact Holding Navigation Dock */}
+          {/* Bottom Centered 4-Button Quick Action Dock (Spacious & Mobile-First Landscape) */}
           <nav
             aria-label="Oyun Araç Çubuğu"
-            className="pointer-events-auto fixed bottom-[max(10px,var(--safe-bottom))] left-[max(10px,var(--safe-left))] z-[600] flex max-w-[calc(100dvw-165px)] items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95"
+            data-testid="bottom-action-dock"
+            className={`pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] z-[600] flex items-center gap-[clamp(4px,0.9vw,8px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95 ${
+              droppedPin || selectedBusiness || selectedCompetitor || activeDrawer
+                ? 'left-[max(14px,calc(var(--safe-left)+10px))] lg:left-1/2 lg:-translate-x-1/2'
+                : 'left-1/2 -translate-x-1/2'
+            }`}
           >
+            {/* 1) Pin Bırak (Primary Highlighted Button) */}
             <button
               type="button"
+              data-testid="dock-pin-btn"
               onClick={() => {
                 soundEngine.playClick();
                 setPinDropMode(true);
@@ -1563,18 +1585,20 @@ export default function App() {
                   handleMapClick(activeProvince.lat, activeProvince.lng);
                 }
               }}
-              className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.8vw,16px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
                 droppedPin || (!activeDrawer && !selectedBusiness && !selectedCompetitor)
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                  ? 'bg-amber-600 text-white shadow-sm hover:bg-amber-700'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
               }`}
             >
               <MapPin className="h-4 w-4 shrink-0" />
               <span>Pin Bırak</span>
             </button>
 
+            {/* 2) Portföy (İşletmelerim & İK) */}
             <button
               type="button"
+              data-testid="dock-portfolio-btn"
               onClick={() => {
                 soundEngine.playClick();
                 setDroppedPin(null);
@@ -1582,115 +1606,54 @@ export default function App() {
                 setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'portfolio' ? null : 'portfolio'));
               }}
-              className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
                 activeDrawer === 'portfolio'
                   ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               <Building2 className="h-4 w-4 shrink-0" />
-              <span>
-                Portföy ({empire.businesses.length}/{companyTier.maxBranches})
+              <span>Portföy</span>
+              <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 font-mono-num text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {empire.businesses.length}/{companyTier.maxBranches}
               </span>
             </button>
 
+            {/* 3) Finans (Unified Borsa + Banka) */}
             <button
               type="button"
-              data-testid="dock-holding-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setHoldingModalOpen(true);
-              }}
-              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-amber-50 hover:text-amber-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
-            >
-              <Crown className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <span>Holding</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="dock-borsa-btn"
+              data-testid="dock-finance-btn"
               onClick={() => {
                 soundEngine.playClick();
                 setBorsaModalOpen(true);
               }}
-              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+              className="flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
             >
-              <BarChart3 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <span>Borsa</span>
+              <Landmark className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>Finans</span>
             </button>
 
+            {/* 4) Menü (Holding & Franchise, Liderlik Tablosu, Görevler, Piyasa Haberleri, Ayarlar) */}
             <button
               type="button"
-              data-testid="dock-banka-btn"
+              data-testid="dock-menu-btn"
               onClick={() => {
                 soundEngine.playClick();
-                setBankingModalOpen(true);
+                setHubMenuOpen(true);
               }}
-              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-sky-50 hover:text-sky-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+              className="relative flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
             >
-              <Landmark className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
-              <span>Banka</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="dock-leaderboard-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setLeaderboardModalOpen(true);
-              }}
-              className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
-            >
-              <Award className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <span>Sıralama</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                soundEngine.playClick();
-                setDroppedPin(null);
-                setSelectedBusinessId(null);
-                setSelectedCompetitorId(null);
-                setActiveDrawer((prev) => (prev === 'missions' ? null : 'missions'));
-              }}
-              className={`relative flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
-                activeDrawer === 'missions'
-                  ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Trophy className="h-4 w-4 shrink-0" />
-              <span>Görevler</span>
+              <LayoutGrid className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>Menü</span>
               {claimableMissionCount > 0 && (
                 <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 font-mono-num text-[10px] font-bold text-white">
                   {claimableMissionCount}
                 </span>
               )}
             </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                soundEngine.playClick();
-                setDroppedPin(null);
-                setSelectedBusinessId(null);
-                setSelectedCompetitorId(null);
-                setActiveDrawer((prev) => (prev === 'market' ? null : 'market'));
-              }}
-              className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition-colors whitespace-nowrap ${
-                activeDrawer === 'market'
-                  ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <TrendingUp className="h-4 w-4 shrink-0" />
-              <span>Piyasa</span>
-            </button>
           </nav>
 
-          {/* Collapsible Patron Chat Panel (Bottom-Right when no right side panel is covering it, or overlay smoothly) */}
+          {/* Collapsible Patron Chat Panel (Bottom-Right with safe-area padding) */}
           {!droppedPin && !selectedBusiness && !selectedCompetitor && !activeDrawer && (
             <PatronChatPanel
               activeProvince={activeProvince}
@@ -1699,23 +1662,22 @@ export default function App() {
             />
           )}
 
-          {/* Contextual Hint when empty */}
+          {/* Contextual Hint when empty — centered cleanly above the 4-button dock */}
           {empire.businesses.length === 0 &&
             !droppedPin &&
             !activeDrawer &&
             !selectedCompetitor && (
-              <div className="pointer-events-none fixed bottom-[max(62px,calc(58px+var(--safe-bottom)))] left-[max(10px,var(--safe-left))] z-[500] max-w-xs rounded-xl border border-amber-300/80 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
+              <div className="pointer-events-none fixed bottom-[max(72px,calc(var(--safe-bottom)+68px))] left-1/2 z-[500] w-[min(90vw,410px)] -translate-x-1/2 rounded-xl border border-amber-300/80 bg-white/95 px-3 py-1.5 text-center text-[clamp(10.5px,1.3vw,12px)] text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
                 <strong className="text-amber-700 dark:text-amber-400">
                   {activeProvince.code} {activeProvince.name}:
                 </strong>{' '}
-                Kara üzerinde bir caddeye tıklayıp pin bırakın (13 sektör, Franchise, 75m mesafe
-                koruması).
+                Kara üzerinde bir caddeye tıklayıp pin bırakın (13 sektör, Franchise, 75m koruması).
               </div>
             )}
 
           {/* Right Contextual Side Panel Container */}
           {(droppedPin || selectedBusiness || selectedCompetitor || activeDrawer) && (
-            <div className="pointer-events-none fixed bottom-[max(10px,var(--safe-bottom))] right-[max(10px,var(--safe-right))] top-[calc(66px+var(--safe-top))] z-[650] flex justify-end">
+            <div className="pointer-events-none fixed bottom-[max(12px,calc(var(--safe-bottom)+8px))] right-[max(14px,calc(var(--safe-right)+10px))] top-[calc(62px+var(--safe-top))] z-[650] flex justify-end">
               {droppedPin ? (
                 <PinDropPanel
                   location={droppedPin}
@@ -1762,6 +1724,10 @@ export default function App() {
                   onClose={() => setActiveDrawer(null)}
                   onSelectBusiness={handleSelectOwnBusiness}
                   onEnterInterior={(id) => setInteriorBusinessId(id)}
+                  onOpenHrModal={(id) => {
+                    setHrTargetBusinessId(id);
+                    setHrModalOpen(true);
+                  }}
                   onCollectBusiness={handleCollectBusiness}
                   onClaimMission={handleClaimMission}
                   onEnablePinMode={() => {
@@ -1832,6 +1798,11 @@ export default function App() {
         onBuyStock={handleBuyStock}
         onSellStock={handleSellStock}
         onLaunchIpo={handleLaunchIpo}
+        onSwitchToBanking={() => {
+          soundEngine.playClick();
+          setBorsaModalOpen(false);
+          setBankingModalOpen(true);
+        }}
         onClose={() => setBorsaModalOpen(false)}
       />
 
@@ -1846,7 +1817,42 @@ export default function App() {
         onRepayLoan={handleRepayLoan}
         onCreateBank={handleCreateBank}
         onUpdateBank={handleUpdateBank}
+        onSwitchToBorsa={() => {
+          soundEngine.playClick();
+          setBankingModalOpen(false);
+          setBorsaModalOpen(true);
+        }}
         onClose={() => setBankingModalOpen(false)}
+      />
+
+      <GameHubMenuModal
+        open={hubMenuOpen}
+        companyLevel={companyTier.level}
+        companyTitle={companyTier.title}
+        netWorth={netWorth}
+        activeCityLabel={`${activeProvince.code} ${activeProvince.name}`}
+        claimableMissionCount={claimableMissionCount}
+        onOpenHolding={() => setHoldingModalOpen(true)}
+        onOpenLeaderboard={() => setLeaderboardModalOpen(true)}
+        onOpenMissions={() => {
+          setDroppedPin(null);
+          setSelectedBusinessId(null);
+          setSelectedCompetitorId(null);
+          setActiveDrawer('missions');
+        }}
+        onOpenMarket={() => {
+          setDroppedPin(null);
+          setSelectedBusinessId(null);
+          setSelectedCompetitorId(null);
+          setActiveDrawer('market');
+        }}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenHrCenter={() => {
+          setHrTargetBusinessId(selectedBusinessId ?? empire.businesses[0]?.id ?? null);
+          setHrModalOpen(true);
+        }}
+        onGoMainMenu={() => setScreen('menu')}
+        onClose={() => setHubMenuOpen(false)}
       />
 
       <LeaderboardModal
