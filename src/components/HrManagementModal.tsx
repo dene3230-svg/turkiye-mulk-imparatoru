@@ -10,6 +10,9 @@ import {
   Briefcase,
   Building2,
   Zap,
+  Crown,
+  Swords,
+  Megaphone,
 } from 'lucide-react';
 import type { EmpireState, OwnedBusiness, StaffRole } from '../types/game';
 import {
@@ -19,7 +22,9 @@ import {
   resolveBusinessAutomation,
 } from '../game/hrEngine';
 import { formatTL } from '../game/economy';
+import { hasChainBrandInCity } from '../game/strategyEngine';
 import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
+import type { ManagementTabId } from './RivalsStrategyModal';
 
 interface HrManagementModalProps {
   open: boolean;
@@ -28,7 +33,8 @@ interface HrManagementModalProps {
   activeCityPlate: number;
   activeCityName: string;
   onSelectBranch?: (businessId: string) => void;
-  onSwitchToBusinesses?: () => void;
+  onSelectManagementTab?: (tab: ManagementTabId) => void;
+  onToggleGmAutoAds?: (managerId: string, enabled: boolean) => void;
   onHireCandidate: (candidateId: string, businessId: string | null, cityPlate: number) => void;
   onDismissStaff: (staffId: string, businessId?: string) => void;
   onRefreshPool: () => void;
@@ -52,7 +58,8 @@ export function HrManagementModal({
   activeCityPlate,
   activeCityName,
   onSelectBranch,
-  onSwitchToBusinesses,
+  onSelectManagementTab,
+  onToggleGmAutoAds,
   onHireCandidate,
   onDismissStaff,
   onRefreshPool,
@@ -67,29 +74,44 @@ export function HrManagementModal({
   const targetPlate = effectiveBusiness?.cityPlate ?? activeCityPlate;
   const targetCityName = effectiveBusiness?.cityName ?? activeCityName;
   const cityBranches = state.businesses.filter((b) => b.cityPlate === targetPlate);
+  const hasChainHere = hasChainBrandInCity(state.businesses, targetPlate);
   const cityExecs = (state.cityManagers ?? []).filter((m) => m.assignedCityPlate === targetPlate);
   const automation = effectiveBusiness
     ? resolveBusinessAutomation(effectiveBusiness, state.cityManagers ?? [], state.businesses)
     : null;
   const slots = effectiveBusiness ? getBranchStaffSlots(effectiveBusiness) : null;
   const totalPayroll = calculateTotalHourlyPayroll(state);
+  const pendingAppsCount = (state.franchiseApplications ?? []).filter(
+    (a) => a.status === 'pending'
+  ).length;
 
   const candidates = (state.candidatePool ?? []).filter((c) =>
     roleFilter === 'all' ? true : c.role === roleFilter
   );
 
-  const topTabs: MobileModalTab[] | undefined = onSwitchToBusinesses
+  const topTabs: MobileModalTab[] | undefined = onSelectManagementTab
     ? [
         {
-          id: 'isletmelerim',
+          id: 'portfolio',
           label: 'İşletmelerim',
           badge: state.businesses.length,
           icon: <Building2 className="h-4 w-4" />,
         },
         {
-          id: 'ik',
+          id: 'hr',
           label: 'İK & Çalışanlar',
           icon: <Users className="h-4 w-4" />,
+        },
+        {
+          id: 'franchise',
+          label: 'Franchise & Bayilik',
+          badge: (state.ownFranchises?.length ?? 0) + pendingAppsCount || undefined,
+          icon: <Crown className="h-4 w-4" />,
+        },
+        {
+          id: 'rivals',
+          label: 'Rakip İşletmeler',
+          icon: <Swords className="h-4 w-4" />,
         },
       ]
     : undefined;
@@ -116,10 +138,8 @@ export function HrManagementModal({
           </button>
         }
         tabs={topTabs}
-        activeTabId="ik"
-        onSelectTab={(id) => {
-          if (id === 'isletmelerim') onSwitchToBusinesses?.();
-        }}
+        activeTabId="hr"
+        onSelectTab={(id) => onSelectManagementTab?.(id as ManagementTabId)}
         subHeader={
           <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap no-scrollbar">
             {ROLE_FILTERS.map((rf) => (
@@ -364,28 +384,60 @@ export function HrManagementModal({
                 {cityExecs.map((exec) => (
                   <div
                     key={exec.id}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2"
+                    className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2.5 space-y-2"
                   >
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-bold text-white">
-                        {exec.name}{' '}
-                        <span className="text-amber-400">{'★'.repeat(exec.stars)}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-bold text-white">
+                          {exec.name}{' '}
+                          <span className="text-amber-400">{'★'.repeat(exec.stars)}</span>
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {ROLE_META[exec.role].label} ·{' '}
+                          <span className="font-mono-num text-amber-300">
+                            {formatTL(exec.hourlySalary)}/sa
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-400">
-                        {ROLE_META[exec.role].label} ·{' '}
-                        <span className="font-mono-num text-amber-300">
-                          {formatTL(exec.hourlySalary)}/sa
-                        </span>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onDismissStaff(exec.id)}
+                        aria-label="Görevden Al"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                      >
+                        <UserMinus className="h-4 w-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onDismissStaff(exec.id)}
-                      aria-label="Görevden Al"
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </button>
+
+                    {exec.role === 'genel_mudur' && onToggleGmAutoAds && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-fuchsia-500/35 bg-fuchsia-950/25 px-2.5 py-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-200">
+                            <Megaphone className="h-3.5 w-3.5 shrink-0" />
+                            <span>Otomatik Reklam Kampanyasını Aktif Et</span>
+                          </div>
+                          <div className="text-[11px] text-slate-300">
+                            {exec.autoAdsEnabled
+                              ? 'Aktif: Biten reklamları kârlılık analizine göre tüm şehir şubelerinde yeniler.'
+                              : 'Kapalı: Açıldığında kasa uygun oldukça reklamları otomatik sürdürür.'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={Boolean(exec.autoAdsEnabled)}
+                          data-testid="gm-auto-ads-toggle"
+                          onClick={() => onToggleGmAutoAds(exec.id, !exec.autoAdsEnabled)}
+                          className={`min-h-[36px] shrink-0 rounded-xl px-3 text-xs font-bold transition whitespace-nowrap ${
+                            exec.autoAdsEnabled
+                              ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
+                              : 'border border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                          }`}
+                        >
+                          {exec.autoAdsEnabled ? 'Aktif (Açık)' : 'Kapalı · Aç'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -410,7 +462,7 @@ export function HrManagementModal({
               const isCityRole = meta.scope === 'city';
               const canAfford = state.cash >= cand.hireCost;
               const needsBranch = !isCityRole && !effectiveBusiness;
-              const needsMultiBranch = isCityRole && cityBranches.length < 2;
+              const needsMultiBranch = isCityRole && cityBranches.length < 2 && !hasChainHere;
 
               let slotFullLabel: string | null = null;
               if (slots) {

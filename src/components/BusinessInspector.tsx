@@ -16,11 +16,12 @@ import {
   Factory,
   Car,
   Store,
+  CopyPlus,
+  Link2,
 } from 'lucide-react';
-import type { EmpireState, OwnedBusiness } from '../types/game';
+import type { AdCampaignTierId, EmpireState, OwnedBusiness } from '../types/game';
 import { getBlueprintById } from '../game/catalog';
 import {
-  calculateBoostCost,
   calculateBusinessCapacity,
   calculateBusinessHourlyIncome,
   calculateBusinessIncomePerSec,
@@ -33,6 +34,13 @@ import {
   hasParkingSynergyForBusiness,
 } from '../game/economy';
 import { getBranchStaffSlots, resolveBusinessAutomation } from '../game/hrEngine';
+import {
+  AD_CAMPAIGN_TIERS,
+  calculateAdCampaignCost,
+  formatRemainingGameHours,
+  getChainStatusForBusiness,
+  isAdCampaignActive,
+} from '../game/strategyEngine';
 
 interface BusinessInspectorProps {
   business: OwnedBusiness;
@@ -40,6 +48,8 @@ interface BusinessInspectorProps {
   now: number;
   onEnterInterior: (businessId: string) => void;
   onOpenHrModal: (businessId: string) => void;
+  onCloneBusiness?: (businessId: string) => void;
+  onLaunchAdCampaign?: (businessId: string, tierId: AdCampaignTierId) => void;
   onRestock: (businessId: string) => void;
   onCollect: (businessId: string) => void;
   onUpgrade: (businessId: string) => void;
@@ -54,10 +64,11 @@ export function BusinessInspector({
   now,
   onEnterInterior,
   onOpenHrModal,
+  onCloneBusiness,
+  onLaunchAdCampaign,
   onRestock,
   onCollect,
   onUpgrade,
-  onBoost,
   onSell,
   onClose,
 }: BusinessInspectorProps) {
@@ -70,6 +81,10 @@ export function BusinessInspector({
     state.businesses
   );
   const slots = getBranchStaffSlots(business);
+  const currentGameMin = state.gameMinutes ?? 540;
+  const chainStatus = getChainStatusForBusiness(business, state.businesses);
+  const hasActiveAd = isAdCampaignActive(business.activeAdCampaign, currentGameMin);
+
   const incomePerSec = calculateBusinessIncomePerSec(
     business,
     state.activeEvent,
@@ -84,7 +99,7 @@ export function BusinessInspector({
     state.businesses,
     state
   );
-  const capacity = calculateBusinessCapacity(business, state.businesses);
+  const capacity = calculateBusinessCapacity(business, state.businesses, currentGameMin);
   const hasAvmBonus = hasAvmSynergyForBusiness(business, state.businesses);
   const hasParkingBonus = hasParkingSynergyForBusiness(business, state.businesses);
   const hasFactoryBonus = hasFactorySupplySynergy(business, state.businesses);
@@ -92,11 +107,9 @@ export function BusinessInspector({
   const vaultCap = calculateVaultCapacity(business);
   const vaultPct = vaultCap > 0 ? Math.min(100, (business.pendingCash / vaultCap) * 100) : 0;
   const upgradeCost = calculateUpgradeCost(business);
-  const boostCost = calculateBoostCost(business);
   const valuation = calculateBusinessValuation(business, state.activeEvent, now);
 
   const isMaxLevel = bp ? business.level >= bp.maxLevel : true;
-  const boostRemainingSec = Math.max(0, Math.ceil((business.boostEndsAt - now) / 1000));
   const pendingWhole = Math.floor(business.pendingCash);
   const stockPct = Math.round(business.stockLevel ?? 100);
   const maintPct = Math.round(business.maintenanceLevel ?? 100);
@@ -188,8 +201,13 @@ export function BusinessInspector({
         )}
 
         {/* Active Synergies */}
-        {(hasAvmBonus || hasParkingBonus || hasFactoryBonus || business.franchiseBrandName) && (
+        {(chainStatus.isChain || hasAvmBonus || hasParkingBonus || hasFactoryBonus || business.franchiseBrandName) && (
           <div className="flex flex-wrap gap-1 text-[10px] font-bold">
+            {chainStatus.isChain && (
+              <span className="flex items-center gap-1 rounded-lg bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                <Link2 className="h-3 w-3" /> Zincir Marka ({chainStatus.branchCount} Şube)
+              </span>
+            )}
             {business.franchiseBrandName && (
               <span className="flex items-center gap-1 rounded-lg bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                 <Store className="h-3 w-3" /> {business.franchiseBrandName} (+%35)
@@ -329,33 +347,63 @@ export function BusinessInspector({
             )}
           </button>
 
-          <button
-            type="button"
-            disabled={boostRemainingSec > 0 || state.cash < boostCost}
-            onClick={() => onBoost(business.id)}
-            className="flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-indigo-50/70 disabled:cursor-not-allowed disabled:opacity-55 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
-                <Megaphone className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-900 dark:text-white">
-                  {boostRemainingSec > 0
-                    ? `Kampanya Aktif (${boostRemainingSec}sn)`
-                    : 'Reklam Kampanyası (2x Gelir)'}
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                  60 saniye boyunca ciroyu 2 katına çıkarır
-                </div>
-              </div>
-            </div>
-            {boostRemainingSec === 0 && (
-              <span className="shrink-0 font-mono-num text-xs font-bold text-indigo-700 dark:text-indigo-400">
-                {formatTL(boostCost)}
+          {onCloneBusiness && (
+            <button
+              type="button"
+              onClick={() => onCloneBusiness(business.id)}
+              className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-800 transition-colors hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200 dark:hover:bg-sky-900/50"
+            >
+              <CopyPlus className="h-4 w-4" />
+              <span>Şubeyi Çoğalt / Yeni Şube Aç (Zincirleş)</span>
+            </button>
+          )}
+
+          {/* Reklam & Pazarlama (3 Tiers + GM Auto-Ads) */}
+          <div className="rounded-xl border border-fuchsia-200 bg-fuchsia-50/70 p-2.5 space-y-2 dark:border-fuchsia-900/60 dark:bg-fuchsia-950/25">
+            <div className="flex items-center justify-between gap-2 text-[11px] font-bold">
+              <span className="flex items-center gap-1.5 text-fuchsia-800 dark:text-fuchsia-300">
+                <Megaphone className="h-3.5 w-3.5 shrink-0" />
+                <span>Reklam & Pazarlama</span>
               </span>
+              {hasActiveAd && business.activeAdCampaign ? (
+                <span className="rounded-md bg-fuchsia-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  +%{Math.round(business.activeAdCampaign.revenueBoost * 100)} ·{' '}
+                  {formatRemainingGameHours(business.activeAdCampaign.endsAtGameMin, currentGameMin)}
+                </span>
+              ) : automation.autoAdsActive ? (
+                <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  GM Oto-Reklam
+                </span>
+              ) : null}
+            </div>
+
+            {onLaunchAdCampaign && (
+              <div className="grid grid-cols-3 gap-1.5">
+                {AD_CAMPAIGN_TIERS.map((tier) => {
+                  const adCost = calculateAdCampaignCost(tier.id, business);
+                  return (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      disabled={state.cash < adCost}
+                      onClick={() => onLaunchAdCampaign(business.id, tier.id)}
+                      className="flex flex-col items-start rounded-lg border border-fuchsia-200 bg-white p-1.5 text-left transition hover:border-fuchsia-400 disabled:opacity-45 dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      <span className="truncate text-[10px] font-bold text-slate-900 dark:text-white">
+                        {tier.shortLabel}
+                      </span>
+                      <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-400">
+                        +%{Math.round(tier.revenueBoost * 100)} · {tier.durationGameHours}sa
+                      </span>
+                      <span className="mt-0.5 font-mono-num text-[10px] font-extrabold text-amber-700 dark:text-amber-300">
+                        {formatTL(adCost, true)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
-          </button>
+          </div>
         </div>
 
         {/* Lifetime Stat & Sell */}

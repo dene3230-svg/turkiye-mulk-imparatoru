@@ -105,26 +105,24 @@ export function checkFranchiseCreationEligibility(state: EmpireState): {
   reason?: string;
   eligibleSectors: BusinessTypeId[];
 } {
-  const lv3Sectors = Array.from(
-    new Set(state.businesses.filter((b) => b.level >= 3).map((b) => b.blueprintId))
-  );
+  const ownedSectors = Array.from(new Set(state.businesses.map((b) => b.blueprintId)));
 
-  if (state.supermarketChain && !lv3Sectors.includes('supermarket')) {
-    lv3Sectors.push('supermarket');
+  if (state.supermarketChain && !ownedSectors.includes('supermarket')) {
+    ownedSectors.push('supermarket');
   }
 
-  if (lv3Sectors.length === 0) {
+  if (ownedSectors.length === 0) {
     return {
       eligible: false,
       reason:
-        'Franchise markası açmak için en az Seviye 3 bir işletmeye veya Zincir Market Markasına (3+ Süpermarket) sahip olmalısınız.',
+        'Franchise markası açmak için önce haritada en az 1 işletme (veya Zincir Marka) kurmalısınız.',
       eligibleSectors: [],
     };
   }
 
   return {
     eligible: true,
-    eligibleSectors: lv3Sectors,
+    eligibleSectors: ownedSectors,
   };
 }
 
@@ -147,7 +145,7 @@ export function createFranchiseBrand(
     return {
       state,
       ok: false,
-      error: 'Sadece Seviye 3+ olduğunuz sektörlerde veya Zincir Marketinizde franchise açabilirsiniz.',
+      error: 'Sadece sahip olduğunuz işletmelerin veya Zincir Markalarınızın sektöründe franchise açabilirsiniz.',
     };
   }
 

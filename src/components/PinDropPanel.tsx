@@ -20,10 +20,12 @@ import {
   ShieldCheck,
   Ruler,
   Store,
+  Link2,
 } from 'lucide-react';
 import type {
   BusinessBlueprint,
   BusinessTypeId,
+  ChainCloneDraft,
   FranchiseBrand,
   PinLocationInfo,
 } from '../types/game';
@@ -44,10 +46,18 @@ interface PinDropPanelProps {
   maxBranches: number;
   distanceCheck: DistanceCheckResult;
   availableFranchises: FranchiseBrand[];
+  chainCloneDraft?: ChainCloneDraft | null;
+  preselectedFranchise?: FranchiseBrand | null;
+  onCancelSpecialMode?: () => void;
   onEstablish: (
     blueprintId: BusinessTypeId,
     customName: string,
-    franchiseBrand?: FranchiseBrand | null
+    franchiseBrand?: FranchiseBrand | null,
+    chainCloneMeta?: {
+      chainBrandName: string;
+      chainBranchNumber: number;
+      sourceBusinessId?: string;
+    } | null
   ) => void;
   onClose: () => void;
 }
@@ -86,39 +96,66 @@ export function PinDropPanel({
   maxBranches,
   distanceCheck,
   availableFranchises,
+  chainCloneDraft,
+  preselectedFranchise,
+  onCancelSpecialMode,
   onEstablish,
   onClose,
 }: PinDropPanelProps) {
-  const [mode, setMode] = useState<'independent' | 'franchise'>('independent');
-  const [selectedId, setSelectedId] = useState<BusinessTypeId>('kafe');
+  const [mode, setMode] = useState<'independent' | 'franchise'>(() =>
+    preselectedFranchise && !chainCloneDraft ? 'franchise' : 'independent'
+  );
+  const [selectedId, setSelectedId] = useState<BusinessTypeId>(
+    () => chainCloneDraft?.businessType ?? 'kafe'
+  );
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>(
-    availableFranchises[0]?.id ?? ''
+    () => preselectedFranchise?.id ?? availableFranchises[0]?.id ?? ''
   );
   const [customName, setCustomName] = useState<string>(() =>
-    suggestBusinessName(location.districtName, BUSINESS_BLUEPRINTS[0].shortName)
+    chainCloneDraft
+      ? chainCloneDraft.suggestedName
+      : suggestBusinessName(location.districtName, BUSINESS_BLUEPRINTS[0].shortName)
   );
-  const [nameEdited, setNameEdited] = useState(false);
+  const [nameEdited, setNameEdited] = useState(Boolean(chainCloneDraft));
+
+  useEffect(() => {
+    if (chainCloneDraft) {
+      setMode('independent');
+      setSelectedId(chainCloneDraft.businessType);
+      setCustomName(chainCloneDraft.suggestedName);
+      setNameEdited(true);
+    } else if (preselectedFranchise) {
+      setMode('franchise');
+      setSelectedFranchiseId(preselectedFranchise.id);
+      setNameEdited(false);
+    }
+  }, [chainCloneDraft, preselectedFranchise]);
 
   const selectedFranchise =
-    mode === 'franchise'
+    mode === 'franchise' && !chainCloneDraft
       ? availableFranchises.find((f) => f.id === selectedFranchiseId) ??
+        preselectedFranchise ??
         availableFranchises[0] ??
         null
       : null;
 
-  const effectiveTypeId = selectedFranchise ? selectedFranchise.businessType : selectedId;
+  const effectiveTypeId = chainCloneDraft
+    ? chainCloneDraft.businessType
+    : selectedFranchise
+    ? selectedFranchise.businessType
+    : selectedId;
   const selectedBlueprint =
     BUSINESS_BLUEPRINTS.find((b) => b.id === effectiveTypeId) ?? BUSINESS_BLUEPRINTS[0];
 
   useEffect(() => {
-    if (!nameEdited) {
+    if (!nameEdited && !chainCloneDraft) {
       if (selectedFranchise) {
         setCustomName(`${selectedFranchise.brandName} · ${location.districtName}`.slice(0, 42));
       } else {
         setCustomName(suggestBusinessName(location.districtName, selectedBlueprint.shortName));
       }
     }
-  }, [location.districtName, selectedBlueprint.shortName, selectedFranchise, nameEdited]);
+  }, [location.districtName, selectedBlueprint.shortName, selectedFranchise, nameEdited, chainCloneDraft]);
 
   const baseCost = calculateEstablishmentCost(selectedBlueprint, location);
   const totalCost = baseCost + (selectedFranchise?.licenseFee ?? 0);
@@ -135,7 +172,8 @@ export function PinDropPanel({
     location.landStatus === 'invalid';
   const isTooClose = !distanceCheck.allowed;
   const isQuotaFull = ownBranchCount >= maxBranches;
-  const isLevelLocked = !selectedFranchise && companyLevel < selectedBlueprint.minCompanyLevel;
+  const isLevelLocked =
+    !selectedFranchise && !chainCloneDraft && companyLevel < selectedBlueprint.minCompanyLevel;
   const canAfford = cash >= totalCost;
 
   const canSubmit =
@@ -149,6 +187,7 @@ export function PinDropPanel({
     (mode === 'independent' || Boolean(selectedFranchise));
 
   const handleSelectBlueprint = (bp: BusinessBlueprint) => {
+    if (chainCloneDraft) return;
     setSelectedId(bp.id);
     if (!nameEdited) {
       setCustomName(suggestBusinessName(location.districtName, bp.shortName));
@@ -158,7 +197,18 @@ export function PinDropPanel({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    onEstablish(selectedBlueprint.id, customName.trim(), selectedFranchise);
+    onEstablish(
+      selectedBlueprint.id,
+      customName.trim(),
+      selectedFranchise,
+      chainCloneDraft
+        ? {
+            chainBrandName: chainCloneDraft.brandName,
+            chainBranchNumber: chainCloneDraft.nextBranchNumber,
+            sourceBusinessId: chainCloneDraft.sourceBusinessId,
+          }
+        : null
+    );
   };
 
   return (
@@ -261,33 +311,61 @@ export function PinDropPanel({
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Fixed Mode Tabs (shrink-0) */}
-          <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/70 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-950/40">
-            <button
-              type="button"
-              onClick={() => setMode('independent')}
-              className={`rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
-                mode === 'independent'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
+          {chainCloneDraft ? (
+            <div
+              data-testid="chain-clone-banner"
+              className="flex shrink-0 items-center justify-between gap-2 border-b border-sky-300/60 bg-sky-50 px-3 py-2 text-[11px] dark:border-sky-800/70 dark:bg-sky-950/50"
             >
-              Bağımsız İşletme (13)
-            </button>
-            <button
-              type="button"
-              data-testid="pin-mode-franchise"
-              onClick={() => setMode('franchise')}
-              className={`flex items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
-                mode === 'franchise'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Store className="h-3.5 w-3.5 shrink-0" />
-              <span>Franchise (+%35)</span>
-            </button>
-          </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1 font-bold text-sky-800 dark:text-sky-300">
+                  <Link2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    Zincir Şube: {chainCloneDraft.brandName} ({chainCloneDraft.nextBranchNumber}. Şube)
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-300">
+                  Otomatik Zincir Marka · -%12 Tedarik İndirimi & +%10 Ciro
+                </div>
+              </div>
+              {onCancelSpecialMode && (
+                <button
+                  type="button"
+                  onClick={onCancelSpecialMode}
+                  className="shrink-0 rounded-lg border border-sky-400/50 px-2 py-1 text-[10px] font-bold text-sky-700 hover:bg-sky-100 dark:text-sky-200 dark:hover:bg-sky-900"
+                >
+                  Normal Mod
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Fixed Mode Tabs (shrink-0) */
+            <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/70 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-950/40">
+              <button
+                type="button"
+                onClick={() => setMode('independent')}
+                className={`rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                  mode === 'independent'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                Bağımsız İşletme (13)
+              </button>
+              <button
+                type="button"
+                data-testid="pin-mode-franchise"
+                onClick={() => setMode('franchise')}
+                className={`flex items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                  mode === 'franchise'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Store className="h-3.5 w-3.5 shrink-0" />
+                <span>Franchise (+%35)</span>
+              </button>
+            </div>
+          )}
 
           {/* Scrollable 2-Column Sector / Franchise Grid (flex-1 min-h-0 overflow-y-auto overscroll-contain) */}
           <div
@@ -465,7 +543,9 @@ export function PinDropPanel({
                   : isLevelLocked
                   ? `Şirket Seviyesi ${selectedBlueprint.minCompanyLevel} Gerekli`
                   : canAfford
-                  ? selectedFranchise
+                  ? chainCloneDraft
+                    ? `Zincir Şube Aç (${chainCloneDraft.nextBranchNumber}. Şube) · ${formatTL(totalCost)}`
+                    : selectedFranchise
                     ? `Franchise Şube Aç · ${formatTL(totalCost)}`
                     : `İşletmeyi Kur · ${formatTL(totalCost)}`
                   : `Yetersiz Bakiye (${formatTL(totalCost)})`}

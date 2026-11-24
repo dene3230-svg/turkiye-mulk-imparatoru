@@ -1,10 +1,10 @@
 {
-  "version": "1.2.7",
+  "version": "1.2.8",
   "buildDate": "2026-11-24",
   "mandatory": false,
   "notes": [
-    "Sol üst bar sadeleştirildi, alt menü Harita-Yönetim-Finans-Haberler-Görevler-Menü olarak düzenlendi",
-    "Merkez şehir ve ilk işletmeye otomatik odaklanma eklendi",
-    "Kaydırma çubuklu kredi çekme ve Borsa Yatırımlarım sekmesi eklendi"
+    "İşletme çoğaltma ile haritada hızlı zincirleşme eklendi",
+    "Yönetim paneline Franchise Ver ve Rakip İşletmeler strateji merkezi eklendi",
+    "Genel Müdür için otomatik reklam yönetimi aktif edildi"
   ]
 }

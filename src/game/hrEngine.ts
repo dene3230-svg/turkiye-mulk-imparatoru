@@ -8,6 +8,7 @@ import type {
   StaffCandidate,
   StaffRole,
 } from '../types/game';
+import { hasChainBrandInCity } from './strategyEngine';
 
 export const MAX_BRANCH_WORKERS = 4;
 export const MAX_BRANCH_ASSISTANT_MANAGERS = 1;
@@ -65,7 +66,7 @@ export const ROLE_META: Record<
     shortLabel: 'Genel Müdür',
     scope: 'city',
     description:
-      'Şehirdeki tüm zincir şubelerde ortak tam otomasyon, +%20 verimlilik bonusu ve otomatik hasılat toplama sağlar (Min. 2 şube).',
+      'Şehirdeki tüm zincir şubelerde ortak tam otomasyon, +%20 verimlilik, otomatik hasılat toplama ve Otomatik Reklam Yönetimi sağlar (Min. 2 şube veya Zincir Marka).',
     baseHourlySalary: 8_500,
     baseHireCost: 560_000,
   },
@@ -288,6 +289,7 @@ export function resolveBusinessAutomation(
       autoMaintenance: true,
       fullAutomation: true,
       autoCollectRevenue: true,
+      autoAdsActive: Boolean(gm.autoAdsEnabled),
       bulkSupplyDiscount: 0.2,
       efficiencyBonus: 0.2, // Exact +20% corporate efficiency bonus in city
       managerLabel: `Genel Müdür · ${gm.name} (${gm.stars}★)`,
@@ -438,18 +440,19 @@ export function hireCandidateFromPool(
 
   if (meta.scope === 'city') {
     const cityBranches = state.businesses.filter((b) => b.cityPlate === targetCityPlate);
-    if (candidate.role === 'bolge_sorumlusu' && cityBranches.length < 2) {
+    const hasChainHere = hasChainBrandInCity(state.businesses, targetCityPlate);
+    if (candidate.role === 'bolge_sorumlusu' && cityBranches.length < 2 && !hasChainHere) {
       return {
         state,
         ok: false,
-        error: 'Bölge Sorumlusu yalnızca birden fazla şubeniz olduğunda (min. 2 şube) atanabilir.',
+        error: 'Bölge Sorumlusu yalnızca bu şehirde en az 2 şubeniz veya aktif bir Zincir Markanız olduğunda atanabilir.',
       };
     }
-    if (candidate.role === 'genel_mudur' && cityBranches.length < 2) {
+    if (candidate.role === 'genel_mudur' && cityBranches.length < 2 && !hasChainHere) {
       return {
         state,
         ok: false,
-        error: 'Genel Müdür yalnızca bu şehirde en az 2 şubeli bir zinciriniz olduğunda atanabilir.',
+        error: 'Genel Müdür yalnızca bu şehirde en az 2 şubeniz veya aktif bir Zincir Markanız olduğunda atanabilir.',
       };
     }
     if (
@@ -469,6 +472,7 @@ export function hireCandidateFromPool(
       ...candidate,
       hiredAt: now,
       assignedCityPlate: targetCityPlate,
+      autoAdsEnabled: candidate.role === 'genel_mudur' ? false : undefined,
       coveredBusinessIds:
         candidate.role === 'bolge_sorumlusu'
           ? cityBranches.slice(0, 4).map((b) => b.id)

@@ -149,15 +149,66 @@ export interface HiredStaff extends StaffCandidate {
   assignedBusinessId?: string; // for calisan, mudur_yardimcisi, sube_muduru
   assignedCityPlate?: number; // for bolge_sorumlusu, genel_mudur
   coveredBusinessIds?: string[]; // up to 4 for bolge_sorumlusu
+  autoAdsEnabled?: boolean; // Genel Müdür automatic ad campaign renewal toggle
 }
 
 export type GameSpeed = 0 | 1 | 2 | 4;
+
+export type AdCampaignTierId = 'brochure' | 'social' | 'billboard';
+
+export interface ActiveAdCampaign {
+  tierId: AdCampaignTierId;
+  label: string;
+  cost: number;
+  revenueBoost: number; // e.g. 0.20, 0.38, 0.65
+  customerBoost: number; // e.g. 0.18, 0.35, 0.60
+  startedAtGameMin: number;
+  endsAtGameMin: number;
+  autoRenewedByGm?: boolean;
+}
+
+export interface FranchiseApplication {
+  id: string;
+  franchiseId: string;
+  brandName: string;
+  businessType: BusinessTypeId;
+  applicantName: string;
+  applicantType: 'ai' | 'player';
+  cityPlate: number;
+  cityName: string;
+  districtName: string;
+  licenseFee: number;
+  royaltyRate: number;
+  status: 'pending' | 'approved';
+  createdAt: number;
+}
+
+export interface CompetitiveBlitz {
+  id: string;
+  targetRivalId: string;
+  targetOwnerName: string;
+  cityPlate: number;
+  cityName: string;
+  businessType: BusinessTypeId;
+  revenueBoost: number; // e.g. 0.25
+  endsAtGameMin: number;
+  startedAt: number;
+}
+
+export interface ChainCloneDraft {
+  sourceBusinessId: string;
+  brandName: string;
+  nextBranchNumber: number;
+  suggestedName: string;
+  businessType: BusinessTypeId;
+}
 
 export interface AutomationStatus {
   autoStock: boolean;
   autoMaintenance: boolean;
   fullAutomation: boolean;
   autoCollectRevenue: boolean; // Şube Müdürü (tek şube), Bölge Sorumlusu (4 şube) & Genel Müdür (il geneli)
+  autoAdsActive?: boolean; // Genel Müdür automatic ad campaign renewal active
   bulkSupplyDiscount: number; // 0..0.35
   efficiencyBonus: number; // e.g. +0.20 from Genel Müdür
   managerLabel: string | null;
@@ -217,7 +268,10 @@ export interface OwnedBusiness {
   boostEndsAt: number;
   createdAt: number;
   notifiedHighVault?: boolean;
-  // Franchise & Chain metadata
+  // Franchise, Chain & Advertising metadata
+  chainBrandName?: string; // Shared brand name across cloned branches (2+ = Zincir Marka)
+  chainBranchNumber?: number; // 1, 2, 3...
+  activeAdCampaign?: ActiveAdCampaign | null;
   franchiseId?: string;
   franchiseBrandName?: string;
   franchiseOwnerId?: string;
@@ -491,7 +545,11 @@ export interface EmpireState {
   candidatePool: StaffCandidate[]; // Renewable 1-5 star HR pool
   supermarketChain: SupermarketChainBrand | null;
   ownFranchises: FranchiseBrand[];
+  franchiseApplications?: FranchiseApplication[];
+  autoApproveFranchiseApps?: boolean;
   franchiseRoyaltiesEarned: number;
+  competitiveBlitzes?: CompetitiveBlitz[];
+  acquiredRivalIds?: string[];
   stockPortfolio: StockHolding[];
   playerIpo: PlayerIpoInfo | null;
   creditScore: number; // 0..1900, default 1100

@@ -4,6 +4,7 @@ import type {
   CompanyTier,
   DayEndSummary,
   EmpireState,
+  FranchiseApplication,
   FranchiseBrand,
   HeadquartersInfo,
   MarketEvent,
@@ -55,6 +56,14 @@ import {
   evaluateDynamicMissionProgress,
   generateNextDynamicMission,
 } from './missionEngine';
+import {
+  extractBaseBrandName,
+  getActiveCompetitiveBlitzBoost,
+  getChainStatusForBusiness,
+  isAdCampaignActive,
+  processAutoFranchiseApplications,
+  runGeneralManagerAutoAds,
+} from './strategyEngine';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
@@ -169,7 +178,11 @@ export function createInitialEmpireState(
     candidatePool: generateCandidatePool(now, 'kafe'),
     supermarketChain: null,
     ownFranchises: [],
+    franchiseApplications: [],
+    autoApproveFranchiseApps: true,
     franchiseRoyaltiesEarned: 0,
+    competitiveBlitzes: [],
+    acquiredRivalIds: [],
     stockPortfolio: [],
     playerIpo: null,
     creditScore: STARTING_CREDIT_SCORE,
@@ -256,7 +269,10 @@ export function calculateBusinessIncomePerSec(
   activeEvent: MarketEvent | null,
   now = Date.now(),
   allOwnBusinesses?: OwnedBusiness[],
-  stateContext?: Pick<EmpireState, 'cityManagers' | 'supermarketChain'>
+  stateContext?: Pick<
+    EmpireState,
+    'cityManagers' | 'supermarketChain' | 'gameMinutes' | 'competitiveBlitzes'
+  >
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
@@ -269,6 +285,20 @@ export function calculateBusinessIncomePerSec(
   );
   const staffMultiplier = calculateStaffQualityMultiplier(business, automation);
   const boostMultiplier = business.boostEndsAt > now ? 2.0 : 1.0;
+
+  // Advertising campaign boost (Brochure +20%, Social +38%, Billboard +65%)
+  const currentGameMin = stateContext?.gameMinutes ?? STARTING_GAME_MINUTES;
+  const adMultiplier = isAdCampaignActive(business.activeAdCampaign, currentGameMin)
+    ? 1 + (business.activeAdCampaign?.revenueBoost ?? 0)
+    : 1.0;
+
+  // Competitive Blitz boost (+25% in targeted rival city)
+  const blitzBoost = getActiveCompetitiveBlitzBoost(
+    business.cityPlate,
+    stateContext?.competitiveBlitzes,
+    currentGameMin
+  );
+  const blitzMultiplier = 1 + blitzBoost;
 
   const avmSynergy =
     allOwnBusinesses && hasAvmSynergyForBusiness(business, allOwnBusinesses)
@@ -287,10 +317,18 @@ export function calculateBusinessIncomePerSec(
       : 1.0;
 
   // Supermarket chain bulk procurement discount (+14% net margin)
-  const chainSynergy =
+  const supermarketChainSynergy =
     business.blueprintId === 'supermarket' && stateContext?.supermarketChain
       ? 1 + SUPERMARKET_CHAIN_DISCOUNT * 0.7
       : 1.0;
+
+  // Cloned Zincir Marka synergy (2+ branches under same brand: +10%/+15% revenue + supply savings)
+  const brandChainStatus = allOwnBusinesses
+    ? getChainStatusForBusiness(business, allOwnBusinesses)
+    : null;
+  const clonedChainSynergy = brandChainStatus?.isChain
+    ? 1 + brandChainStatus.revenueBonus + brandChainStatus.supplyDiscount * 0.4
+    : 1.0;
 
   // Franchise branch +35% customer & revenue bonus (minus royalty share kept by brand owner)
   const franchiseGrossMult = business.franchiseId ? FRANCHISE_BRANCH_BONUS_MULTIPLIER : 1.0;
@@ -315,10 +353,13 @@ export function calculateBusinessIncomePerSec(
       levelMultiplier *
       staffMultiplier *
       boostMultiplier *
+      adMultiplier *
+      blitzMultiplier *
       avmSynergy *
       parkingSynergy *
       factorySynergy *
-      chainSynergy *
+      supermarketChainSynergy *
+      clonedChainSynergy *
       franchiseGrossMult *
       royaltyDeduction *
       eventMultiplier
@@ -330,7 +371,10 @@ export function calculateBusinessHourlyIncome(
   activeEvent: MarketEvent | null,
   now = Date.now(),
   allOwnBusinesses?: OwnedBusiness[],
-  stateContext?: Pick<EmpireState, 'cityManagers' | 'supermarketChain'>
+  stateContext?: Pick<
+    EmpireState,
+    'cityManagers' | 'supermarketChain' | 'gameMinutes' | 'competitiveBlitzes'
+  >
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
@@ -347,7 +391,8 @@ export function calculateBusinessHourlyIncome(
 
 export function calculateBusinessCapacity(
   business: OwnedBusiness,
-  allOwnBusinesses?: OwnedBusiness[]
+  allOwnBusinesses?: OwnedBusiness[],
+  currentGameMinutes?: number
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 10;
@@ -356,11 +401,20 @@ export function calculateBusinessCapacity(
       ? 1 + PARKING_CAPACITY_BONUS
       : 1.0;
   const franchiseMult = business.franchiseId ? FRANCHISE_BRANCH_BONUS_MULTIPLIER : 1.0;
+  const adMult =
+    business.activeAdCampaign &&
+    (currentGameMinutes === undefined || business.activeAdCampaign.endsAtGameMin > currentGameMinutes)
+      ? 1 + business.activeAdCampaign.customerBoost
+      : 1.0;
   const starSum = (business.employees ?? []).reduce((s, e) => s + e.stars, 0);
   const staffBonus = starSum > 0 ? starSum * 0.04 : business.staffCount * 0.08;
 
   return Math.round(
-    bp.baseCapacity * (1 + (business.level - 1) * 0.35 + staffBonus) * parkingMult * franchiseMult
+    bp.baseCapacity *
+      (1 + (business.level - 1) * 0.35 + staffBonus) *
+      parkingMult *
+      franchiseMult *
+      adMult
   );
 }
 
@@ -517,7 +571,12 @@ export function purchaseBusiness(
   owner: { id: string; name: string },
   nearbyExisting: Array<{ lat: number; lng: number; name: string }> = [],
   now = Date.now(),
-  franchiseBrand?: FranchiseBrand | null
+  franchiseBrand?: FranchiseBrand | null,
+  chainCloneMeta?: {
+    chainBrandName: string;
+    chainBranchNumber: number;
+    sourceBusinessId?: string;
+  } | null
 ): ActionResult {
   const effectiveType = franchiseBrand ? franchiseBrand.businessType : blueprintId;
   const bp = getBlueprintById(effectiveType);
@@ -577,6 +636,10 @@ export function purchaseBusiness(
     return { state, ok: false, error: 'Lütfen işletmeniz için bir ad girin.' };
   }
 
+  const resolvedChainBrand = chainCloneMeta?.chainBrandName
+    ? chainCloneMeta.chainBrandName.trim()
+    : extractBaseBrandName(trimmedName);
+
   const affinityMultiplier = getAffinityMultiplier(bp, location);
   const newBusiness: OwnedBusiness = {
     id: `biz-${now}-${Math.floor(Math.random() * 100000)}`,
@@ -602,11 +665,26 @@ export function purchaseBusiness(
     boostEndsAt: 0,
     createdAt: now,
     notifiedHighVault: false,
+    chainBrandName: resolvedChainBrand,
+    chainBranchNumber: chainCloneMeta?.chainBranchNumber ?? 1,
     franchiseId: franchiseBrand?.id,
     franchiseBrandName: franchiseBrand?.brandName,
     franchiseOwnerId: franchiseBrand?.ownerId,
     franchiseRoyaltyRate: franchiseBrand?.royaltyRate,
   };
+
+  // Ensure the cloned source business also shares the exact chainBrandName
+  const existingUpdated = chainCloneMeta?.sourceBusinessId
+    ? state.businesses.map((b) =>
+        b.id === chainCloneMeta.sourceBusinessId
+          ? {
+              ...b,
+              chainBrandName: resolvedChainBrand,
+              chainBranchNumber: b.chainBranchNumber ?? 1,
+            }
+          : b
+      )
+    : state.businesses;
 
   const nextHq: HeadquartersInfo =
     state.businesses.length === 0 || !state.hq?.businessId
@@ -627,7 +705,7 @@ export function purchaseBusiness(
       ...state,
       cash: state.cash - totalCost,
       hq: nextHq,
-      businesses: [newBusiness, ...state.businesses],
+      businesses: [newBusiness, ...existingUpdated],
       lastSavedAt: now,
     },
   };
@@ -637,7 +715,8 @@ export function takeoverCompetitorBusiness(
   state: EmpireState,
   target: RemoteBusinessRecord,
   newOwner: { id: string; name: string },
-  now = Date.now()
+  now = Date.now(),
+  customMultiplier?: number
 ): ActionResult {
   if (target.owner_id === newOwner.id) {
     return { state, ok: false, error: 'Bu işletme zaten size ait.' };
@@ -654,7 +733,11 @@ export function takeoverCompetitorBusiness(
     };
   }
 
-  const takeoverPrice = calculateTakeoverPrice(target.valuation);
+  const mult =
+    customMultiplier !== undefined
+      ? Math.max(1.2, Math.min(1.5, customMultiplier))
+      : TAKEOVER_VALUATION_MULTIPLIER;
+  const takeoverPrice = Math.round((target.valuation * mult) / 1000) * 1000;
   if (state.cash < takeoverPrice) {
     return {
       state,
@@ -688,6 +771,8 @@ export function takeoverCompetitorBusiness(
     boostEndsAt: 0,
     createdAt: now,
     notifiedHighVault: false,
+    chainBrandName: extractBaseBrandName(target.business_name),
+    chainBranchNumber: 1,
   };
 
   return {
@@ -697,6 +782,7 @@ export function takeoverCompetitorBusiness(
       ...state,
       cash: state.cash - takeoverPrice,
       businesses: [acquired, ...state.businesses.filter((b) => b.id !== acquired.id)],
+      acquiredRivalIds: Array.from(new Set([...(state.acquiredRivalIds ?? []), target.id])),
       lastSavedAt: now,
     },
   };
@@ -712,6 +798,10 @@ export interface TickResult {
   daysPassed: number;
   dayEndSummary: DayEndSummary | null;
   loanEnforcement: LoanEnforcementResult;
+  autoRenewedAdsCount: number;
+  autoAdsSpent: number;
+  autoAdBranchNames: string[];
+  newFranchiseOpenings: FranchiseApplication[];
 }
 
 export function tickEconomy(
@@ -737,6 +827,10 @@ export function tickEconomy(
         garnishedTotal: 0,
         seizedLoans: [],
       },
+      autoRenewedAdsCount: 0,
+      autoAdsSpent: 0,
+      autoAdBranchNames: [],
+      newFranchiseOpenings: [],
     };
   }
 
@@ -901,7 +995,16 @@ export function tickEconomy(
     };
   }
 
-  const preLoanState: EmpireState = {
+  const cleanedBusinesses = updatedBusinesses.map((b) =>
+    b.activeAdCampaign && b.activeAdCampaign.endsAtGameMin <= nextMinutes
+      ? { ...b, activeAdCampaign: null }
+      : b
+  );
+  const activeBlitzes = (state.competitiveBlitzes ?? []).filter(
+    (bl) => bl.endsAtGameMin > nextMinutes
+  );
+
+  let preLoanState: EmpireState = {
     ...state,
     gameMinutes: nextMinutes,
     creditScore: nextCreditScore,
@@ -909,10 +1012,42 @@ export function tickEconomy(
     totalEarnedLifetime:
       state.totalEarnedLifetime + autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
     franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
-    businesses: updatedBusinesses,
+    businesses: cleanedBusinesses,
+    competitiveBlitzes: activeBlitzes,
     activeEvent,
     lastSavedAt: now,
   };
+
+  // Genel Müdür automatic ad campaign renewal (runs hourly or immediately when GM has autoAdsEnabled)
+  let autoRenewedAdsCount = 0;
+  let autoAdsSpent = 0;
+  let autoAdBranchNames: string[] = [];
+  if (
+    hoursPassed > 0 ||
+    (preLoanState.cityManagers ?? []).some((m) => m.role === 'genel_mudur' && m.autoAdsEnabled)
+  ) {
+    const gmAdRes = runGeneralManagerAutoAds(
+      preLoanState,
+      (biz) =>
+        calculateBusinessHourlyIncome(
+          { ...biz, activeAdCampaign: null },
+          activeEvent,
+          now,
+          preLoanState.businesses,
+          preLoanState
+        ),
+      now
+    );
+    preLoanState = gmAdRes.state;
+    autoRenewedAdsCount = gmAdRes.renewedCount;
+    autoAdsSpent = gmAdRes.totalSpent;
+    autoAdBranchNames = gmAdRes.renewedBranchNames;
+  }
+
+  // Automatic AI Franchise entrepreneur applications & branch openings
+  const franchiseAppRes = processAutoFranchiseApplications(preLoanState, hoursPassed, now);
+  preLoanState = franchiseAppRes.state;
+  const newFranchiseOpenings = franchiseAppRes.autoApprovedApps;
 
   // Enforce overdue loans (garnishment -> automatic collateral seizure!)
   const loanEnforcement = enforceOverdueLoans(
@@ -931,6 +1066,10 @@ export function tickEconomy(
     daysPassed,
     dayEndSummary,
     loanEnforcement,
+    autoRenewedAdsCount,
+    autoAdsSpent,
+    autoAdBranchNames,
+    newFranchiseOpenings,
   };
 }
 

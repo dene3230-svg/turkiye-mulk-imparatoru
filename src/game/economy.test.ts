@@ -69,6 +69,18 @@ import {
   repayLoan,
   takeLoanFromBank,
 } from './bankingEngine.ts';
+import {
+  approveFranchiseApplication,
+  buildNationalRivalDirectory,
+  calculateDynamicTakeoverOffer,
+  generateAiFranchiseApplication,
+  getChainStatusForBusiness,
+  launchBusinessAdCampaign,
+  launchCompetitiveBlitz,
+  prepareChainCloneDraft,
+  processAutoFranchiseApplications,
+  toggleGeneralManagerAutoAds,
+} from './strategyEngine.ts';
 import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
 import {
   generateEdgeToEdgeMainActivity,
@@ -465,9 +477,9 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.2.7');
-  assert.equal(compareSemver('1.2.6', '1.2.7'), 1);
-  assert.equal(compareSemver('1.2.7', '1.2.7'), 0);
+  assert.equal(APP_VERSION, '1.2.8');
+  assert.equal(compareSemver('1.2.7', '1.2.8'), 1);
+  assert.equal(compareSemver('1.2.8', '1.2.8'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
 
@@ -823,3 +835,231 @@ test('v1.2.7 Headquarters (HQ) city and first business coordinates persist perma
   assert.equal(focusAfterSecond.lng, 32.8541);
   assert.equal(focusAfterSecond.zoom, 15);
 });
+
+test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supply discount, revenue boost & executive unlock', () => {
+  const now = 950_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 5_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  const first = purchaseBusiness(
+    state,
+    'kafe',
+    landPin(41.0422, 29.0067, 34),
+    'Boğaz Kahve',
+    owner,
+    [],
+    now
+  );
+  assert.equal(first.ok, true);
+  state = first.state;
+  const soloStatus = getChainStatusForBusiness(first.business!, state.businesses);
+  assert.equal(soloStatus.isChain, false);
+  const soloIncome = calculateBusinessIncomePerSec(
+    first.business!,
+    null,
+    now,
+    state.businesses,
+    state
+  );
+
+  // Clone into a 2nd branch in Ankara (cross-province chain!)
+  const draft = prepareChainCloneDraft(first.business!, state.businesses);
+  assert.equal(draft.chainBrandName, 'Boğaz Kahve');
+  assert.equal(draft.nextBranchNumber, 2);
+  assert.equal(draft.suggestedName, 'Boğaz Kahve - 2. Şube');
+
+  const cloned = purchaseBusiness(
+    state,
+    draft.blueprintId,
+    landPin(39.9208, 32.8541, 6),
+    draft.suggestedName,
+    owner,
+    [],
+    now + 50,
+    null,
+    {
+      chainBrandName: draft.chainBrandName,
+      chainBranchNumber: draft.nextBranchNumber,
+      sourceBusinessId: draft.sourceBusinessId,
+    }
+  );
+  assert.equal(cloned.ok, true);
+  state = cloned.state;
+
+  // Both branches now share Zincir Marka status (2 branches -> 12% supply discount, 10% revenue bonus)
+  const chainStatus1 = getChainStatusForBusiness(state.businesses[0], state.businesses);
+  const chainStatus2 = getChainStatusForBusiness(state.businesses[1], state.businesses);
+  assert.equal(chainStatus1.isChain, true);
+  assert.equal(chainStatus2.isChain, true);
+  assert.equal(chainStatus1.branchCount, 2);
+  assert.equal(chainStatus1.supplyDiscount, 0.12);
+  assert.equal(chainStatus1.revenueBonus, 0.1);
+
+  const chainIncome = calculateBusinessIncomePerSec(
+    state.businesses[0],
+    null,
+    now + 50,
+    state.businesses,
+    state
+  );
+  assert.ok(chainIncome > soloIncome * 1.08, 'Zincir Marka should increase branch revenue');
+
+  const accounting = calculateAccountingReport(state, [], now + 50);
+  assert.ok(accounting.hourlySupplyDiscountSaved > 0, 'Zincir Marka supply discount must appear in accounting');
+
+  // Even though Istanbul only has 1 physical branch, belonging to a Zincir Marka unlocks Bölge Sorumlusu!
+  const pool = generateCandidatePool(20261, 'kafe');
+  const rm = pool.find((c) => c.role === 'bolge_sorumlusu')!;
+  const hireRm = hireCandidateFromPool({ ...state, candidatePool: pool }, rm.id, null, 34, now + 100);
+  assert.equal(hireRm.ok, true);
+});
+
+test('v1.2.8 3-Tier Ad Campaigns boost income/capacity & Genel Müdür Auto-Ads renews expired campaigns automatically', () => {
+  const now = 1_000_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  const b1 = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Lezzet 1', owner, [], now);
+  const b2 = purchaseBusiness(b1.state, 'restoran', landPin(41.0522, 29.0067, 34), 'Lezzet 2', owner, [], now + 10);
+  state = b2.state;
+
+  const baseCap = calculateBusinessCapacity(state.businesses[0], state.businesses);
+  const baseInc = calculateBusinessIncomePerSec(state.businesses[0], null, now + 10, state.businesses, state);
+
+  // Launch manual Şehir Billboard campaign on branch 1
+  const adRes = launchBusinessAdCampaign(state, state.businesses[0].id, 'billboard', now + 20, false);
+  assert.equal(adRes.ok, true);
+  assert.equal(adRes.campaign?.tierId, 'billboard');
+  state = adRes.state;
+
+  const boostedCap = calculateBusinessCapacity(state.businesses[0], state.businesses, state.gameMinutes);
+  const boostedInc = calculateBusinessIncomePerSec(state.businesses[0], null, now + 20, state.businesses, state);
+  assert.ok(boostedCap > baseCap * 1.4, 'Billboard ad should significantly boost customer capacity');
+  assert.ok(boostedInc > baseInc * 1.6, 'Billboard ad should significantly boost branch revenue');
+
+  // Hire Genel Müdür in Istanbul and enable Auto-Ads toggle
+  const pool = generateCandidatePool(30303, 'restoran');
+  const gm = pool.find((c) => c.role === 'genel_mudur')!;
+  const hired = hireCandidateFromPool({ ...state, candidatePool: pool }, gm.id, null, 34, now + 30);
+  assert.equal(hired.ok, true);
+  const gmId = hired.state.cityManagers.find((m) => m.role === 'genel_mudur')!.id;
+
+  const toggled = toggleGeneralManagerAutoAds(hired.state, gmId, true, now + 40);
+  assert.equal(toggled.ok, true);
+  assert.equal(toggled.state.cityManagers[0].autoAdsEnabled, true);
+
+  // Tick 1 in-game hour (6s at 1x) -> GM analyzes branch 2 (which has no active ad) and launches campaign automatically!
+  const tickRes = tickEconomy(toggled.state, 6, now + 6040);
+  assert.ok(tickRes.autoRenewedAdsCount >= 1, 'Genel Müdür should automatically launch ad campaign for unadvertised city branch');
+  assert.ok(tickRes.autoAdsSpent > 0);
+  const branch2After = tickRes.state.businesses.find((b) => b.id === b2.business!.id)!;
+  assert.ok(branch2After.activeAdCampaign, 'Branch 2 should now have an active GM-managed ad campaign');
+  assert.equal(branch2After.activeAdCampaign?.autoManaged, true);
+});
+
+test('v1.2.8 Bidirectional Franchise Marketplace (Owned Branch -> Franchise -> AI Entrepreneur Applications & Royalties)', () => {
+  const now = 1_100_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 2_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Anadolu Kahvecisi', owner, [], now);
+  assert.equal(built.ok, true);
+  state = built.state;
+
+  // Player can publish franchise from their owned business
+  const fran = createFranchiseBrand(
+    state,
+    { brandName: 'Anadolu Kahvecisi', businessType: 'kafe', licenseFee: 120_000, royaltyRate: 0.18 },
+    owner,
+    now + 10
+  );
+  assert.equal(fran.ok, true);
+  assert.ok(fran.brand);
+  state = fran.state;
+
+  // Generate AI entrepreneur application and approve manually
+  const aiApp = generateAiFranchiseApplication(fran.brand!, 777, now + 20);
+  assert.equal(aiApp.applicantType, 'ai');
+  assert.equal(aiApp.status, 'pending');
+  state = { ...state, franchiseApplications: [aiApp] };
+
+  const cashBefore = state.cash;
+  const approved = approveFranchiseApplication(state, aiApp.id, now + 30);
+  assert.equal(approved.ok, true);
+  assert.equal(approved.state.cash, cashBefore + 120_000);
+  assert.equal(approved.state.ownFranchises[0].branchCount, 1);
+  assert.equal(approved.state.franchiseRoyaltiesEarned, 120_000);
+
+  // Auto-franchise application processing during ticks
+  const autoProc = processAutoFranchiseApplications(
+    { ...approved.state, autoApproveFranchiseApps: true, gameMinutes: 540 + 240 },
+    4,
+    now + 40
+  );
+  assert.ok(autoProc.newOpenings.length >= 1);
+  assert.ok(autoProc.state.ownFranchises[0].branchCount >= 2);
+});
+
+test('v1.2.8 Rivals Strategy Center: National Directory, Dynamic 120%-150% Takeover & +25% Competitive Blitz', () => {
+  const now = 1_200_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  const ownBiz = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Merkez Kafe', owner, [], now);
+  assert.equal(ownBiz.ok, true);
+  state = ownBiz.state;
+
+  const cityRivals = generateSeedCityRivals(34);
+  const directory = buildNationalRivalDirectory(state, 34, cityRivals, SEED_FRANCHISE_BRANDS, owner.id);
+  assert.ok(directory.length >= 3, 'Directory must include city & national AI rival holdings');
+
+  const targetEntry = directory.find((d) => d.record.city_plate === 34)!;
+  assert.ok(targetEntry.holdingTotalValuation > 0);
+  assert.ok(targetEntry.sectorMarketSharePct > 0);
+  const offer = calculateDynamicTakeoverOffer(targetEntry.record);
+  assert.ok(offer.multiplier >= 1.2 && offer.multiplier <= 1.5);
+
+  // Competitive Blitz boosts player's city branches by +25%
+  const incomeBeforeBlitz = calculateBusinessIncomePerSec(
+    state.businesses[0],
+    null,
+    now + 10,
+    state.businesses,
+    state
+  );
+  const blitz = launchCompetitiveBlitz(state, targetEntry.record, now + 10);
+  assert.equal(blitz.ok, true);
+  state = blitz.state;
+  const incomeAfterBlitz = calculateBusinessIncomePerSec(
+    state.businesses[0],
+    null,
+    now + 10,
+    state.businesses,
+    state
+  );
+  assert.ok(incomeAfterBlitz > incomeBeforeBlitz * 1.2, 'Competitive blitz should boost city income by +25%');
+
+  // Dynamic takeover removes rival from acquiredRivalIds & adds to player portfolio
+  const takeover = takeoverCompetitorBusiness(
+    state,
+    targetEntry.record,
+    owner,
+    now + 20,
+    offer.multiplier
+  );
+  assert.equal(takeover.ok, true);
+  assert.ok(takeover.state.acquiredRivalIds?.includes(targetEntry.record.id));
+  const dirAfter = buildNationalRivalDirectory(
+    takeover.state,
+    34,
+    cityRivals,
+    SEED_FRANCHISE_BRANDS,
+    owner.id
+  );
+  assert.ok(!dirAfter.some((d) => d.record.id === targetEntry.record.id));
+});
+

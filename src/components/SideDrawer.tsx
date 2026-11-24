@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   MapPin,
   Coins,
@@ -16,8 +17,13 @@ import {
   Newspaper,
   Landmark,
   Flame,
+  Swords,
+  CopyPlus,
+  Megaphone,
+  Link2,
 } from 'lucide-react';
 import type {
+  AdCampaignTierId,
   BankRecord,
   EmpireState,
   MissionDef,
@@ -38,8 +44,16 @@ import {
 import { getBranchStaffSlots, resolveBusinessAutomation } from '../game/hrEngine';
 import { ensureDynamicMissions } from '../game/missionEngine';
 import { getCreditTier } from '../game/bankingEngine';
+import {
+  AD_CAMPAIGN_TIERS,
+  calculateAdCampaignCost,
+  formatRemainingGameHours,
+  getChainStatusForBusiness,
+  isAdCampaignActive,
+} from '../game/strategyEngine';
 import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
 import { BrandLogo } from './BrandLogo';
+import type { ManagementTabId } from './RivalsStrategyModal';
 
 export type DrawerTab = 'portfolio' | 'missions' | 'market';
 
@@ -51,9 +65,12 @@ interface SideDrawerProps {
   competitorBusinesses?: RemoteBusinessRecord[];
   now: number;
   onClose: () => void;
+  onSelectManagementTab?: (tab: ManagementTabId) => void;
   onSelectBusiness: (businessId: string) => void;
   onEnterInterior: (businessId: string) => void;
   onOpenHrModal?: (businessId: string | null) => void;
+  onCloneBusiness?: (businessId: string) => void;
+  onLaunchAdCampaign?: (businessId: string, tierId: AdCampaignTierId) => void;
   onCollectBusiness: (businessId: string) => void;
   onCollectAll: () => void;
   onUpgradeBusiness: (businessId: string) => void;
@@ -70,9 +87,12 @@ export function SideDrawer({
   competitorBusinesses = [],
   now,
   onClose,
+  onSelectManagementTab,
   onSelectBusiness,
   onEnterInterior,
   onOpenHrModal,
+  onCloneBusiness,
+  onLaunchAdCampaign,
   onCollectBusiness,
   onCollectAll,
   onUpgradeBusiness,
@@ -80,12 +100,16 @@ export function SideDrawer({
   onClaimMission,
   onEnablePinMode,
 }: SideDrawerProps) {
+  const [expandedAdBizId, setExpandedAdBizId] = useState<string | null>(null);
   const netWorth = calculateNetWorth(state, now, stockQuotes);
   const currentTier = getCompanyTier(netWorth);
   const uniqueCities = new Set(state.businesses.map((b) => b.cityPlate)).size;
   const dynamicMissions = ensureDynamicMissions(state, now, stockQuotes);
   const clock = formatGameClock(state.gameMinutes);
   const totalPendingCash = calculateTotalPendingCash(state);
+  const pendingAppsCount = (state.franchiseApplications ?? []).filter(
+    (a) => a.status === 'pending'
+  ).length;
 
   const titles: Record<DrawerTab, string> = {
     portfolio: 'Yönetim Merkezi',
@@ -103,20 +127,32 @@ export function SideDrawer({
     ? Math.max(0, Math.ceil((state.activeEvent.endsAt - now) / 1000))
     : 0;
 
-  // Yönetim window strictly uses 2 tabs: İşletmelerim & İK & Çalışanlar
+  // Yönetim window strictly uses 4 single-row scrollable tabs:
+  // 1) İşletmelerim  2) İK & Çalışanlar  3) Franchise & Bayilik  4) Rakip İşletmeler
   const managementTabs: MobileModalTab[] | undefined =
     tab === 'portfolio'
       ? [
           {
-            id: 'isletmelerim',
+            id: 'portfolio',
             label: 'İşletmelerim',
             badge: state.businesses.length,
             icon: <Building2 className="h-4 w-4" />,
           },
           {
-            id: 'ik',
+            id: 'hr',
             label: 'İK & Çalışanlar',
             icon: <Users className="h-4 w-4" />,
+          },
+          {
+            id: 'franchise',
+            label: 'Franchise & Bayilik',
+            badge: (state.ownFranchises?.length ?? 0) + pendingAppsCount || undefined,
+            icon: <Crown className="h-4 w-4" />,
+          },
+          {
+            id: 'rivals',
+            label: 'Rakip İşletmeler',
+            icon: <Swords className="h-4 w-4" />,
           },
         ]
       : undefined;
@@ -161,9 +197,11 @@ export function SideDrawer({
           ) : undefined
         }
         tabs={managementTabs}
-        activeTabId={tab === 'portfolio' ? 'isletmelerim' : undefined}
+        activeTabId={tab === 'portfolio' ? 'portfolio' : undefined}
         onSelectTab={(id) => {
-          if (id === 'ik' && onOpenHrModal) {
+          if (onSelectManagementTab) {
+            onSelectManagementTab(id as ManagementTabId);
+          } else if (id === 'hr' && onOpenHrModal) {
             onClose();
             onOpenHrModal(state.businesses[0]?.id ?? null);
           }
@@ -235,6 +273,11 @@ export function SideDrawer({
                   const maintPct = Math.round(biz.maintenanceLevel ?? 100);
                   const needsService = stockPct < 95 || maintPct < 95;
                   const isHq = state.hq?.businessId === biz.id;
+                  const chainStatus = getChainStatusForBusiness(biz, state.businesses);
+                  const currentGameMin = state.gameMinutes ?? 540;
+                  const hasActiveAd = isAdCampaignActive(biz.activeAdCampaign, currentGameMin);
+                  const isAdExpanded = expandedAdBizId === biz.id;
+                  const quotaFull = state.businesses.length >= currentTier.maxBranches;
 
                   return (
                     <div
@@ -246,41 +289,68 @@ export function SideDrawer({
                         <button
                           type="button"
                           onClick={() => onSelectBusiness(biz.id)}
-                          className="min-w-0 flex-1 text-left"
+                          className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
                         >
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="truncate text-sm font-bold text-white hover:text-amber-300">
-                              {biz.customName}
-                            </span>
-                            {isHq && (
-                              <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
-                                Merkez Üs
+                          {chainStatus.isChain && (
+                            <BrandLogo brandKey={chainStatus.brandName} size={36} />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="truncate text-sm font-bold text-white hover:text-amber-300">
+                                {biz.customName}
                               </span>
-                            )}
-                            {automation.autoCollectRevenue && (
-                              <span
-                                data-testid="portfolio-auto-collect-badge"
-                                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300"
-                              >
-                                <Zap className="h-3 w-3" /> Oto Tahsilat
+                              {isHq && (
+                                <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
+                                  Merkez Üs
+                                </span>
+                              )}
+                              {chainStatus.isChain && (
+                                <span
+                                  data-testid={`chain-badge-${biz.id}`}
+                                  className="inline-flex items-center gap-0.5 rounded-md bg-sky-500/20 px-1.5 py-0.5 text-[11px] font-bold text-sky-300"
+                                >
+                                  <Link2 className="h-3 w-3" /> Zincir Marka ({chainStatus.branchCount} Şube)
+                                </span>
+                              )}
+                              {automation.autoCollectRevenue && (
+                                <span
+                                  data-testid="portfolio-auto-collect-badge"
+                                  className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300"
+                                >
+                                  <Zap className="h-3 w-3" /> Oto Tahsilat
+                                </span>
+                              )}
+                              {hasActiveAd && biz.activeAdCampaign && (
+                                <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-fuchsia-500/20 px-2 py-0.5 text-[11px] font-bold text-fuchsia-300">
+                                  <Megaphone className="h-3 w-3" /> +%
+                                  {Math.round(biz.activeAdCampaign.revenueBoost * 100)} ·{' '}
+                                  {formatRemainingGameHours(
+                                    biz.activeAdCampaign.endsAtGameMin,
+                                    currentGameMin
+                                  )}
+                                  {biz.activeAdCampaign.autoRenewedByGm ? ' (GM)' : ''}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 text-xs text-slate-400">
+                              {String(biz.cityPlate).padStart(2, '0')} {biz.cityName} ·{' '}
+                              {biz.districtName} · Sv.{biz.level}/{bp?.maxLevel ?? 10} ·{' '}
+                              {bp?.shortName}
+                              {chainStatus.isChain
+                                ? ` · -%${Math.round(chainStatus.supplyDiscount * 100)} Tedarik`
+                                : ''}
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-slate-300">
+                              <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
+                                {slots.workers}/{slots.maxWorkers} Çalışan
                               </span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 text-xs text-slate-400">
-                            {String(biz.cityPlate).padStart(2, '0')} {biz.cityName} ·{' '}
-                            {biz.districtName} · Sv.{biz.level}/{bp?.maxLevel ?? 10} ·{' '}
-                            {bp?.shortName}
-                          </div>
-                          <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-slate-300">
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
-                              {slots.workers}/{slots.maxWorkers} Çalışan
-                            </span>
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
-                              {slots.assistantManagers}/{slots.maxAssistantManagers} Yrd.
-                            </span>
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
-                              {slots.branchManagers}/{slots.maxBranchManagers} Şube Müd.
-                            </span>
+                              <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
+                                {slots.assistantManagers}/{slots.maxAssistantManagers} Yrd.
+                              </span>
+                              <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
+                                {slots.branchManagers}/{slots.maxBranchManagers} Şube Müd.
+                              </span>
+                            </div>
                           </div>
                         </button>
 
@@ -347,6 +417,94 @@ export function SideDrawer({
                           </button>
                         )}
                       </div>
+
+                      {/* Prominent Chain Branch Clone + Ad Campaign Toggle Row */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {onCloneBusiness && (
+                          <button
+                            type="button"
+                            data-testid={`clone-branch-btn-${biz.id}`}
+                            disabled={quotaFull}
+                            onClick={() => onCloneBusiness(biz.id)}
+                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-sky-400/50 bg-sky-500/20 px-3 text-xs font-bold text-sky-200 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap"
+                          >
+                            <CopyPlus className="h-3.5 w-3.5 shrink-0" />
+                            <span>
+                              {quotaFull ? 'Şube Kotası Dolu' : 'Şubeyi Çoğalt / Yeni Şube Aç'}
+                            </span>
+                          </button>
+                        )}
+
+                        {onLaunchAdCampaign && (
+                          <button
+                            type="button"
+                            data-testid={`toggle-ad-panel-${biz.id}`}
+                            onClick={() =>
+                              setExpandedAdBizId((prev) => (prev === biz.id ? null : biz.id))
+                            }
+                            className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold whitespace-nowrap ${
+                              isAdExpanded || hasActiveAd
+                                ? 'border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200'
+                                : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                            }`}
+                          >
+                            <Megaphone className="h-3.5 w-3.5 shrink-0" />
+                            <span>Reklam</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Expandable Advertising & Marketing Drawer */}
+                      {isAdExpanded && onLaunchAdCampaign && (
+                        <div
+                          data-testid={`branch-ad-panel-${biz.id}`}
+                          className="rounded-xl border border-fuchsia-500/35 bg-fuchsia-950/20 p-2.5 space-y-2"
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-fuchsia-200">
+                              Reklam & Pazarlama Kampanyaları
+                            </span>
+                            {automation.autoAdsActive && (
+                              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                                GM Oto-Reklam Aktif
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                            {AD_CAMPAIGN_TIERS.map((tier) => {
+                              const adCost = calculateAdCampaignCost(tier.id, biz);
+                              const canAffordAd = state.cash >= adCost;
+                              const isCurrentTier =
+                                hasActiveAd && biz.activeAdCampaign?.tierId === tier.id;
+                              return (
+                                <button
+                                  key={tier.id}
+                                  type="button"
+                                  data-testid={`launch-ad-${tier.id}-${biz.id}`}
+                                  disabled={!canAffordAd}
+                                  onClick={() => onLaunchAdCampaign(biz.id, tier.id)}
+                                  className={`flex flex-col items-start justify-between rounded-xl border p-2 text-left transition ${
+                                    isCurrentTier
+                                      ? 'border-fuchsia-400 bg-fuchsia-500/25'
+                                      : 'border-slate-700 bg-slate-900/90 hover:border-fuchsia-400/60 disabled:opacity-45'
+                                  }`}
+                                >
+                                  <div className="text-[11px] font-bold text-white">
+                                    {tier.shortLabel}
+                                  </div>
+                                  <div className="mt-0.5 text-[10px] text-emerald-300 font-semibold">
+                                    +%{Math.round(tier.revenueBoost * 100)} Ciro ·{' '}
+                                    {tier.durationGameHours}sa
+                                  </div>
+                                  <div className="mt-1 font-mono-num text-[11px] font-black text-amber-300">
+                                    {formatTL(adCost, true)}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Secondary Branch Controls */}
                       <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">

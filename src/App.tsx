@@ -13,15 +13,20 @@ import {
   Radio,
   Landmark,
   LayoutGrid,
+  Link2,
   Newspaper,
+  Store,
   Trophy,
+  X,
 } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
 import type {
+  AdCampaignTierId,
   BankRecord,
   BusinessTypeId,
+  ChainCloneDraft,
   ChatMessage,
   EmpireState,
   FranchiseBrand,
@@ -81,6 +86,15 @@ import {
   createFranchiseBrand,
   formSupermarketChain,
 } from './game/holdingEngine';
+import {
+  approveFranchiseApplication,
+  generateAiFranchiseApplication,
+  getChainStatusForBusiness,
+  launchBusinessAdCampaign,
+  launchCompetitiveBlitz,
+  prepareChainCloneDraft,
+  toggleGeneralManagerAutoAds,
+} from './game/strategyEngine';
 import {
   buyStockShares,
   createInitialStockQuotes,
@@ -153,6 +167,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { OtaUpdateModal } from './components/OtaUpdateModal';
 import { HrManagementModal } from './components/HrManagementModal';
 import { HoldingFranchiseModal } from './components/HoldingFranchiseModal';
+import { RivalsStrategyModal, type ManagementTabId } from './components/RivalsStrategyModal';
 import { BorsaModal } from './components/BorsaModal';
 import { BankingModal } from './components/BankingModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
@@ -263,7 +278,13 @@ function migrateSavedEmpire(
         : generateCandidatePool(Date.now(), 'kafe'),
     supermarketChain: saved.supermarketChain ?? null,
     ownFranchises: Array.isArray(saved.ownFranchises) ? saved.ownFranchises : [],
+    franchiseApplications: Array.isArray(saved.franchiseApplications)
+      ? saved.franchiseApplications
+      : [],
+    autoApproveFranchiseApps: saved.autoApproveFranchiseApps ?? true,
     franchiseRoyaltiesEarned: saved.franchiseRoyaltiesEarned ?? 0,
+    competitiveBlitzes: Array.isArray(saved.competitiveBlitzes) ? saved.competitiveBlitzes : [],
+    acquiredRivalIds: Array.isArray(saved.acquiredRivalIds) ? saved.acquiredRivalIds : [],
     stockPortfolio: Array.isArray(saved.stockPortfolio) ? saved.stockPortfolio : [],
     playerIpo: saved.playerIpo ?? null,
     creditScore: typeof saved.creditScore === 'number' ? saved.creditScore : STARTING_CREDIT_SCORE,
@@ -361,6 +382,9 @@ export default function App() {
   const [hrModalOpen, setHrModalOpen] = useState(false);
   const [hrTargetBusinessId, setHrTargetBusinessId] = useState<string | null>(null);
   const [holdingModalOpen, setHoldingModalOpen] = useState(false);
+  const [rivalsModalOpen, setRivalsModalOpen] = useState(false);
+  const [chainCloneDraft, setChainCloneDraft] = useState<ChainCloneDraft | null>(null);
+  const [preselectedFranchise, setPreselectedFranchise] = useState<FranchiseBrand | null>(null);
   const [borsaModalOpen, setBorsaModalOpen] = useState(false);
   const [borsaMode, setBorsaMode] = useState<'market' | 'portfolio'>('market');
   const [bankingModalOpen, setBankingModalOpen] = useState(false);
@@ -381,9 +405,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v127',
-      title: 'Türkiye Mülk İmparatoru v1.2.7',
-      body: 'Sadeleştirilmiş üst bar, 6 sekmeli alt menü, Merkez Üs odaklanması, kaydırma çubuklu kredi ve Borsa Yatırımlarım sekmesi aktif!',
+      id: 'welcome-v128',
+      title: 'Türkiye Mülk İmparatoru v1.2.8',
+      body: 'Şube çoğaltma ile hızlı zincirleşme, Yönetim panelinde Franchise Ver & Rakip İşletmeler strateji merkezi ve Genel Müdür otomatik reklam yönetimi aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -737,6 +761,42 @@ export default function App() {
           }
         }
 
+        if (result.autoRenewedAdsCount > 0) {
+          pushNotification(
+            'Genel Müdür Otomatik Reklam Yeniledi',
+            `${result.autoAdBranchNames.slice(0, 2).join(', ')}${
+              result.autoAdBranchNames.length > 2
+                ? ` ve +${result.autoAdBranchNames.length - 2} şube`
+                : ''
+            } için kampanya başlatıldı (-${formatTL(result.autoAdsSpent, true)}).`,
+            'event',
+            false
+          );
+        }
+
+        if (result.newFranchiseOpenings.length > 0) {
+          const totalLicense = result.newFranchiseOpenings.reduce(
+            (sum, app) => sum + (app.status === 'approved' ? app.licenseFee : 0),
+            0
+          );
+          if (totalLicense > 0) {
+            spawnCashPopup(totalLicense);
+          }
+          const firstApp = result.newFranchiseOpenings[0];
+          pushNotification(
+            firstApp.status === 'approved'
+              ? 'Yeni Bayilik Şubesi Açıldı!'
+              : 'Yeni Bayilik Başvurusu Geldi!',
+            firstApp.status === 'approved'
+              ? `${firstApp.applicantName}, ${firstApp.cityName} ilinde ${firstApp.brandName} bayisi açtı (+${formatTL(
+                  firstApp.licenseFee
+                )} isim hakkı).`
+              : `${firstApp.applicantName}, ${firstApp.cityName} için ${firstApp.brandName} bayiliği istiyor. Yönetim > Franchise'tan onaylayın!`,
+            'revenue',
+            true
+          );
+        }
+
         if (result.loanEnforcement.seizedLoans.length > 0) {
           for (const seized of result.loanEnforcement.seizedLoans) {
             pushNotification(
@@ -815,17 +875,30 @@ export default function App() {
 
   // Competitor records in current city room (merged with deterministic AI city rivals if room has none)
   const ownIds = useMemo(() => new Set(empire.businesses.map((b) => b.id)), [empire.businesses]);
+  const acquiredRivalSet = useMemo(
+    () => new Set(empire.acquiredRivalIds ?? []),
+    [empire.acquiredRivalIds]
+  );
   const seedCityRivals = useMemo(() => generateSeedCityRivals(activePlate), [activePlate]);
   const effectiveRoomRecords = useMemo(() => {
-    const liveRivals = roomRecords.filter((rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id));
-    if (liveRivals.length > 0) return roomRecords;
-    const filteredSeeds = seedCityRivals.filter((seed) => !ownIds.has(seed.id));
-    return [...roomRecords, ...filteredSeeds];
-  }, [roomRecords, seedCityRivals, user?.id, ownIds]);
+    const liveRivals = roomRecords.filter(
+      (rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id) && !acquiredRivalSet.has(rec.id)
+    );
+    if (liveRivals.length > 0) {
+      return roomRecords.filter((rec) => !acquiredRivalSet.has(rec.id));
+    }
+    const filteredSeeds = seedCityRivals.filter(
+      (seed) => !ownIds.has(seed.id) && !acquiredRivalSet.has(seed.id)
+    );
+    return [...roomRecords.filter((rec) => !acquiredRivalSet.has(rec.id)), ...filteredSeeds];
+  }, [roomRecords, seedCityRivals, user?.id, ownIds, acquiredRivalSet]);
 
   const competitorBusinesses = useMemo(
-    () => effectiveRoomRecords.filter((rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id)),
-    [effectiveRoomRecords, user?.id, ownIds]
+    () =>
+      effectiveRoomRecords.filter(
+        (rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id) && !acquiredRivalSet.has(rec.id)
+      ),
+    [effectiveRoomRecords, user?.id, ownIds, acquiredRivalSet]
   );
 
   // 75m minimum distance check for currently dropped pin
@@ -1026,10 +1099,62 @@ export default function App() {
     [activePlate]
   );
 
+  const handleSelectManagementTab = useCallback(
+    (tab: ManagementTabId) => {
+      soundEngine.playClick();
+      setDroppedPin(null);
+      setSelectedBusinessId(null);
+      setSelectedCompetitorId(null);
+      setBorsaModalOpen(false);
+      setBankingModalOpen(false);
+      setAccountingModalOpen(false);
+      setHubMenuOpen(false);
+      setActiveDrawer(tab === 'portfolio' ? 'portfolio' : null);
+      setHrModalOpen(tab === 'hr');
+      setHoldingModalOpen(tab === 'franchise');
+      setRivalsModalOpen(tab === 'rivals');
+      if (tab === 'hr' && !hrTargetBusinessId && empire.businesses.length > 0) {
+        setHrTargetBusinessId(empire.businesses[0].id);
+      }
+    },
+    [hrTargetBusinessId, empire.businesses]
+  );
+
+  const handleStartCloneBusiness = useCallback(
+    (businessId: string) => {
+      const source = empire.businesses.find((b) => b.id === businessId);
+      if (!source) return;
+      const draft = prepareChainCloneDraft(source, empire.businesses);
+      soundEngine.playClick();
+      setChainCloneDraft(draft);
+      setPreselectedFranchise(null);
+      setActiveDrawer(null);
+      setHrModalOpen(false);
+      setHoldingModalOpen(false);
+      setRivalsModalOpen(false);
+      setSelectedBusinessId(null);
+      setSelectedCompetitorId(null);
+      setDroppedPin(null);
+      setPinDropMode(true);
+      pushNotification(
+        'Zincir Şube Yerleştirme Modu',
+        `"${draft.suggestedName}" için haritada (aynı il veya 81 ilden biri) kara üzerine tıklayın.`,
+        'system',
+        false
+      );
+    },
+    [empire.businesses, pushNotification]
+  );
+
   const handleEstablishBusiness = (
     blueprintId: BusinessTypeId,
     customName: string,
-    franchiseBrand?: FranchiseBrand | null
+    franchiseBrand?: FranchiseBrand | null,
+    chainCloneMeta?: {
+      chainBrandName: string;
+      chainBranchNumber: number;
+      sourceBusinessId?: string;
+    } | null
   ) => {
     if (!droppedPin || !user) return;
     const res = purchaseBusiness(
@@ -1040,7 +1165,8 @@ export default function App() {
       { id: user.id, name: user.name },
       competitorBusinesses.map((r) => ({ lat: r.lat, lng: r.lng, name: r.business_name })),
       Date.now(),
-      franchiseBrand
+      franchiseBrand,
+      chainCloneMeta
     );
     if (!res.ok || !res.business) {
       if (res.error) {
@@ -1053,6 +1179,8 @@ export default function App() {
     soundEngine.playPurchase();
     setEmpire(res.state);
     setDroppedPin(null);
+    setChainCloneDraft(null);
+    setPreselectedFranchise(null);
     setSelectedBusinessId(created.id);
 
     const hourly = calculateBusinessHourlyIncome(
@@ -1078,12 +1206,24 @@ export default function App() {
       );
     }
 
-    pushNotification(
-      franchiseBrand ? 'Franchise Şubesi Açıldı!' : 'Yeni İşletme Açıldı!',
-      `${created.customName} (${String(created.cityPlate).padStart(2, '0')} ${created.cityName}) canlı haritada yayında.`,
-      'milestone',
-      true
-    );
+    const chainInfo = getChainStatusForBusiness(created, res.state.businesses);
+    if (chainInfo.isChain && chainCloneMeta) {
+      pushNotification(
+        `Zincir Marka Büyüdü! (${chainInfo.branchCount} Şube)`,
+        `${chainInfo.brandName} artık Zincir Marka: -%${Math.round(
+          chainInfo.supplyDiscount * 100
+        )} tedarik indirimi ve +%${Math.round(chainInfo.revenueBonus * 100)} ciro bonusu aktif!`,
+        'milestone',
+        true
+      );
+    } else {
+      pushNotification(
+        franchiseBrand ? 'Franchise Şubesi Açıldı!' : 'Yeni İşletme Açıldı!',
+        `${created.customName} (${String(created.cityPlate).padStart(2, '0')} ${created.cityName}) canlı haritada yayında.`,
+        'milestone',
+        true
+      );
+    }
   };
 
   const handleSelectOwnBusiness = useCallback(
@@ -1113,13 +1253,14 @@ export default function App() {
     setFlyTarget({ lat: record.lat, lng: record.lng, zoom: 15, nonce: Date.now() });
   }, []);
 
-  const handleTakeoverCompetitor = (record: RemoteBusinessRecord) => {
+  const handleTakeoverCompetitor = (record: RemoteBusinessRecord, customMultiplier?: number) => {
     if (!user) return;
     const res = takeoverCompetitorBusiness(
       empire,
       record,
       { id: user.id, name: user.name },
-      Date.now()
+      Date.now(),
+      customMultiplier
     );
     if (!res.ok || !res.business) {
       if (res.error) pushNotification('Devralma Başarısız', res.error, 'system', false);
@@ -1130,6 +1271,7 @@ export default function App() {
     soundEngine.playUpgrade();
     setEmpire(res.state);
     setSelectedCompetitorId(null);
+    setRivalsModalOpen(false);
     setSelectedBusinessId(acquired.id);
 
     updateBusinessInRoom(record.id, {
@@ -1145,8 +1287,37 @@ export default function App() {
 
     pushNotification(
       'Rakip İşletme Devralındı!',
-      `${acquired.customName} artık sizin portföyünüzde.`,
+      `${acquired.customName} (%${Math.round((customMultiplier ?? 1.5) * 100)} değerleme) artık sizin portföyünüzde.`,
       'milestone',
+      true
+    );
+  };
+
+  const handleFocusRivalOnMap = (rival: RemoteBusinessRecord) => {
+    soundEngine.playClick();
+    setRivalsModalOpen(false);
+    setActiveDrawer(null);
+    setSelectedBusinessId(null);
+    setDroppedPin(null);
+    if (rival.city_plate !== activePlate) {
+      setActivePlate(rival.city_plate);
+    }
+    setSelectedCompetitorId(rival.id);
+    setFlyTarget({ lat: rival.lat, lng: rival.lng, zoom: 16, nonce: Date.now() });
+  };
+
+  const handleLaunchCompetitiveBlitz = (rival: RemoteBusinessRecord) => {
+    const res = launchCompetitiveBlitz(empire, rival, Date.now());
+    if (!res.ok || !res.blitz) {
+      if (res.error) pushNotification('Rekabet Hamlesi Başarısız', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Rekabetçi Fiyat Hamlesi Başladı!',
+      `${rival.city_name} ilindeki tüm şubeleriniz 6 oyun saati boyunca +%25 ciro bonusu kazandı!`,
+      'event',
       true
     );
   };
@@ -1290,9 +1461,127 @@ export default function App() {
     publishFranchiseBrand(res.brand).catch(() => {});
     pushNotification(
       'Franchise Markası Yayında!',
-      `${res.brand.brandName} artık 81 ilde bayilik başvurularına açık.`,
+      `${res.brand.brandName} artık 81 ilde hem oyuncuların hem AI girişimcilerin başvurularına açık.`,
       'milestone',
       true
+    );
+  };
+
+  const handleLaunchAdCampaign = (businessId: string, tierId: AdCampaignTierId) => {
+    const res = launchBusinessAdCampaign(empire, businessId, tierId, Date.now(), false);
+    if (!res.ok || !res.campaign) {
+      if (res.error) pushNotification('Reklam Başlatılamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    const biz = res.state.businesses.find((b) => b.id === businessId);
+    pushNotification(
+      `${res.campaign.label} Başladı!`,
+      `${biz?.customName ?? 'Şube'} için +%${Math.round(
+        res.campaign.revenueBoost * 100
+      )} ciro ve +%${Math.round(res.campaign.customerBoost * 100)} müşteri akışı aktif.`,
+      'event',
+      false
+    );
+  };
+
+  const handleToggleGmAutoAds = (managerId: string, enabled: boolean) => {
+    const res = toggleGeneralManagerAutoAds(empire, managerId, enabled, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Otomasyon Güncellenemedi', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playClick();
+    setEmpire(res.state);
+    pushNotification(
+      enabled ? 'Otomatik Reklam Aktif Edildi' : 'Otomatik Reklam Kapatıldı',
+      enabled
+        ? 'Genel Müdür şehirdeki şubelerin kârlılığını analiz edip biten kampanyaları otomatik yenileyecek.'
+        : 'Genel Müdür artık reklam kampanyalarını otomatik yenilemeyecek.',
+      'system',
+      false
+    );
+  };
+
+  const handleApproveFranchiseApp = (appId: string) => {
+    const res = approveFranchiseApplication(empire, appId, Date.now());
+    if (!res.ok || !res.application) {
+      if (res.error) pushNotification('Başvuru Onaylanamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playCashCollect();
+    setEmpire(res.state);
+    spawnCashPopup(res.application.licenseFee);
+    const updatedBrand = res.state.ownFranchises.find(
+      (f) => f.id === res.application!.franchiseId
+    );
+    if (updatedBrand) {
+      incrementFranchiseUsage(
+        updatedBrand.id,
+        updatedBrand.branchCount,
+        updatedBrand.totalRoyaltyEarned
+      ).catch(() => {});
+    }
+    pushNotification(
+      'Bayilik Başvurusu Onaylandı!',
+      `${res.application.applicantName} (${res.application.cityName}) yeni ${res.application.brandName} şubesini açtı! +${formatTL(
+        res.application.licenseFee
+      )} isim hakkı kasaya aktarıldı.`,
+      'revenue',
+      true
+    );
+  };
+
+  const handleToggleAutoApproveApps = (enabled: boolean) => {
+    soundEngine.playClick();
+    setEmpire((prev) => ({
+      ...prev,
+      autoApproveFranchiseApps: enabled,
+      lastSavedAt: Date.now(),
+    }));
+  };
+
+  const handleScanAiApplicant = (franchiseId: string) => {
+    const brand = (empire.ownFranchises ?? []).find((f) => f.id === franchiseId);
+    if (!brand) return;
+    const nowTs = Date.now();
+    const seed =
+      nowTs +
+      (empire.franchiseApplications?.length ?? 0) * 97 +
+      brand.branchCount * 31;
+    const newApp = generateAiFranchiseApplication(brand, seed, nowTs);
+    soundEngine.playClick();
+    setEmpire((prev) => ({
+      ...prev,
+      franchiseApplications: [newApp, ...(prev.franchiseApplications ?? [])].slice(0, 20),
+      lastSavedAt: nowTs,
+    }));
+    pushNotification(
+      'Yeni AI Girişimci Başvurusu!',
+      `${newApp.applicantName}, ${newApp.cityName} / ${newApp.districtName} için ${brand.brandName} bayiliği başvurusu yaptı.`,
+      'revenue',
+      false
+    );
+  };
+
+  const handleOpenFranchiseOnMap = (brand: FranchiseBrand) => {
+    soundEngine.playClick();
+    setPreselectedFranchise(brand);
+    setChainCloneDraft(null);
+    setHoldingModalOpen(false);
+    setRivalsModalOpen(false);
+    setActiveDrawer(null);
+    setHrModalOpen(false);
+    setSelectedBusinessId(null);
+    setSelectedCompetitorId(null);
+    setDroppedPin(null);
+    setPinDropMode(true);
+    pushNotification(
+      `${brand.brandName} Franchise Modu`,
+      'Haritada kara üzerine tıklayarak bu markanın bayilik şubesini (+%35 ciro bonusu ile) kurun.',
+      'system',
+      false
     );
   };
 
@@ -1560,6 +1849,11 @@ export default function App() {
     setSelectedCompetitorId(null);
     setInteriorBusinessId(null);
     setActiveDrawer(null);
+    setHrModalOpen(false);
+    setHoldingModalOpen(false);
+    setRivalsModalOpen(false);
+    setChainCloneDraft(null);
+    setPreselectedFranchise(null);
     focusHeadquarters(fresh);
     if (user) {
       saveEmpireStateLocal(user.id, fresh);
@@ -1861,6 +2155,7 @@ export default function App() {
                 setPinDropMode(true);
                 setActiveDrawer(null);
                 setHrModalOpen(false);
+                setRivalsModalOpen(false);
                 setBorsaModalOpen(false);
                 setBankingModalOpen(false);
                 setAccountingModalOpen(false);
@@ -1876,6 +2171,8 @@ export default function App() {
               className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
                 !activeDrawer &&
                 !hrModalOpen &&
+                !holdingModalOpen &&
+                !rivalsModalOpen &&
                 !borsaModalOpen &&
                 !bankingModalOpen &&
                 !accountingModalOpen &&
@@ -1888,24 +2185,28 @@ export default function App() {
               <span>Harita</span>
             </button>
 
-            {/* 2) Yönetim (İşletmelerim + İK & Çalışanlar) */}
+            {/* 2) Yönetim (İşletmelerim · İK & Çalışanlar · Franchise & Bayilik · Rakip İşletmeler) */}
             <button
               type="button"
               data-testid="dock-management-btn"
               onClick={() => {
-                soundEngine.playClick();
-                setDroppedPin(null);
-                setSelectedBusinessId(null);
-                setSelectedCompetitorId(null);
-                setHrModalOpen(false);
-                setBorsaModalOpen(false);
-                setBankingModalOpen(false);
-                setAccountingModalOpen(false);
-                setHubMenuOpen(false);
-                setActiveDrawer((prev) => (prev === 'portfolio' ? null : 'portfolio'));
+                const isMgmtOpen =
+                  activeDrawer === 'portfolio' ||
+                  hrModalOpen ||
+                  holdingModalOpen ||
+                  rivalsModalOpen;
+                if (isMgmtOpen) {
+                  soundEngine.playClick();
+                  setActiveDrawer(null);
+                  setHrModalOpen(false);
+                  setHoldingModalOpen(false);
+                  setRivalsModalOpen(false);
+                } else {
+                  handleSelectManagementTab('portfolio');
+                }
               }}
               className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                activeDrawer === 'portfolio' || hrModalOpen
+                activeDrawer === 'portfolio' || hrModalOpen || holdingModalOpen || rivalsModalOpen
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
@@ -1922,6 +2223,8 @@ export default function App() {
                 soundEngine.playClick();
                 setActiveDrawer(null);
                 setHrModalOpen(false);
+                setHoldingModalOpen(false);
+                setRivalsModalOpen(false);
                 setHubMenuOpen(false);
                 setBankingModalOpen(false);
                 setBorsaModalOpen(false);
@@ -1947,6 +2250,8 @@ export default function App() {
                 setSelectedBusinessId(null);
                 setSelectedCompetitorId(null);
                 setHrModalOpen(false);
+                setHoldingModalOpen(false);
+                setRivalsModalOpen(false);
                 setBorsaModalOpen(false);
                 setBankingModalOpen(false);
                 setAccountingModalOpen(false);
@@ -1973,6 +2278,8 @@ export default function App() {
                 setSelectedBusinessId(null);
                 setSelectedCompetitorId(null);
                 setHrModalOpen(false);
+                setHoldingModalOpen(false);
+                setRivalsModalOpen(false);
                 setBorsaModalOpen(false);
                 setBankingModalOpen(false);
                 setAccountingModalOpen(false);
@@ -2002,6 +2309,8 @@ export default function App() {
                 soundEngine.playClick();
                 setActiveDrawer(null);
                 setHrModalOpen(false);
+                setHoldingModalOpen(false);
+                setRivalsModalOpen(false);
                 setBorsaModalOpen(false);
                 setBankingModalOpen(false);
                 setAccountingModalOpen(false);
@@ -2028,8 +2337,54 @@ export default function App() {
             onSendMessage={handleSendChat}
           />
 
+          {/* Active Chain Clone or Franchise Placement Banner above Bottom Dock */}
+          {(chainCloneDraft || preselectedFranchise) &&
+            !droppedPin &&
+            !activeDrawer &&
+            !hrModalOpen &&
+            !holdingModalOpen &&
+            !rivalsModalOpen && (
+              <div
+                data-testid="map-special-placement-banner"
+                className="pointer-events-auto fixed bottom-[calc(var(--panel-bottom-offset)+4px)] left-1/2 z-[520] flex w-[min(92vw,470px)] -translate-x-1/2 items-center justify-between gap-2 rounded-xl border border-amber-400 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  {chainCloneDraft ? (
+                    <Link2 className="h-4 w-4 shrink-0 text-amber-400" />
+                  ) : (
+                    <Store className="h-4 w-4 shrink-0 text-emerald-400" />
+                  )}
+                  <p className="truncate">
+                    {chainCloneDraft ? (
+                      <>
+                        <strong className="text-amber-300">Zincir Şube:</strong>{' '}
+                        {chainCloneDraft.suggestedName} için haritada kara üzerine tıklayın
+                      </>
+                    ) : (
+                      <>
+                        <strong className="text-emerald-300">Franchise:</strong>{' '}
+                        {preselectedFranchise?.brandName} şubesi için haritada kara üzerine tıklayın
+                      </>
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChainCloneDraft(null);
+                    setPreselectedFranchise(null);
+                  }}
+                  className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-700"
+                >
+                  <X className="h-3 w-3" /> İptal
+                </button>
+              </div>
+            )}
+
           {/* Contextual Hint when empty — centered cleanly above the 6-button dock */}
           {empire.businesses.length === 0 &&
+            !chainCloneDraft &&
+            !preselectedFranchise &&
             !droppedPin &&
             !activeDrawer &&
             !selectedCompetitor && (
@@ -2056,8 +2411,16 @@ export default function App() {
                   maxBranches={companyTier.maxBranches}
                   distanceCheck={droppedPinDistanceCheck}
                   availableFranchises={allFranchises}
+                  chainCloneDraft={chainCloneDraft}
+                  preselectedFranchise={preselectedFranchise}
+                  onCancelSpecialMode={() => {
+                    setChainCloneDraft(null);
+                    setPreselectedFranchise(null);
+                  }}
                   onEstablish={handleEstablishBusiness}
-                  onClose={() => setDroppedPin(null)}
+                  onClose={() => {
+                    setDroppedPin(null);
+                  }}
                 />
               ) : selectedBusiness ? (
                 <BusinessInspector
@@ -2067,8 +2430,10 @@ export default function App() {
                   onEnterInterior={(id) => setInteriorBusinessId(id)}
                   onOpenHrModal={(id) => {
                     setHrTargetBusinessId(id);
-                    setHrModalOpen(true);
+                    handleSelectManagementTab('hr');
                   }}
+                  onCloneBusiness={handleStartCloneBusiness}
+                  onLaunchAdCampaign={handleLaunchAdCampaign}
                   onRestock={handleRestockBusiness}
                   onCollect={handleCollectBusiness}
                   onUpgrade={handleUpgradeBusiness}
@@ -2099,12 +2464,15 @@ export default function App() {
               competitorBusinesses={competitorBusinesses}
               now={now}
               onClose={() => setActiveDrawer(null)}
+              onSelectManagementTab={handleSelectManagementTab}
               onSelectBusiness={handleSelectOwnBusiness}
               onEnterInterior={(id) => setInteriorBusinessId(id)}
               onOpenHrModal={(id) => {
                 setHrTargetBusinessId(id);
-                setHrModalOpen(true);
+                handleSelectManagementTab('hr');
               }}
+              onCloneBusiness={handleStartCloneBusiness}
+              onLaunchAdCampaign={handleLaunchAdCampaign}
               onCollectBusiness={handleCollectBusiness}
               onCollectAll={handleCollectAll}
               onUpgradeBusiness={handleUpgradeBusiness}
@@ -2149,11 +2517,8 @@ export default function App() {
         activeCityPlate={activeProvince.plate}
         activeCityName={activeProvince.name}
         onSelectBranch={(id) => setHrTargetBusinessId(id)}
-        onSwitchToBusinesses={() => {
-          soundEngine.playClick();
-          setHrModalOpen(false);
-          setActiveDrawer('portfolio');
-        }}
+        onSelectManagementTab={handleSelectManagementTab}
+        onToggleGmAutoAds={handleToggleGmAutoAds}
         onHireCandidate={handleHireCandidate}
         onDismissStaff={handleDismissStaff}
         onRefreshPool={handleRefreshCandidatePool}
@@ -2165,14 +2530,30 @@ export default function App() {
         open={holdingModalOpen}
         state={empire}
         allFranchises={allFranchises}
+        onSelectManagementTab={handleSelectManagementTab}
         onFormSupermarketChain={handleFormSupermarketChain}
         onCreateFranchise={handleCreateFranchise}
-        onOpenHrCenter={() => {
-          setHoldingModalOpen(false);
-          setHrTargetBusinessId(selectedBusinessId ?? empire.businesses[0]?.id ?? null);
-          setHrModalOpen(true);
-        }}
+        onApproveFranchiseApp={handleApproveFranchiseApp}
+        onToggleAutoApproveApps={handleToggleAutoApproveApps}
+        onScanAiApplicant={handleScanAiApplicant}
+        onOpenFranchiseOnMap={handleOpenFranchiseOnMap}
         onClose={() => setHoldingModalOpen(false)}
+      />
+
+      <RivalsStrategyModal
+        open={rivalsModalOpen}
+        state={empire}
+        activeCityPlate={activeProvince.plate}
+        activeCityName={activeProvince.name}
+        playerOwnerId={user?.id}
+        competitorBusinesses={competitorBusinesses}
+        allFranchises={allFranchises}
+        onSelectManagementTab={handleSelectManagementTab}
+        onFocusRivalOnMap={handleFocusRivalOnMap}
+        onTakeoverRival={handleTakeoverCompetitor}
+        onLaunchBlitz={handleLaunchCompetitiveBlitz}
+        onTakeRivalFranchise={handleOpenFranchiseOnMap}
+        onClose={() => setRivalsModalOpen(false)}
       />
 
       <BorsaModal

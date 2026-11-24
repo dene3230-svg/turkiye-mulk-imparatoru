@@ -16,6 +16,7 @@ import {
   hasFactorySupplySynergy,
 } from './economy';
 import { resolveBusinessAutomation } from './hrEngine';
+import { getChainStatusForBusiness } from './strategyEngine';
 
 /**
  * Pure P&L Accounting & Balance Sheet calculator.
@@ -108,8 +109,9 @@ export function calculateAccountingReport(
         : 0.22;
     const supplyGross = Math.round(grossHourly * supplyRatio);
 
-    // Combine discounts: Factory 35%, Supermarket Chain 20%, Manager Bulk Supply Discount (up to 20%)
-    let discountPct = automation.bulkSupplyDiscount;
+    // Combine discounts: Factory 35%, Supermarket Chain 20%, Cloned Zincir Marka (12-18%), Manager Bulk Supply Discount
+    const chainStatus = getChainStatusForBusiness(biz, state.businesses);
+    let discountPct = automation.bulkSupplyDiscount + chainStatus.supplyDiscount;
     if (hasFactorySupplySynergy(biz, state.businesses)) {
       discountPct += FACTORY_SUPPLY_DISCOUNT;
     }
