@@ -66,8 +66,11 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      - name: Rename APK to Turkiye-Mulk-Imparatoru.apk
+        run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Turkiye-Mulk-Imparatoru.apk
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: turkiye-mulk-imparatoru-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Turkiye-Mulk-Imparatoru.apk
+          path: android/app/build/outputs/apk/debug/Turkiye-Mulk-Imparatoru.apk
