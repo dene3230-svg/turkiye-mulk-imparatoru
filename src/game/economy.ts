@@ -5,6 +5,7 @@ import type {
   DayEndSummary,
   EmpireState,
   FranchiseBrand,
+  HeadquartersInfo,
   MarketEvent,
   MissionDef,
   MonthlyClosingSummary,
@@ -32,7 +33,7 @@ import {
   isFactoryType,
   isParkingType,
 } from './catalog';
-import { getProvinceByPlate, haversineMeters } from './provinces81';
+import { DEFAULT_PROVINCE_PLATE, getProvinceByPlate, haversineMeters } from './provinces81';
 import {
   MAX_BRANCH_WORKERS,
   calculateStaffQualityMultiplier,
@@ -90,13 +91,79 @@ export function formatGameClock(gameMinutes: number): {
   };
 }
 
-export function createInitialEmpireState(now = Date.now()): EmpireState {
+export function createHeadquartersForCity(cityPlate = DEFAULT_PROVINCE_PLATE): HeadquartersInfo {
+  const prov = getProvinceByPlate(cityPlate);
+  return {
+    cityPlate: prov.plate,
+    cityName: prov.name,
+    lat: prov.lat,
+    lng: prov.lng,
+    zoom: prov.zoom,
+  };
+}
+
+export function resolveInitialFocusTarget(state: EmpireState): {
+  cityPlate: number;
+  lat: number;
+  lng: number;
+  zoom: number;
+} {
+  // 1) If HQ points to an existing business (or saved first-business coordinates), focus directly on it
+  if (state.hq) {
+    if (state.hq.businessId) {
+      const hqBiz = state.businesses.find((b) => b.id === state.hq?.businessId);
+      if (hqBiz) {
+        return {
+          cityPlate: hqBiz.cityPlate,
+          lat: hqBiz.lat,
+          lng: hqBiz.lng,
+          zoom: 15,
+        };
+      }
+    }
+    if (state.businesses.length === 0) {
+      return {
+        cityPlate: state.hq.cityPlate,
+        lat: state.hq.lat,
+        lng: state.hq.lng,
+        zoom: state.hq.zoom || getProvinceByPlate(state.hq.cityPlate).zoom,
+      };
+    }
+  }
+
+  // 2) Fallback to earliest built business (first branch) if player has businesses
+  if (state.businesses.length > 0) {
+    const firstBiz = [...state.businesses].sort((a, b) => a.createdAt - b.createdAt)[0];
+    return {
+      cityPlate: firstBiz.cityPlate,
+      lat: firstBiz.lat,
+      lng: firstBiz.lng,
+      zoom: 15,
+    };
+  }
+
+  // 3) Fallback to saved HQ city or default province
+  const fallbackPlate = state.hq?.cityPlate ?? DEFAULT_PROVINCE_PLATE;
+  const prov = getProvinceByPlate(fallbackPlate);
+  return {
+    cityPlate: prov.plate,
+    lat: prov.lat,
+    lng: prov.lng,
+    zoom: prov.zoom,
+  };
+}
+
+export function createInitialEmpireState(
+  now = Date.now(),
+  startingCityPlate = DEFAULT_PROVINCE_PLATE
+): EmpireState {
   const initialTemplate = MARKET_EVENT_TEMPLATES[2]; // Ticari Emlak Canlanması
   return {
     cash: STARTING_CASH,
     totalEarnedLifetime: 0,
     companyXp: 0,
     gameMinutes: STARTING_GAME_MINUTES,
+    hq: createHeadquartersForCity(startingCityPlate),
     businesses: [],
     cityManagers: [],
     candidatePool: generateCandidatePool(now, 'kafe'),
@@ -541,12 +608,25 @@ export function purchaseBusiness(
     franchiseRoyaltyRate: franchiseBrand?.royaltyRate,
   };
 
+  const nextHq: HeadquartersInfo =
+    state.businesses.length === 0 || !state.hq?.businessId
+      ? {
+          cityPlate: newBusiness.cityPlate,
+          cityName: newBusiness.cityName,
+          lat: newBusiness.lat,
+          lng: newBusiness.lng,
+          zoom: 15,
+          businessId: newBusiness.id,
+        }
+      : state.hq;
+
   return {
     ok: true,
     business: newBusiness,
     state: {
       ...state,
       cash: state.cash - totalCost,
+      hq: nextHq,
       businesses: [newBusiness, ...state.businesses],
       lastSavedAt: now,
     },

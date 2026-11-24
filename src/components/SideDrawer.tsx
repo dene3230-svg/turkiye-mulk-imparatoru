@@ -10,13 +10,26 @@ import {
   Zap,
   Sparkles,
   CalendarDays,
-  Briefcase,
+  Building2,
+  ArrowUpCircle,
+  Wrench,
+  Newspaper,
+  Landmark,
+  Flame,
 } from 'lucide-react';
-import type { EmpireState, MissionDef, StockQuote } from '../types/game';
+import type {
+  BankRecord,
+  EmpireState,
+  MissionDef,
+  RemoteBusinessRecord,
+  StockQuote,
+} from '../types/game';
 import { COMPANY_TIERS, getBlueprintById } from '../game/catalog';
 import {
   calculateBusinessHourlyIncome,
   calculateNetWorth,
+  calculateTotalPendingCash,
+  calculateUpgradeCost,
   formatGameClock,
   formatTL,
   getCompanyTier,
@@ -24,7 +37,9 @@ import {
 } from '../game/economy';
 import { getBranchStaffSlots, resolveBusinessAutomation } from '../game/hrEngine';
 import { ensureDynamicMissions } from '../game/missionEngine';
+import { getCreditTier } from '../game/bankingEngine';
 import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
+import { BrandLogo } from './BrandLogo';
 
 export type DrawerTab = 'portfolio' | 'missions' | 'market';
 
@@ -32,13 +47,17 @@ interface SideDrawerProps {
   tab: DrawerTab;
   state: EmpireState;
   stockQuotes?: StockQuote[];
+  allBanks?: BankRecord[];
+  competitorBusinesses?: RemoteBusinessRecord[];
   now: number;
-  onSwitchTab?: (tab: DrawerTab) => void;
   onClose: () => void;
   onSelectBusiness: (businessId: string) => void;
   onEnterInterior: (businessId: string) => void;
   onOpenHrModal?: (businessId: string | null) => void;
   onCollectBusiness: (businessId: string) => void;
+  onCollectAll: () => void;
+  onUpgradeBusiness: (businessId: string) => void;
+  onRestockBusiness: (businessId: string) => void;
   onClaimMission: (mission: MissionDef) => void;
   onEnablePinMode: () => void;
 }
@@ -46,14 +65,18 @@ interface SideDrawerProps {
 export function SideDrawer({
   tab,
   state,
-  stockQuotes,
+  stockQuotes = [],
+  allBanks = [],
+  competitorBusinesses = [],
   now,
-  onSwitchTab,
   onClose,
   onSelectBusiness,
   onEnterInterior,
   onOpenHrModal,
   onCollectBusiness,
+  onCollectAll,
+  onUpgradeBusiness,
+  onRestockBusiness,
   onClaimMission,
   onEnablePinMode,
 }: SideDrawerProps) {
@@ -62,46 +85,53 @@ export function SideDrawer({
   const uniqueCities = new Set(state.businesses.map((b) => b.cityPlate)).size;
   const dynamicMissions = ensureDynamicMissions(state, now, stockQuotes);
   const clock = formatGameClock(state.gameMinutes);
-
-  const claimableCount = dynamicMissions.filter(
-    (m) => getMissionProgress(state, m, now, stockQuotes) >= m.targetValue
-  ).length;
+  const totalPendingCash = calculateTotalPendingCash(state);
 
   const titles: Record<DrawerTab, string> = {
-    portfolio: 'Portföy & İK',
+    portfolio: 'Yönetim Merkezi',
     missions: 'İmparatorluk Görevleri',
-    market: 'Piyasa Haberleri & Seviye',
+    market: 'Piyasa Haberleri',
   };
 
   const subtitles: Record<DrawerTab, string> = {
     portfolio: `${state.businesses.length}/${currentTier.maxBranches} şube · ${uniqueCities} il · Net: ${formatTL(netWorth, true)}`,
     missions: `${state.completedMissionsCount ?? state.claimedMissionIds.length} tamamlandı · ${(state.companyXp ?? 0).toLocaleString('tr-TR')} XP`,
-    market: `Sv.${currentTier.level} ${currentTier.title} · ${clock.label}`,
+    market: `${clock.label} · Sv.${currentTier.level} ${currentTier.title}`,
   };
 
   const eventRemaining = state.activeEvent
     ? Math.max(0, Math.ceil((state.activeEvent.endsAt - now) / 1000))
     : 0;
 
-  const tabs: MobileModalTab[] = [
-    {
-      id: 'portfolio',
-      label: 'Portföy & İK',
-      badge: state.businesses.length,
-      icon: <Briefcase className="h-4 w-4" />,
-    },
-    {
-      id: 'missions',
-      label: 'Görevler',
-      badge: claimableCount > 0 ? claimableCount : undefined,
-      icon: <Trophy className="h-4 w-4" />,
-    },
-    {
-      id: 'market',
-      label: 'Piyasa Haberleri',
-      icon: <TrendingUp className="h-4 w-4" />,
-    },
-  ];
+  // Yönetim window strictly uses 2 tabs: İşletmelerim & İK & Çalışanlar
+  const managementTabs: MobileModalTab[] | undefined =
+    tab === 'portfolio'
+      ? [
+          {
+            id: 'isletmelerim',
+            label: 'İşletmelerim',
+            badge: state.businesses.length,
+            icon: <Building2 className="h-4 w-4" />,
+          },
+          {
+            id: 'ik',
+            label: 'İK & Çalışanlar',
+            icon: <Users className="h-4 w-4" />,
+          },
+        ]
+      : undefined;
+
+  // Compute live news intelligence for Haberler tab
+  const topGainerStock = [...stockQuotes].sort((a, b) => {
+    const ca = a.openPrice > 0 ? (a.price - a.openPrice) / a.openPrice : 0;
+    const cb = b.openPrice > 0 ? (b.price - b.openPrice) / b.openPrice : 0;
+    return cb - ca;
+  })[0];
+  const avgBankRate =
+    allBanks.length > 0
+      ? allBanks.reduce((s, b) => s + b.baseInterestRate, 0) / allBanks.length
+      : 0.11;
+  const creditTier = getCreditTier(state.creditScore ?? 1100);
 
   return (
     <div data-testid={`drawer-${tab}`}>
@@ -110,34 +140,59 @@ export function SideDrawer({
         subtitle={subtitles[tab]}
         icon={
           tab === 'portfolio' ? (
-            <Briefcase className="h-4 w-4" />
+            <Building2 className="h-4 w-4" />
           ) : tab === 'missions' ? (
             <Trophy className="h-4 w-4" />
           ) : (
-            <TrendingUp className="h-4 w-4" />
+            <Newspaper className="h-4 w-4" />
           )
         }
         headerRight={
-          tab === 'portfolio' && onOpenHrModal ? (
+          tab === 'portfolio' && totalPendingCash > 0 ? (
             <button
               type="button"
-              data-testid="portfolio-open-hr-btn"
-              onClick={() => onOpenHrModal(state.businesses[0]?.id ?? null)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-sky-400 px-3 text-xs font-bold text-slate-950 hover:bg-sky-300 whitespace-nowrap"
+              data-testid="management-collect-all-btn"
+              onClick={onCollectAll}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
             >
-              <Users className="h-3.5 w-3.5" />
-              <span>İK Havuzu</span>
+              <Coins className="h-3.5 w-3.5" />
+              <span>Tümünü Topla ({formatTL(totalPendingCash, true)})</span>
             </button>
           ) : undefined
         }
-        tabs={tabs}
-        activeTabId={tab}
-        onSelectTab={(id) => onSwitchTab?.(id as DrawerTab)}
+        tabs={managementTabs}
+        activeTabId={tab === 'portfolio' ? 'isletmelerim' : undefined}
+        onSelectTab={(id) => {
+          if (id === 'ik' && onOpenHrModal) {
+            onClose();
+            onOpenHrModal(state.businesses[0]?.id ?? null);
+          }
+        }}
         onClose={onClose}
         zIndexClass="z-[1240]"
       >
         {tab === 'portfolio' && (
-          <>
+          <div className="space-y-3">
+            {totalPendingCash > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/35 px-3.5 py-2.5">
+                <div className="text-xs text-emerald-200">
+                  Şube kasalarında toplam{' '}
+                  <strong className="font-mono-num text-sm font-black text-emerald-300">
+                    {formatTL(totalPendingCash)}
+                  </strong>{' '}
+                  tahsilat bekliyor.
+                </div>
+                <button
+                  type="button"
+                  onClick={onCollectAll}
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-bold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
+                >
+                  <Coins className="h-4 w-4" />
+                  <span>Tümünü Topla</span>
+                </button>
+              </div>
+            )}
+
             {state.businesses.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/60 px-4 py-10 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/20 text-amber-300">
@@ -153,7 +208,7 @@ export function SideDrawer({
                   onClick={onEnablePinMode}
                   className="mt-4 min-h-[44px] rounded-xl bg-amber-400 px-5 text-sm font-bold text-slate-950 hover:bg-amber-300"
                 >
-                  Haritaya Pin Bırak
+                  Haritaya Dön & Pin Bırak
                 </button>
               </div>
             ) : (
@@ -174,10 +229,17 @@ export function SideDrawer({
                     state
                   );
                   const pending = Math.floor(biz.pendingCash);
+                  const upgradeCost = calculateUpgradeCost(biz);
+                  const canUpgrade = Boolean(bp && biz.level < bp.maxLevel && state.cash >= upgradeCost);
+                  const stockPct = Math.round(biz.stockLevel ?? 100);
+                  const maintPct = Math.round(biz.maintenanceLevel ?? 100);
+                  const needsService = stockPct < 95 || maintPct < 95;
+                  const isHq = state.hq?.businessId === biz.id;
 
                   return (
                     <div
                       key={biz.id}
+                      data-testid={`branch-card-${biz.id}`}
                       className="flex flex-col justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -190,6 +252,11 @@ export function SideDrawer({
                             <span className="truncate text-sm font-bold text-white hover:text-amber-300">
                               {biz.customName}
                             </span>
+                            {isHq && (
+                              <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
+                                Merkez Üs
+                              </span>
+                            )}
                             {automation.autoCollectRevenue && (
                               <span
                                 data-testid="portfolio-auto-collect-badge"
@@ -201,9 +268,10 @@ export function SideDrawer({
                           </div>
                           <div className="mt-0.5 text-xs text-slate-400">
                             {String(biz.cityPlate).padStart(2, '0')} {biz.cityName} ·{' '}
-                            {biz.districtName} · Sv.{biz.level} · {bp?.shortName}
+                            {biz.districtName} · Sv.{biz.level}/{bp?.maxLevel ?? 10} ·{' '}
+                            {bp?.shortName}
                           </div>
-                          <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-slate-300">
+                          <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-slate-300">
                             <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
                               {slots.workers}/{slots.maxWorkers} Çalışan
                             </span>
@@ -221,40 +289,103 @@ export function SideDrawer({
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2.5">
+                      {/* Stock & Maintenance Health */}
+                      <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-800/90 bg-slate-950/60 p-2 text-[11px]">
+                        <div>
+                          <div className="flex justify-between text-slate-400">
+                            <span>Stok</span>
+                            <span className="font-mono-num font-bold text-slate-200">
+                              %{stockPct}
+                            </span>
+                          </div>
+                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                            <div
+                              className="h-full rounded-full bg-emerald-500"
+                              style={{ width: `${stockPct}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-slate-400">
+                            <span>Bakım</span>
+                            <span className="font-mono-num font-bold text-slate-200">
+                              %{maintPct}
+                            </span>
+                          </div>
+                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                            <div
+                              className="h-full rounded-full bg-sky-400"
+                              style={{ width: `${maintPct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Primary Revenue & Upgrade Actions */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={pending <= 0}
+                          onClick={() => onCollectBusiness(biz.id)}
+                          className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                        >
+                          <Coins className="h-3.5 w-3.5" />
+                          <span>
+                            {pending > 0 ? `Hasılatı Topla (${formatTL(pending, true)})` : 'Kasa Boş'}
+                          </span>
+                        </button>
+
+                        {bp && biz.level < bp.maxLevel && (
+                          <button
+                            type="button"
+                            disabled={!canUpgrade}
+                            onClick={() => onUpgradeBusiness(biz.id)}
+                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                          >
+                            <ArrowUpCircle className="h-3.5 w-3.5" />
+                            <span>Yükselt ({formatTL(upgradeCost, true)})</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Secondary Branch Controls */}
+                      <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
                         <button
                           type="button"
                           onClick={() => onSelectBusiness(biz.id)}
-                          className="min-h-[40px] flex-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-amber-300 hover:bg-slate-700 whitespace-nowrap"
+                          className="min-h-[38px] flex-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-amber-300 hover:bg-slate-700 whitespace-nowrap"
                         >
                           Haritada Gör
                         </button>
                         <button
                           type="button"
                           onClick={() => onEnterInterior(biz.id)}
-                          className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-sky-300 hover:bg-slate-700 whitespace-nowrap"
+                          className="inline-flex min-h-[38px] flex-1 items-center justify-center gap-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-sky-300 hover:bg-slate-700 whitespace-nowrap"
                         >
                           <DoorOpen className="h-3.5 w-3.5" />
                           <span>İçeri Gir</span>
                         </button>
+                        {needsService && (
+                          <button
+                            type="button"
+                            onClick={() => onRestockBusiness(biz.id)}
+                            className="inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl border border-amber-500/40 bg-amber-500/15 px-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 whitespace-nowrap"
+                          >
+                            <Wrench className="h-3.5 w-3.5" />
+                            <span>Bakım</span>
+                          </button>
+                        )}
                         {onOpenHrModal && (
                           <button
                             type="button"
-                            onClick={() => onOpenHrModal(biz.id)}
-                            className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded-xl border border-indigo-500/40 bg-indigo-500/20 px-3 text-xs font-bold text-indigo-200 hover:bg-indigo-500/30 whitespace-nowrap"
+                            onClick={() => {
+                              onClose();
+                              onOpenHrModal(biz.id);
+                            }}
+                            className="inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl border border-indigo-500/40 bg-indigo-500/20 px-3 text-xs font-bold text-indigo-200 hover:bg-indigo-500/30 whitespace-nowrap"
                           >
                             <Users className="h-3.5 w-3.5" />
                             <span>İK</span>
-                          </button>
-                        )}
-                        {pending > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => onCollectBusiness(biz.id)}
-                            className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
-                          >
-                            <Coins className="h-3.5 w-3.5" />
-                            <span>{formatTL(pending)}</span>
                           </button>
                         )}
                       </div>
@@ -263,7 +394,7 @@ export function SideDrawer({
                 })}
               </div>
             )}
-          </>
+          </div>
         )}
 
         {tab === 'missions' && (
@@ -374,12 +505,13 @@ export function SideDrawer({
               </div>
             </section>
 
+            {/* Active Market Event */}
             {state.activeEvent && (
               <section className="rounded-xl border border-amber-400/45 bg-amber-500/10 p-3.5">
                 <div className="flex items-center justify-between text-xs font-bold text-amber-300">
                   <span className="flex items-center gap-1.5">
-                    <TrendingUp className="h-4 w-4" />
-                    Aktif Piyasa Gündemi
+                    <Flame className="h-4 w-4" />
+                    Son Dakika · Aktif Ekonomik Gündem
                   </span>
                   <span className="font-mono-num">{eventRemaining}sn</span>
                 </div>
@@ -397,6 +529,82 @@ export function SideDrawer({
               </section>
             )}
 
+            {/* Sector Trend & Interest Rate Bulletins */}
+            <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
+              {topGainerStock && (
+                <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                    <TrendingUp className="h-4 w-4" />
+                    <span>Borsa & Sektör Trendi</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <BrandLogo brandKey={topGainerStock.ticker} size={36} />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-white">
+                        {topGainerStock.ticker} · {topGainerStock.name}
+                      </div>
+                      <div className="text-xs text-slate-300">
+                        {topGainerStock.sector} sektörü öne çıkıyor · Fiyat:{' '}
+                        <strong className="font-mono-num text-emerald-400">
+                          ₺{topGainerStock.price.toFixed(2)}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400">
+                  <Landmark className="h-4 w-4" />
+                  <span>Faiz & Kredi Piyasası</span>
+                </div>
+                <div className="text-xs text-slate-200 leading-relaxed">
+                  Piyasa ortalama banka baz faizi{' '}
+                  <strong className="font-mono-num text-amber-300">
+                    %{(avgBankRate * 100).toFixed(1)}
+                  </strong>{' '}
+                  seviyesinde. Kredi notunuz ({state.creditScore} ·{' '}
+                  <strong className="text-white">{creditTier.label}</strong>) ile{' '}
+                  <strong className="font-mono-num text-emerald-400">
+                    {formatTL(creditTier.maxLoanAmount, true)}
+                  </strong>{' '}
+                  limite erişebilirsiniz.
+                </div>
+              </section>
+            </div>
+
+            {/* Rival Holding Activity */}
+            {competitorBusinesses.length > 0 && (
+              <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 space-y-2">
+                <div className="text-xs font-bold text-rose-300">
+                  Rakip Holding Hamleleri ({competitorBusinesses.length} Aktif Mülk)
+                </div>
+                <div className="grid grid-cols-1 gap-2 min-[900px]:grid-cols-2">
+                  {competitorBusinesses.slice(0, 4).map((rival) => (
+                    <div
+                      key={rival.id}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/75 px-3 py-2 text-xs"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <BrandLogo brandKey={rival.owner_name} size={30} />
+                        <div className="min-w-0">
+                          <div className="truncate font-bold text-white">{rival.owner_name}</div>
+                          <div className="truncate text-slate-400">
+                            {rival.business_name} · {rival.city_name} (Sv.{rival.level})
+                          </div>
+                        </div>
+                      </div>
+                      <span className="shrink-0 font-mono-num font-bold text-amber-300">
+                        {formatTL(rival.valuation, true)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Company Tiers */}
             <section className="space-y-2">
               <div className="flex items-center gap-1.5 text-sm font-bold text-white">
                 <Crown className="h-4 w-4 text-amber-400" />

@@ -1,14 +1,12 @@
 import {
   Crown,
   Award,
-  Trophy,
-  TrendingUp,
   Settings,
-  Users,
   Home,
   ChevronRight,
-  FileSpreadsheet,
   LayoutGrid,
+  MessageSquare,
+  BookOpen,
 } from 'lucide-react';
 import { formatTL } from '../game/economy';
 import { MobileGameModal } from './MobileGameModal';
@@ -19,14 +17,11 @@ interface GameHubMenuModalProps {
   companyTitle: string;
   netWorth: number;
   activeCityLabel: string;
-  claimableMissionCount: number;
-  onOpenHolding: () => void;
-  onOpenAccounting: () => void;
   onOpenLeaderboard: () => void;
-  onOpenMissions: () => void;
-  onOpenMarket: () => void;
+  onOpenHolding: () => void;
+  onOpenPatronChat: () => void;
+  onOpenGuide: () => void;
   onOpenSettings: () => void;
-  onOpenHrCenter: () => void;
   onGoMainMenu: () => void;
   onClose: () => void;
 }
@@ -37,14 +32,11 @@ export function GameHubMenuModal({
   companyTitle,
   netWorth,
   activeCityLabel,
-  claimableMissionCount,
-  onOpenHolding,
-  onOpenAccounting,
   onOpenLeaderboard,
-  onOpenMissions,
-  onOpenMarket,
+  onOpenHolding,
+  onOpenPatronChat,
+  onOpenGuide,
   onOpenSettings,
-  onOpenHrCenter,
   onGoMainMenu,
   onClose,
 }: GameHubMenuModalProps) {
@@ -52,91 +44,60 @@ export function GameHubMenuModal({
 
   const items = [
     {
-      id: 'holding',
-      testId: 'hub-item-holding',
-      title: 'Holding & Franchise',
-      subtitle: 'Bayilik ver, Zincir Market kur, fabrika & otopark ağı',
-      icon: Crown,
-      accent: 'bg-amber-400/20 text-amber-300',
-      badge: null as number | null,
-      onClick: () => {
-        onClose();
-        onOpenHolding();
-      },
-    },
-    {
-      id: 'accounting',
-      testId: 'hub-item-accounting',
-      title: 'Muhasebe & Gelir-Gider',
-      subtitle: 'Saatlik/günlük bilanço, net kâr marjı & şube kârlılığı',
-      icon: FileSpreadsheet,
-      accent: 'bg-emerald-500/20 text-emerald-300',
-      badge: null as number | null,
-      onClick: () => {
-        onClose();
-        onOpenAccounting();
-      },
-    },
-    {
       id: 'leaderboard',
       testId: 'hub-item-leaderboard',
       title: 'Liderlik Tablosu',
-      subtitle: 'En zengin holdingler, il liderleri, franchise & bankalar',
+      subtitle: 'En zengin holdingler, il liderleri, franchise ve bankalar',
       icon: Award,
       accent: 'bg-sky-500/20 text-sky-300',
-      badge: null as number | null,
       onClick: () => {
         onClose();
         onOpenLeaderboard();
       },
     },
     {
-      id: 'missions',
-      testId: 'hub-item-missions',
-      title: 'Görevler',
-      subtitle: 'İmparatorluk hedeflerini tamamla ve ödülleri topla',
-      icon: Trophy,
+      id: 'holding',
+      testId: 'hub-item-holding',
+      title: 'Holding & Franchise',
+      subtitle: 'Bayilik ver, Zincir Market kur, fabrika ve otopark ağı',
+      icon: Crown,
+      accent: 'bg-amber-400/20 text-amber-300',
+      onClick: () => {
+        onClose();
+        onOpenHolding();
+      },
+    },
+    {
+      id: 'chat',
+      testId: 'hub-item-chat',
+      title: 'Patron Sohbeti',
+      subtitle: `${activeCityLabel} odası ve Türkiye geneli canlı yatırımcı sohbeti`,
+      icon: MessageSquare,
       accent: 'bg-emerald-500/20 text-emerald-300',
-      badge: claimableMissionCount > 0 ? claimableMissionCount : null,
       onClick: () => {
         onClose();
-        onOpenMissions();
+        onOpenPatronChat();
       },
     },
     {
-      id: 'market',
-      testId: 'hub-item-market',
-      title: 'Piyasa Haberleri',
-      subtitle: 'Canlı sektör çarpanları, piyasa olayları & şirket seviyesi',
-      icon: TrendingUp,
+      id: 'guide',
+      testId: 'hub-item-guide',
+      title: 'Oyun Rehberi',
+      subtitle: 'Pin bırakma, şube otomasyonu, borsa ve kredi kuralları',
+      icon: BookOpen,
       accent: 'bg-indigo-500/20 text-indigo-300',
-      badge: null as number | null,
       onClick: () => {
         onClose();
-        onOpenMarket();
-      },
-    },
-    {
-      id: 'hr',
-      testId: 'hub-item-hr',
-      title: 'Personel & İK Merkezi',
-      subtitle: `${activeCityLabel} şube kadroları, Bölge Sorumlusu ve Genel Müdür`,
-      icon: Users,
-      accent: 'bg-cyan-500/20 text-cyan-300',
-      badge: null as number | null,
-      onClick: () => {
-        onClose();
-        onOpenHrCenter();
+        onOpenGuide();
       },
     },
     {
       id: 'settings',
       testId: 'hub-item-settings',
-      title: 'Ayarlar & Güncelleme',
+      title: 'Ayarlar',
       subtitle: 'Tema, harita stili, ses, bildirimler ve canlı OTA güncelleme',
       icon: Settings,
       accent: 'bg-slate-700/80 text-slate-200',
-      badge: null as number | null,
       onClick: () => {
         onClose();
         onOpenSettings();
@@ -175,7 +136,7 @@ export function GameHubMenuModal({
                 type="button"
                 data-testid={item.testId}
                 onClick={item.onClick}
-                className="group flex min-h-[62px] items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/85 p-3 text-left transition hover:border-amber-400/70 hover:bg-slate-800/90"
+                className="group flex min-h-[64px] items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/85 p-3 text-left transition hover:border-amber-400/70 hover:bg-slate-800/90"
               >
                 <div
                   className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.accent}`}
@@ -183,14 +144,7 @@ export function GameHubMenuModal({
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-bold text-white">{item.title}</span>
-                    {item.badge !== null && (
-                      <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-amber-400 px-1.5 font-mono-num text-xs font-black text-slate-950">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
+                  <div className="truncate text-sm font-bold text-white">{item.title}</div>
                   <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{item.subtitle}</p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-amber-300" />

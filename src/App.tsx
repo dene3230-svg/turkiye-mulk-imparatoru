@@ -3,7 +3,6 @@ import {
   Bell,
   Building2,
   Clock,
-  Coins,
   Home,
   MapPin,
   Pause,
@@ -14,6 +13,8 @@ import {
   Radio,
   Landmark,
   LayoutGrid,
+  Newspaper,
+  Trophy,
 } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -48,11 +49,11 @@ import {
   calculateBusinessValuation,
   calculateNetWorth,
   calculateTotalIncomePerSec,
-  calculateTotalPendingCash,
   checkMinDistance75m,
   claimMissionReward,
   collectAllCash,
   collectBusinessCash,
+  createHeadquartersForCity,
   createInitialEmpireState,
   formatGameClock,
   formatTL,
@@ -60,6 +61,7 @@ import {
   getMissionProgress,
   hireStaff,
   purchaseBusiness,
+  resolveInitialFocusTarget,
   sellBusiness,
   takeoverCompetitorBusiness,
   tickEconomy,
@@ -161,6 +163,17 @@ import { GameTutorialOverlay } from './components/GameTutorialOverlay';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
 const TUTORIAL_STORAGE_KEY = 'tmi_tutorial_done_v122';
+const HQ_CITY_STORAGE_KEY = 'tmi_hq_city_v1';
+
+function loadSavedStartingCity(): number {
+  try {
+    const raw = Number(localStorage.getItem(HQ_CITY_STORAGE_KEY));
+    if (Number.isInteger(raw) && raw >= 1 && raw <= 81) return raw;
+  } catch {
+    // ignore storage errors
+  }
+  return DEFAULT_PROVINCE_PLATE;
+}
 
 function isTutorialCompleted(): boolean {
   try {
@@ -194,8 +207,12 @@ function loadSettings(): GameSettings {
 }
 
 // Backward-compatible migration for v1.0/v1.1 saved games -> v1.2.0 holding state
-function migrateSavedEmpire(saved: EmpireState | null, owner: UserProfile): EmpireState {
-  if (!saved) return createInitialEmpireState();
+function migrateSavedEmpire(
+  saved: EmpireState | null,
+  owner: UserProfile,
+  fallbackCityPlate = DEFAULT_PROVINCE_PLATE
+): EmpireState {
+  if (!saved) return createInitialEmpireState(Date.now(), fallbackCityPlate);
   const migratedBusinesses = saved.businesses.map((raw) => {
     const legacy = raw as unknown as Record<string, unknown>;
     const rawType = String(legacy.blueprintId ?? 'kafe');
@@ -219,8 +236,25 @@ function migrateSavedEmpire(saved: EmpireState | null, owner: UserProfile): Empi
     };
   });
 
+  const derivedHq =
+    saved.hq ??
+    (migratedBusinesses.length > 0
+      ? (() => {
+          const first = [...migratedBusinesses].sort((a, b) => a.createdAt - b.createdAt)[0];
+          return {
+            cityPlate: first.cityPlate,
+            cityName: first.cityName,
+            lat: first.lat,
+            lng: first.lng,
+            zoom: 15,
+            businessId: first.id,
+          };
+        })()
+      : createHeadquartersForCity(fallbackCityPlate));
+
   const baseMigrated: EmpireState = {
     ...saved,
+    hq: derivedHq,
     businesses: migratedBusinesses,
     cityManagers: Array.isArray(saved.cityManagers) ? saved.cityManagers : [],
     candidatePool:
@@ -270,16 +304,23 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  const [startingCityPlate, setStartingCityPlate] = useState<number>(() =>
+    loadSavedStartingCity()
+  );
+
   const [empire, setEmpire] = useState<EmpireState>(() => {
+    const startPlate = loadSavedStartingCity();
     const initialUser = autostart ? createOrLoadGuestProfile() : null;
     if (initialUser) {
-      return migrateSavedEmpire(loadEmpireStateLocal(initialUser.id), initialUser);
+      return migrateSavedEmpire(loadEmpireStateLocal(initialUser.id), initialUser, startPlate);
     }
-    return createInitialEmpireState();
+    return createInitialEmpireState(Date.now(), startPlate);
   });
 
-  // Active 81-province live room state (default: 34 İstanbul)
-  const [activePlate, setActivePlate] = useState<number>(DEFAULT_PROVINCE_PLATE);
+  // Active 81-province live room state — automatically locked to HQ city / first business
+  const [activePlate, setActivePlate] = useState<number>(
+    () => resolveInitialFocusTarget(empire).cityPlate
+  );
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [roomRecords, setRoomRecords] = useState<RemoteBusinessRecord[]>([]);
   const [roomStatus, setRoomStatus] = useState<RoomSyncStatus>('connecting');
@@ -321,10 +362,12 @@ export default function App() {
   const [hrTargetBusinessId, setHrTargetBusinessId] = useState<string | null>(null);
   const [holdingModalOpen, setHoldingModalOpen] = useState(false);
   const [borsaModalOpen, setBorsaModalOpen] = useState(false);
+  const [borsaMode, setBorsaMode] = useState<'market' | 'portfolio'>('market');
   const [bankingModalOpen, setBankingModalOpen] = useState(false);
   const [accountingModalOpen, setAccountingModalOpen] = useState(false);
   const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
   const [hubMenuOpen, setHubMenuOpen] = useState(false);
+  const [patronChatOpen, setPatronChatOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => !isTutorialCompleted());
 
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
@@ -338,9 +381,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v126',
-      title: 'Türkiye Mülk İmparatoru v1.2.6',
-      body: 'Ferah mobil menü şablonu, özel kurumsal vektör logolar, oyun takvimi ve Şube Müdürü tam otomasyonu aktif!',
+      id: 'welcome-v127',
+      title: 'Türkiye Mülk İmparatoru v1.2.7',
+      body: 'Sadeleştirilmiş üst bar, 6 sekmeli alt menü, Merkez Üs odaklanması, kaydırma çubuklu kredi ve Borsa Yatırımlarım sekmesi aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -457,8 +500,16 @@ export default function App() {
       .then(({ data }) => {
         if (!mounted || !data.session) return;
         const profile = sessionToUserProfile(data.session);
+        const loaded = migrateSavedEmpire(
+          loadEmpireStateLocal(profile.id),
+          profile,
+          loadSavedStartingCity()
+        );
+        const focus = resolveInitialFocusTarget(loaded);
         setUser(profile);
-        setEmpire(migrateSavedEmpire(loadEmpireStateLocal(profile.id), profile));
+        setEmpire(loaded);
+        setActivePlate(focus.cityPlate);
+        setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
       })
       .catch(() => {});
 
@@ -466,8 +517,16 @@ export default function App() {
       if (!mounted) return;
       if (session) {
         const profile = sessionToUserProfile(session);
+        const loaded = migrateSavedEmpire(
+          loadEmpireStateLocal(profile.id),
+          profile,
+          loadSavedStartingCity()
+        );
+        const focus = resolveInitialFocusTarget(loaded);
         setUser(profile);
-        setEmpire(migrateSavedEmpire(loadEmpireStateLocal(profile.id), profile));
+        setEmpire(loaded);
+        setActivePlate(focus.cityPlate);
+        setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
         setScreen('playing');
       }
     });
@@ -737,7 +796,7 @@ export default function App() {
     () => calculateTotalIncomePerSec(empire, now),
     [empire, now]
   );
-  const totalPendingCash = useMemo(() => calculateTotalPendingCash(empire), [empire]);
+  const initialMapFocus = useMemo(() => resolveInitialFocusTarget(empire), [empire]);
 
   // Merged Franchises & Banks (Own + Remote + Seed)
   const allFranchises = useMemo(() => {
@@ -838,12 +897,33 @@ export default function App() {
     setSettings((prev) => ({ ...prev, ...patch }));
   };
 
+  const handleSelectStartingCity = (plate: number) => {
+    setStartingCityPlate(plate);
+    try {
+      localStorage.setItem(HQ_CITY_STORAGE_KEY, String(plate));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const focusHeadquarters = useCallback((targetState: EmpireState) => {
+    const focus = resolveInitialFocusTarget(targetState);
+    setActivePlate(focus.cityPlate);
+    setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
+  }, []);
+
   const handleGuestLogin = () => {
     soundEngine.playClick();
     setAuthError(null);
     const guest = createOrLoadGuestProfile();
+    const loaded = migrateSavedEmpire(
+      loadEmpireStateLocal(guest.id),
+      guest,
+      startingCityPlate
+    );
     setUser(guest);
-    setEmpire(migrateSavedEmpire(loadEmpireStateLocal(guest.id), guest));
+    setEmpire(loaded);
+    focusHeadquarters(loaded);
     setScreen('playing');
   };
 
@@ -900,6 +980,10 @@ export default function App() {
     setDroppedPin(null);
     setSelectedBusinessId(null);
     setSelectedCompetitorId(null);
+    if (empire.businesses.length === 0) {
+      setEmpire((prev) => ({ ...prev, hq: createHeadquartersForCity(prov.plate) }));
+      handleSelectStartingCity(prov.plate);
+    }
     setFlyTarget({ lat: prov.lat, lng: prov.lng, zoom: prov.zoom, nonce: Date.now() });
     pushNotification(
       `${prov.code} ${prov.name} Odasına Geçildi`,
@@ -1468,7 +1552,7 @@ export default function App() {
   };
 
   const handleResetGame = () => {
-    const fresh = createInitialEmpireState();
+    const fresh = createInitialEmpireState(Date.now(), startingCityPlate);
     setEmpire(fresh);
     setGameSpeed(1);
     setDroppedPin(null);
@@ -1476,6 +1560,7 @@ export default function App() {
     setSelectedCompetitorId(null);
     setInteriorBusinessId(null);
     setActiveDrawer(null);
+    focusHeadquarters(fresh);
     if (user) {
       saveEmpireStateLocal(user.id, fresh);
     }
@@ -1526,9 +1611,14 @@ export default function App() {
           user={user}
           authLoading={authLoading}
           authError={authError}
+          startingCityPlate={startingCityPlate}
+          onSelectStartingCity={handleSelectStartingCity}
           onGuestLogin={handleGuestLogin}
           onGoogleLogin={handleGoogleLogin}
-          onContinueLoggedIn={() => setScreen('playing')}
+          onContinueLoggedIn={() => {
+            focusHeadquarters(empire);
+            setScreen('playing');
+          }}
           onSignOut={handleSignOut}
           onOpenSettings={() => setSettingsOpen(true)}
           onCheckUpdate={handleManualOtaCheck}
@@ -1550,22 +1640,23 @@ export default function App() {
             droppedPin={droppedPin}
             droppedPinBlocked={!droppedPinDistanceCheck.allowed}
             pinDropMode={pinDropMode}
+            initialCenter={initialMapFocus}
             flyTarget={flyTarget}
             onMapClick={handleMapClick}
             onSelectOwnBusiness={handleSelectOwnBusiness}
             onSelectCompetitor={handleSelectCompetitor}
           />
 
-          {/* Top Compact Landscape HUD Overlay (Universal Edge-to-Edge for Phones & Tablets) */}
+          {/* Top Clean Landscape HUD Overlay (Zero-Overlap: No "Topla" Button) */}
           <header
             aria-label="Oyun Durum Çubuğu"
             data-testid="top-hud"
             className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex items-center justify-between gap-1.5 pl-[var(--hud-left-gap)] pr-[var(--hud-right-gap)] pt-[var(--hud-top-gap)]"
           >
-            {/* Left Economy & Quota Cluster */}
+            {/* Left Economy & Quota Cluster — Clean 2-Row Layout, Zero Overlap */}
             <div
               data-testid="hud-left-cluster"
-              className="compact-short-hud pointer-events-auto flex min-w-0 items-center gap-[clamp(6px,1vw,10px)] rounded-2xl border border-slate-200/95 bg-white/95 px-[clamp(7px,1.2vw,12px)] py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95"
+              className="compact-short-hud pointer-events-auto flex min-w-0 items-center gap-[clamp(6px,1vw,10px)] rounded-2xl border border-slate-200/95 bg-white/95 px-[clamp(8px,1.2vw,12px)] py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95"
             >
               <div className="h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-amber-500/50 bg-[#0B1426] sm:h-8 sm:w-8">
                 <img
@@ -1576,18 +1667,26 @@ export default function App() {
                 />
               </div>
 
-              <div className="relative min-w-0 pr-0.5">
-                <div className="max-w-[clamp(86px,13vw,165px)] truncate text-[clamp(9px,1.15vw,10.5px)] font-semibold leading-none text-amber-700 dark:text-amber-400">
-                  Sv.{companyTier.level} · {companyTier.title}
+              <div className="relative min-w-0">
+                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="max-w-[clamp(96px,15vw,170px)] truncate text-[clamp(9.5px,1.15vw,11px)] font-bold leading-none text-amber-700 dark:text-amber-400">
+                    Sv.{companyTier.level} · {empire.playerIpo?.holdingName ?? companyTier.title}
+                  </span>
                 </div>
-                <div className="mt-0.5 flex items-baseline gap-1.5 whitespace-nowrap">
+                <div className="mt-0.5 flex items-baseline gap-2 whitespace-nowrap">
                   <span
                     data-testid="hud-cash"
-                    className="font-mono-num text-[clamp(11.5px,1.55vw,15.5px)] font-extrabold leading-none text-slate-900 dark:text-white"
+                    className="font-mono-num text-[clamp(12px,1.55vw,15.5px)] font-extrabold leading-none text-slate-900 dark:text-white"
                   >
                     {formatTL(empire.cash)}
                   </span>
-                  <span className="font-mono-num text-[9.5px] font-bold leading-none text-emerald-700 dark:text-emerald-400 min-[960px]:hidden">
+                  <span className="font-mono-num text-[clamp(9.5px,1.1vw,11px)] font-semibold leading-none text-slate-500 dark:text-slate-400">
+                    Şube {empire.businesses.length}/{companyTier.maxBranches} · Puan {empire.creditScore}
+                  </span>
+                  <span
+                    data-testid="hud-income"
+                    className="hidden font-mono-num text-[11px] font-bold leading-none text-emerald-700 dark:text-emerald-400 min-[1060px]:inline"
+                  >
                     +{formatTL(totalIncomePerSec, true)}/sn
                   </span>
                 </div>
@@ -1601,35 +1700,6 @@ export default function App() {
                   </span>
                 ))}
               </div>
-
-              <div className="hidden h-7 w-px shrink-0 bg-slate-200 dark:bg-slate-700 min-[960px]:block" />
-
-              <div className="hidden shrink-0 pr-0.5 min-[960px]:block whitespace-nowrap">
-                <div className="text-[clamp(9px,1.15vw,10.5px)] text-slate-500 dark:text-slate-400">
-                  Şube {empire.businesses.length}/{companyTier.maxBranches} · Puan{' '}
-                  {empire.creditScore}
-                </div>
-                <div
-                  data-testid="hud-income"
-                  className="font-mono-num text-[clamp(11px,1.35vw,12px)] font-bold leading-none text-emerald-700 dark:text-emerald-400"
-                >
-                  +{formatTL(totalIncomePerSec)}/sn
-                </div>
-              </div>
-
-              {totalPendingCash > 0 && (
-                <button
-                  type="button"
-                  data-testid="hud-collect-btn"
-                  onClick={handleCollectAll}
-                  className="flex min-h-[32px] shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-[clamp(6px,1vw,10px)] text-[clamp(10px,1.2vw,12px)] font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 whitespace-nowrap"
-                >
-                  <Coins className="h-3.5 w-3.5 shrink-0" />
-                  <span className="font-mono-num">
-                    Topla {formatTL(totalPendingCash, true)}
-                  </span>
-                </button>
-              )}
             </div>
 
             {/* Center Compact Game Calendar & Time Speed Capsule (Durdur / 1x / 2x / 4x) */}
@@ -1646,21 +1716,12 @@ export default function App() {
                 title={gameClock.totalDaysLabel}
                 className="flex items-center gap-1 pl-1 pr-0.5 whitespace-nowrap"
               >
-                <Clock
-                  className={`h-3.5 w-3.5 shrink-0 ${
-                    gameSpeed === 0
-                      ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-amber-600 dark:text-amber-400'
-                  }`}
-                />
-                <span className="hidden font-mono-num text-[clamp(10.5px,1.2vw,12px)] font-extrabold text-slate-900 dark:text-white min-[740px]:inline">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span className="hidden font-mono-num text-[clamp(10.5px,1.2vw,12px)] font-extrabold text-slate-900 dark:text-white min-[780px]:inline">
                   {gameClock.label}
                 </span>
-                <span className="font-mono-num text-[10.5px] font-extrabold text-slate-900 dark:text-white min-[740px]:hidden">
+                <span className="font-mono-num text-[10px] font-extrabold text-slate-900 dark:text-white min-[780px]:hidden">
                   {gameClock.compactLabel}
-                </span>
-                <span className="hidden rounded-md bg-amber-400/20 px-1.5 py-0.5 font-mono-num text-[10px] font-bold text-amber-800 dark:text-amber-300 xl:inline">
-                  {gameClock.totalDaysLabel}
                 </span>
               </div>
 
@@ -1685,7 +1746,7 @@ export default function App() {
                       aria-pressed={active}
                       title={item.label}
                       onClick={() => handleSetGameSpeed(item.speed)}
-                      className={`flex h-7 min-w-[26px] items-center justify-center rounded-lg px-1.5 font-mono-num text-[10.5px] font-extrabold transition-colors sm:h-8 sm:min-w-[30px] sm:text-[11px] whitespace-nowrap ${
+                      className={`flex h-7 min-w-[24px] items-center justify-center rounded-lg px-1.5 font-mono-num text-[10.5px] font-extrabold transition-colors sm:h-8 sm:min-w-[28px] sm:text-[11px] whitespace-nowrap ${
                         active
                           ? item.speed === 0
                             ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
@@ -1717,10 +1778,10 @@ export default function App() {
               >
                 <Globe2 className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
                 <span className="font-mono-num">{activeProvince.code}</span>
-                <span className="max-w-[82px] truncate sm:max-w-[120px]">
+                <span className="max-w-[74px] truncate sm:max-w-[115px]">
                   {activeProvince.name}
                 </span>
-                <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 lg:inline-flex">
+                <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 xl:inline-flex">
                   · <Radio className="h-3 w-3" />
                   {roomStatus === 'live' ? 'Canlı' : 'Oda'}
                 </span>
@@ -1777,125 +1838,206 @@ export default function App() {
                 }}
                 aria-label="Ana Menü"
                 title="Ana Menü"
-                className="hidden h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 min-[740px]:flex whitespace-nowrap"
+                className="hidden h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 xl:flex whitespace-nowrap"
               >
                 <Home className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden lg:inline">Ana Menü</span>
+                <span>Ana Menü</span>
               </button>
             </div>
           </header>
 
-          {/* Bottom Centered 4-Button Quick Action Dock (Universal Mobile & Tablet Landscape) */}
+          {/* Bottom Centered 6-Button Clean Navigation Bar: Harita · Yönetim · Finans · Haberler · Görevler · Menü */}
           <nav
             aria-label="Oyun Araç Çubuğu"
             data-testid="bottom-action-dock"
-            className={`compact-short-hud pointer-events-auto fixed bottom-[var(--hud-bottom-gap)] z-[600] flex items-center gap-[clamp(4px,0.9vw,8px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95 ${
-              droppedPin || selectedBusiness || selectedCompetitor || activeDrawer
-                ? 'left-[var(--hud-left-gap)] lg:left-1/2 lg:-translate-x-1/2'
-                : 'left-1/2 -translate-x-1/2'
-            }`}
+            className="compact-short-hud pointer-events-auto fixed bottom-[var(--hud-bottom-gap)] left-1/2 z-[600] flex max-w-[calc(100dvw-16px)] -translate-x-1/2 items-center gap-[clamp(3px,0.7vw,7px)] overflow-x-auto rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl no-scrollbar dark:border-slate-700/90 dark:bg-slate-900/95"
           >
-            {/* 1) Pin Bırak (Primary Highlighted Button) */}
+            {/* 1) Harita (Map view + Pin Drop active) */}
             <button
               type="button"
-              data-testid="dock-pin-btn"
+              data-testid="dock-map-btn"
               onClick={() => {
                 soundEngine.playClick();
                 setPinDropMode(true);
                 setActiveDrawer(null);
+                setHrModalOpen(false);
+                setBorsaModalOpen(false);
+                setBankingModalOpen(false);
+                setAccountingModalOpen(false);
+                setHubMenuOpen(false);
+                setHoldingModalOpen(false);
+                setLeaderboardModalOpen(false);
                 setSelectedBusinessId(null);
                 setSelectedCompetitorId(null);
                 if (!droppedPin) {
-                  handleMapClick(activeProvince.lat, activeProvince.lng);
+                  focusHeadquarters(empire);
                 }
               }}
-              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.8vw,16px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                droppedPin || (!activeDrawer && !selectedBusiness && !selectedCompetitor)
+              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                !activeDrawer &&
+                !hrModalOpen &&
+                !borsaModalOpen &&
+                !bankingModalOpen &&
+                !accountingModalOpen &&
+                !hubMenuOpen
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-sm hover:bg-amber-300'
-                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
+                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               <MapPin className="h-4 w-4 shrink-0" />
-              <span>Pin Bırak</span>
+              <span>Harita</span>
             </button>
 
-            {/* 2) Portföy (İşletmelerim & İK) */}
+            {/* 2) Yönetim (İşletmelerim + İK & Çalışanlar) */}
             <button
               type="button"
-              data-testid="dock-portfolio-btn"
+              data-testid="dock-management-btn"
               onClick={() => {
                 soundEngine.playClick();
                 setDroppedPin(null);
                 setSelectedBusinessId(null);
                 setSelectedCompetitorId(null);
+                setHrModalOpen(false);
+                setBorsaModalOpen(false);
+                setBankingModalOpen(false);
+                setAccountingModalOpen(false);
+                setHubMenuOpen(false);
                 setActiveDrawer((prev) => (prev === 'portfolio' ? null : 'portfolio'));
               }}
-              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                activeDrawer === 'portfolio'
-                  ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
+              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                activeDrawer === 'portfolio' || hrModalOpen
+                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               <Building2 className="h-4 w-4 shrink-0" />
-              <span>Portföy</span>
-              <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 font-mono-num text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                {empire.businesses.length}/{companyTier.maxBranches}
-              </span>
+              <span>Yönetim</span>
             </button>
 
-            {/* 3) Finans (Unified Borsa + Banka + Muhasebe) */}
+            {/* 3) Finans (Muhasebe · Banka & Kredi · Borsa & Yatırım · Yatırımlarım) */}
             <button
               type="button"
               data-testid="dock-finance-btn"
               onClick={() => {
                 soundEngine.playClick();
-                setBorsaModalOpen(true);
+                setActiveDrawer(null);
+                setHrModalOpen(false);
+                setHubMenuOpen(false);
+                setBankingModalOpen(false);
+                setBorsaModalOpen(false);
+                setAccountingModalOpen(true);
               }}
-              className="compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                accountingModalOpen || bankingModalOpen || borsaModalOpen
+                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800'
+              }`}
             >
-              <Landmark className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <Landmark className="h-4 w-4 shrink-0" />
               <span>Finans</span>
             </button>
 
-            {/* 4) Menü (Holding & Franchise, Muhasebe, Liderlik Tablosu, Görevler, Piyasa Haberleri, Ayarlar) */}
+            {/* 4) Haberler (Piyasa Haberleri) */}
+            <button
+              type="button"
+              data-testid="dock-news-btn"
+              onClick={() => {
+                soundEngine.playClick();
+                setDroppedPin(null);
+                setSelectedBusinessId(null);
+                setSelectedCompetitorId(null);
+                setHrModalOpen(false);
+                setBorsaModalOpen(false);
+                setBankingModalOpen(false);
+                setAccountingModalOpen(false);
+                setHubMenuOpen(false);
+                setActiveDrawer((prev) => (prev === 'market' ? null : 'market'));
+              }}
+              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                activeDrawer === 'market'
+                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Newspaper className="h-4 w-4 shrink-0" />
+              <span>Haberler</span>
+            </button>
+
+            {/* 5) Görevler (Dinamik Görevler) */}
+            <button
+              type="button"
+              data-testid="dock-missions-btn"
+              onClick={() => {
+                soundEngine.playClick();
+                setDroppedPin(null);
+                setSelectedBusinessId(null);
+                setSelectedCompetitorId(null);
+                setHrModalOpen(false);
+                setBorsaModalOpen(false);
+                setBankingModalOpen(false);
+                setAccountingModalOpen(false);
+                setHubMenuOpen(false);
+                setActiveDrawer((prev) => (prev === 'missions' ? null : 'missions'));
+              }}
+              className={`compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                activeDrawer === 'missions'
+                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Trophy className="h-4 w-4 shrink-0" />
+              <span>Görevler</span>
+              {claimableMissionCount > 0 && (
+                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 font-mono-num text-[10px] font-black text-slate-950">
+                  {claimableMissionCount}
+                </span>
+              )}
+            </button>
+
+            {/* 6) Menü (Liderlik Tablosu, Holding & Franchise, Patron Sohbeti, Oyun Rehberi, Ayarlar) */}
             <button
               type="button"
               data-testid="dock-menu-btn"
               onClick={() => {
                 soundEngine.playClick();
+                setActiveDrawer(null);
+                setHrModalOpen(false);
+                setBorsaModalOpen(false);
+                setBankingModalOpen(false);
+                setAccountingModalOpen(false);
                 setHubMenuOpen(true);
               }}
-              className="compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.7vw,15px)] text-[clamp(11.5px,1.5vw,13px)] font-bold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                hubMenuOpen
+                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+              }`}
             >
-              <LayoutGrid className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <LayoutGrid className="h-4 w-4 shrink-0" />
               <span>Menü</span>
-              {claimableMissionCount > 0 && (
-                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 font-mono-num text-[10px] font-bold text-white">
-                  {claimableMissionCount}
-                </span>
-              )}
             </button>
           </nav>
 
-          {/* Collapsible Patron Chat Panel (Bottom-Right with safe-area padding) */}
-          {!droppedPin && !selectedBusiness && !selectedCompetitor && !activeDrawer && (
-            <PatronChatPanel
-              activeProvince={activeProvince}
-              messages={chatMessages}
-              onSendMessage={handleSendChat}
-            />
-          )}
+          {/* Controlled Patron Chat Panel (Launched via Menü -> Patron Sohbeti, never collides with 6-button dock) */}
+          <PatronChatPanel
+            activeProvince={activeProvince}
+            messages={chatMessages}
+            open={patronChatOpen}
+            onOpenChange={setPatronChatOpen}
+            hideFloatingButton={true}
+            onSendMessage={handleSendChat}
+          />
 
-          {/* Contextual Hint when empty — centered cleanly above the 4-button dock */}
+          {/* Contextual Hint when empty — centered cleanly above the 6-button dock */}
           {empire.businesses.length === 0 &&
             !droppedPin &&
             !activeDrawer &&
             !selectedCompetitor && (
-              <div className="pointer-events-none fixed bottom-[calc(var(--panel-bottom-offset)+4px)] left-1/2 z-[500] w-[min(90vw,410px)] -translate-x-1/2 rounded-xl border border-amber-300/80 bg-white/95 px-3 py-1.5 text-center text-[clamp(10.5px,1.3vw,12px)] text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
+              <div className="pointer-events-none fixed bottom-[calc(var(--panel-bottom-offset)+4px)] left-1/2 z-[500] w-[min(90vw,430px)] -translate-x-1/2 rounded-xl border border-amber-300/80 bg-white/95 px-3 py-1.5 text-center text-[clamp(10.5px,1.3vw,12px)] text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
                 <strong className="text-amber-700 dark:text-amber-400">
                   {activeProvince.code} {activeProvince.name}:
                 </strong>{' '}
-                Kara üzerinde bir caddeye tıklayıp pin bırakın (13 sektör, Franchise, 75m koruması).
+                Kara üzerinde bir caddeye tıklayıp pin bırakın; ilk işletmeniz Merkez Üssünüz olur.
               </div>
             )}
 
@@ -1947,14 +2089,15 @@ export default function App() {
             </div>
           )}
 
-          {/* Unified MobileGameModal for Portföy, Görevler & Piyasa Haberleri */}
+          {/* Unified MobileGameModal for Yönetim (İşletmelerim), Haberler & Görevler */}
           {activeDrawer && (
             <SideDrawer
               tab={activeDrawer}
               state={empire}
               stockQuotes={stockQuotes}
+              allBanks={allBanks}
+              competitorBusinesses={competitorBusinesses}
               now={now}
-              onSwitchTab={(nextTab) => setActiveDrawer(nextTab)}
               onClose={() => setActiveDrawer(null)}
               onSelectBusiness={handleSelectOwnBusiness}
               onEnterInterior={(id) => setInteriorBusinessId(id)}
@@ -1963,9 +2106,13 @@ export default function App() {
                 setHrModalOpen(true);
               }}
               onCollectBusiness={handleCollectBusiness}
+              onCollectAll={handleCollectAll}
+              onUpgradeBusiness={handleUpgradeBusiness}
+              onRestockBusiness={handleRestockBusiness}
               onClaimMission={handleClaimMission}
               onEnablePinMode={() => {
                 setActiveDrawer(null);
+                setPinDropMode(true);
                 handleMapClick(activeProvince.lat, activeProvince.lng);
               }}
             />
@@ -2001,6 +2148,12 @@ export default function App() {
         state={empire}
         activeCityPlate={activeProvince.plate}
         activeCityName={activeProvince.name}
+        onSelectBranch={(id) => setHrTargetBusinessId(id)}
+        onSwitchToBusinesses={() => {
+          soundEngine.playClick();
+          setHrModalOpen(false);
+          setActiveDrawer('portfolio');
+        }}
         onHireCandidate={handleHireCandidate}
         onDismissStaff={handleDismissStaff}
         onRefreshPool={handleRefreshCandidatePool}
@@ -2016,7 +2169,7 @@ export default function App() {
         onCreateFranchise={handleCreateFranchise}
         onOpenHrCenter={() => {
           setHoldingModalOpen(false);
-          setHrTargetBusinessId(selectedBusinessId);
+          setHrTargetBusinessId(selectedBusinessId ?? empire.businesses[0]?.id ?? null);
           setHrModalOpen(true);
         }}
         onClose={() => setHoldingModalOpen(false)}
@@ -2024,21 +2177,26 @@ export default function App() {
 
       <BorsaModal
         open={borsaModalOpen}
+        mode={borsaMode}
         state={empire}
         quotes={stockQuotes}
         netWorth={netWorth}
         onBuyStock={handleBuyStock}
         onSellStock={handleSellStock}
         onLaunchIpo={handleLaunchIpo}
+        onSwitchToAccounting={() => {
+          soundEngine.playClick();
+          setBorsaModalOpen(false);
+          setAccountingModalOpen(true);
+        }}
         onSwitchToBanking={() => {
           soundEngine.playClick();
           setBorsaModalOpen(false);
           setBankingModalOpen(true);
         }}
-        onSwitchToAccounting={() => {
+        onSwitchMode={(nextMode) => {
           soundEngine.playClick();
-          setBorsaModalOpen(false);
-          setAccountingModalOpen(true);
+          setBorsaMode(nextMode);
         }}
         onClose={() => setBorsaModalOpen(false)}
       />
@@ -2054,15 +2212,22 @@ export default function App() {
         onRepayLoan={handleRepayLoan}
         onCreateBank={handleCreateBank}
         onUpdateBank={handleUpdateBank}
-        onSwitchToBorsa={() => {
-          soundEngine.playClick();
-          setBankingModalOpen(false);
-          setBorsaModalOpen(true);
-        }}
         onSwitchToAccounting={() => {
           soundEngine.playClick();
           setBankingModalOpen(false);
           setAccountingModalOpen(true);
+        }}
+        onSwitchToBorsa={() => {
+          soundEngine.playClick();
+          setBankingModalOpen(false);
+          setBorsaMode('market');
+          setBorsaModalOpen(true);
+        }}
+        onSwitchToInvestments={() => {
+          soundEngine.playClick();
+          setBankingModalOpen(false);
+          setBorsaMode('portfolio');
+          setBorsaModalOpen(true);
         }}
         onClose={() => setBankingModalOpen(false)}
       />
@@ -2072,15 +2237,22 @@ export default function App() {
         state={empire}
         quotes={stockQuotes}
         now={now}
-        onSwitchToBorsa={() => {
-          soundEngine.playClick();
-          setAccountingModalOpen(false);
-          setBorsaModalOpen(true);
-        }}
         onSwitchToBanking={() => {
           soundEngine.playClick();
           setAccountingModalOpen(false);
           setBankingModalOpen(true);
+        }}
+        onSwitchToBorsa={() => {
+          soundEngine.playClick();
+          setAccountingModalOpen(false);
+          setBorsaMode('market');
+          setBorsaModalOpen(true);
+        }}
+        onSwitchToInvestments={() => {
+          soundEngine.playClick();
+          setAccountingModalOpen(false);
+          setBorsaMode('portfolio');
+          setBorsaModalOpen(true);
         }}
         onClose={() => setAccountingModalOpen(false)}
       />
@@ -2091,27 +2263,11 @@ export default function App() {
         companyTitle={companyTier.title}
         netWorth={netWorth}
         activeCityLabel={`${activeProvince.code} ${activeProvince.name}`}
-        claimableMissionCount={claimableMissionCount}
-        onOpenHolding={() => setHoldingModalOpen(true)}
-        onOpenAccounting={() => setAccountingModalOpen(true)}
         onOpenLeaderboard={() => setLeaderboardModalOpen(true)}
-        onOpenMissions={() => {
-          setDroppedPin(null);
-          setSelectedBusinessId(null);
-          setSelectedCompetitorId(null);
-          setActiveDrawer('missions');
-        }}
-        onOpenMarket={() => {
-          setDroppedPin(null);
-          setSelectedBusinessId(null);
-          setSelectedCompetitorId(null);
-          setActiveDrawer('market');
-        }}
+        onOpenHolding={() => setHoldingModalOpen(true)}
+        onOpenPatronChat={() => setPatronChatOpen(true)}
+        onOpenGuide={handleReplayTutorial}
         onOpenSettings={() => setSettingsOpen(true)}
-        onOpenHrCenter={() => {
-          setHrTargetBusinessId(selectedBusinessId ?? empire.businesses[0]?.id ?? null);
-          setHrModalOpen(true);
-        }}
         onGoMainMenu={() => setScreen('menu')}
         onClose={() => setHubMenuOpen(false)}
       />

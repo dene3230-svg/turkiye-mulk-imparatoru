@@ -27,6 +27,8 @@ interface HrManagementModalProps {
   state: EmpireState;
   activeCityPlate: number;
   activeCityName: string;
+  onSelectBranch?: (businessId: string) => void;
+  onSwitchToBusinesses?: () => void;
   onHireCandidate: (candidateId: string, businessId: string | null, cityPlate: number) => void;
   onDismissStaff: (staffId: string, businessId?: string) => void;
   onRefreshPool: () => void;
@@ -34,9 +36,9 @@ interface HrManagementModalProps {
   onClose: () => void;
 }
 
-const ROLE_TABS: MobileModalTab[] = [
+const ROLE_FILTERS: Array<{ id: 'all' | StaffRole; label: string }> = [
   { id: 'all', label: 'Tümü' },
-  { id: 'calisan', label: '1. Çalışan (Max 4)' },
+  { id: 'calisan', label: '1. Çalışan (4)' },
   { id: 'mudur_yardimcisi', label: '2. Müd. Yrd. (1)' },
   { id: 'sube_muduru', label: '3. Şube Müd. (1)' },
   { id: 'bolge_sorumlusu', label: '4. Bölge Sor.' },
@@ -49,6 +51,8 @@ export function HrManagementModal({
   state,
   activeCityPlate,
   activeCityName,
+  onSelectBranch,
+  onSwitchToBusinesses,
   onHireCandidate,
   onDismissStaff,
   onRefreshPool,
@@ -59,25 +63,46 @@ export function HrManagementModal({
 
   if (!open) return null;
 
-  const targetPlate = business?.cityPlate ?? activeCityPlate;
-  const targetCityName = business?.cityName ?? activeCityName;
+  const effectiveBusiness = business ?? state.businesses[0] ?? null;
+  const targetPlate = effectiveBusiness?.cityPlate ?? activeCityPlate;
+  const targetCityName = effectiveBusiness?.cityName ?? activeCityName;
   const cityBranches = state.businesses.filter((b) => b.cityPlate === targetPlate);
   const cityExecs = (state.cityManagers ?? []).filter((m) => m.assignedCityPlate === targetPlate);
-  const automation = business
-    ? resolveBusinessAutomation(business, state.cityManagers ?? [], state.businesses)
+  const automation = effectiveBusiness
+    ? resolveBusinessAutomation(effectiveBusiness, state.cityManagers ?? [], state.businesses)
     : null;
-  const slots = business ? getBranchStaffSlots(business) : null;
+  const slots = effectiveBusiness ? getBranchStaffSlots(effectiveBusiness) : null;
   const totalPayroll = calculateTotalHourlyPayroll(state);
 
   const candidates = (state.candidatePool ?? []).filter((c) =>
     roleFilter === 'all' ? true : c.role === roleFilter
   );
 
+  const topTabs: MobileModalTab[] | undefined = onSwitchToBusinesses
+    ? [
+        {
+          id: 'isletmelerim',
+          label: 'İşletmelerim',
+          badge: state.businesses.length,
+          icon: <Building2 className="h-4 w-4" />,
+        },
+        {
+          id: 'ik',
+          label: 'İK & Çalışanlar',
+          icon: <Users className="h-4 w-4" />,
+        },
+      ]
+    : undefined;
+
   return (
     <div data-testid="hr-management-modal">
       <MobileGameModal
-        title="Personel & İK Yönetimi"
-        subtitle={business ? business.customName : `${targetCityName} İl Yönetimi`}
+        title="Yönetim Merkezi"
+        subtitle={
+          effectiveBusiness
+            ? `İK & Çalışanlar · ${effectiveBusiness.customName}`
+            : `İK & Çalışanlar · ${targetCityName}`
+        }
         icon={<Users className="h-4 w-4" />}
         headerRight={
           <button
@@ -90,18 +115,56 @@ export function HrManagementModal({
             <span>Havuzu Yenile (₺2.500)</span>
           </button>
         }
-        tabs={ROLE_TABS}
-        activeTabId={roleFilter}
-        onSelectTab={(id) => setRoleFilter(id as 'all' | StaffRole)}
+        tabs={topTabs}
+        activeTabId="ik"
+        onSelectTab={(id) => {
+          if (id === 'isletmelerim') onSwitchToBusinesses?.();
+        }}
         subHeader={
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap no-scrollbar">
+            {ROLE_FILTERS.map((rf) => (
+              <button
+                key={rf.id}
+                type="button"
+                onClick={() => setRoleFilter(rf.id)}
+                className={`min-h-[36px] shrink-0 rounded-xl px-3 text-xs font-bold transition ${
+                  roleFilter === rf.id
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                }`}
+              >
+                {rf.label}
+              </button>
+            ))}
+          </div>
+        }
+        onClose={onClose}
+        zIndexClass="z-[1265]"
+      >
+        {/* Branch Switcher + Strict Slot Counters & Payroll Bar */}
+        <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/80 p-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            {state.businesses.length > 1 && onSelectBranch && (
+              <select
+                aria-label="Hedef Şube Seç"
+                value={effectiveBusiness?.id ?? ''}
+                onChange={(e) => onSelectBranch(e.target.value)}
+                className="min-h-[38px] rounded-xl border border-slate-700 bg-slate-950 px-2.5 text-xs font-bold text-white"
+              >
+                {state.businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.customName} ({b.cityName})
+                  </option>
+                ))}
+              </select>
+            )}
             {slots ? (
-              <div className="flex flex-wrap items-center gap-2" data-testid="hr-branch-slots">
+              <div className="flex flex-wrap items-center gap-1.5" data-testid="hr-branch-slots">
                 <span
                   className={`rounded-lg border px-2.5 py-1 font-bold ${
                     slots.workers >= slots.maxWorkers
                       ? 'border-amber-400/60 bg-amber-400/15 text-amber-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                      : 'border-slate-700 bg-slate-950 text-slate-200'
                   }`}
                 >
                   {slots.workers}/{slots.maxWorkers} Çalışan
@@ -110,7 +173,7 @@ export function HrManagementModal({
                   className={`rounded-lg border px-2.5 py-1 font-bold ${
                     slots.assistantManagers >= slots.maxAssistantManagers
                       ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                      : 'border-slate-700 bg-slate-950 text-slate-200'
                   }`}
                 >
                   {slots.assistantManagers}/{slots.maxAssistantManagers} Müd. Yrd.
@@ -119,7 +182,7 @@ export function HrManagementModal({
                   className={`rounded-lg border px-2.5 py-1 font-bold ${
                     slots.branchManagers >= slots.maxBranchManagers
                       ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                      : 'border-slate-700 bg-slate-950 text-slate-200'
                   }`}
                 >
                   {slots.branchManagers}/{slots.maxBranchManagers} Şube Müdürü
@@ -130,16 +193,14 @@ export function HrManagementModal({
                 {targetCityName} İl Yönetimi ({cityBranches.length} Şube)
               </span>
             )}
-            <span className="font-mono-num text-xs font-bold text-slate-300">
-              Saatlik Bordro: <strong className="text-amber-300">{formatTL(totalPayroll)}/sa</strong>
-            </span>
           </div>
-        }
-        onClose={onClose}
-        zIndexClass="z-[1265]"
-      >
+          <span className="font-mono-num text-xs font-bold text-slate-300">
+            Saatlik Bordro: <strong className="text-amber-300">{formatTL(totalPayroll)}/sa</strong>
+          </span>
+        </section>
+
         {/* Branch Automation & Stock/Maintenance Card */}
-        {business && automation ? (
+        {effectiveBusiness && automation ? (
           <section
             className={`rounded-xl border p-3 space-y-2.5 ${
               automation.fullAutomation
@@ -186,13 +247,13 @@ export function HrManagementModal({
                 <div className="flex justify-between text-xs font-semibold text-slate-300">
                   <span>Stok Durumu</span>
                   <span className="font-mono-num text-white">
-                    {Math.round(business.stockLevel ?? 100)}%
+                    {Math.round(effectiveBusiness.stockLevel ?? 100)}%
                   </span>
                 </div>
                 <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
                   <div
                     className="h-full rounded-full bg-emerald-500"
-                    style={{ width: `${Math.round(business.stockLevel ?? 100)}%` }}
+                    style={{ width: `${Math.round(effectiveBusiness.stockLevel ?? 100)}%` }}
                   />
                 </div>
               </div>
@@ -200,22 +261,23 @@ export function HrManagementModal({
                 <div className="flex justify-between text-xs font-semibold text-slate-300">
                   <span>Temizlik & Bakım</span>
                   <span className="font-mono-num text-white">
-                    {Math.round(business.maintenanceLevel ?? 100)}%
+                    {Math.round(effectiveBusiness.maintenanceLevel ?? 100)}%
                   </span>
                 </div>
                 <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
                   <div
                     className="h-full rounded-full bg-sky-400"
-                    style={{ width: `${Math.round(business.maintenanceLevel ?? 100)}%` }}
+                    style={{ width: `${Math.round(effectiveBusiness.maintenanceLevel ?? 100)}%` }}
                   />
                 </div>
               </div>
             </div>
 
-            {((business.stockLevel ?? 100) < 98 || (business.maintenanceLevel ?? 100) < 98) && (
+            {((effectiveBusiness.stockLevel ?? 100) < 98 ||
+              (effectiveBusiness.maintenanceLevel ?? 100) < 98) && (
               <button
                 type="button"
-                onClick={() => onRestockBusiness(business.id)}
+                onClick={() => onRestockBusiness(effectiveBusiness.id)}
                 className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300"
               >
                 <Wrench className="h-4 w-4" />
@@ -233,12 +295,12 @@ export function HrManagementModal({
 
         {/* Current Staff & City Executives */}
         <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
-          {business && (
+          {effectiveBusiness && (
             <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-2">
               <div className="flex items-center justify-between text-xs font-bold text-white">
                 <span className="flex items-center gap-1.5">
                   <Building2 className="h-4 w-4 text-sky-400" />
-                  Şube Kadrosu ({(business.employees ?? []).length})
+                  Şube Kadrosu ({(effectiveBusiness.employees ?? []).length})
                 </span>
                 {slots && (
                   <span className="text-slate-400">
@@ -247,13 +309,13 @@ export function HrManagementModal({
                   </span>
                 )}
               </div>
-              {(business.employees ?? []).length === 0 ? (
+              {(effectiveBusiness.employees ?? []).length === 0 ? (
                 <p className="text-xs text-slate-400">
                   Aşağıdaki aday havuzundan çalışan veya yönetici işe alın.
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {(business.employees ?? []).map((emp) => (
+                  {(effectiveBusiness.employees ?? []).map((emp) => (
                     <div
                       key={emp.id}
                       className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2"
@@ -272,7 +334,7 @@ export function HrManagementModal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => onDismissStaff(emp.id, business.id)}
+                        onClick={() => onDismissStaff(emp.id, effectiveBusiness.id)}
                         aria-label="İşten Çıkar"
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
                       >
@@ -347,7 +409,7 @@ export function HrManagementModal({
               const meta = ROLE_META[cand.role];
               const isCityRole = meta.scope === 'city';
               const canAfford = state.cash >= cand.hireCost;
-              const needsBranch = !isCityRole && !business;
+              const needsBranch = !isCityRole && !effectiveBusiness;
               const needsMultiBranch = isCityRole && cityBranches.length < 2;
 
               let slotFullLabel: string | null = null;
@@ -425,7 +487,9 @@ export function HrManagementModal({
                   <button
                     type="button"
                     disabled={disabled}
-                    onClick={() => onHireCandidate(cand.id, business?.id ?? null, targetPlate)}
+                    onClick={() =>
+                      onHireCandidate(cand.id, effectiveBusiness?.id ?? null, targetPlate)
+                    }
                     className="min-h-[42px] w-full rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-400"
                   >
                     {buttonLabel}

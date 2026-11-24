@@ -471,11 +471,21 @@ export interface GameSettings {
   mapStyle: 'osm' | 'carto';
 }
 
+export interface HeadquartersInfo {
+  cityPlate: number;
+  cityName: string;
+  lat: number;
+  lng: number;
+  zoom: number;
+  businessId?: string;
+}
+
 export interface EmpireState {
   cash: number;
   totalEarnedLifetime: number;
   companyXp: number;
   gameMinutes: number; // In-game clock in minutes (starts at 540 = Day 1 09:00)
+  hq?: HeadquartersInfo | null; // Permanent HQ city & first business coordinates
   businesses: OwnedBusiness[];
   cityManagers: HiredStaff[]; // bolge_sorumlusu & genel_mudur executives
   candidatePool: StaffCandidate[]; // Renewable 1-5 star HR pool

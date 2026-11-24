@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Sparkles,
   CalendarDays,
+  Wallet,
 } from 'lucide-react';
 import type { EmpireState, StockQuote } from '../types/game';
 import { calculateAccountingReport } from '../game/accountingEngine';
@@ -20,8 +21,9 @@ interface AccountingModalProps {
   state: EmpireState;
   quotes: StockQuote[];
   now: number;
-  onSwitchToBorsa?: () => void;
   onSwitchToBanking?: () => void;
+  onSwitchToBorsa?: () => void;
+  onSwitchToInvestments?: () => void;
   onClose: () => void;
 }
 
@@ -30,8 +32,9 @@ export function AccountingModal({
   state,
   quotes,
   now,
-  onSwitchToBorsa,
   onSwitchToBanking,
+  onSwitchToBorsa,
+  onSwitchToInvestments,
   onClose,
 }: AccountingModalProps) {
   const [period, setPeriod] = useState<'hourly' | 'daily'>('hourly');
@@ -46,6 +49,7 @@ export function AccountingModal({
   const clock = formatGameClock(state.gameMinutes);
   const mult = period === 'daily' ? 24 : 1;
   const unit = period === 'daily' ? '/gün' : '/sa';
+  const holdingCount = (state.stockPortfolio ?? []).filter((h) => h.shares > 0).length;
 
   const totalRevenue = report.hourlyTotalRevenue * mult;
   const totalExpenses = report.hourlyTotalExpenses * mult;
@@ -56,13 +60,23 @@ export function AccountingModal({
   const expBarPct = rawBarTotal > 0 ? 100 - revBarPct : 0;
 
   const topTabs: MobileModalTab[] = [
-    ...(onSwitchToBorsa
-      ? [{ id: 'borsa', label: 'Borsa', icon: <BarChart3 className="h-4 w-4" /> }]
-      : []),
+    { id: 'muhasebe', label: 'Muhasebe', icon: <FileSpreadsheet className="h-4 w-4" /> },
     ...(onSwitchToBanking
       ? [{ id: 'banka', label: 'Banka & Kredi', icon: <Landmark className="h-4 w-4" /> }]
       : []),
-    { id: 'muhasebe', label: 'Muhasebe', icon: <FileSpreadsheet className="h-4 w-4" /> },
+    ...(onSwitchToBorsa
+      ? [{ id: 'borsa', label: 'Borsa & Yatırım', icon: <BarChart3 className="h-4 w-4" /> }]
+      : []),
+    ...(onSwitchToInvestments
+      ? [
+          {
+            id: 'yatirimlarim',
+            label: 'Yatırımlarım',
+            badge: holdingCount > 0 ? holdingCount : undefined,
+            icon: <Wallet className="h-4 w-4" />,
+          },
+        ]
+      : []),
   ];
 
   const revenueRows = [
@@ -133,8 +147,9 @@ export function AccountingModal({
         tabs={topTabs}
         activeTabId="muhasebe"
         onSelectTab={(id) => {
-          if (id === 'borsa') onSwitchToBorsa?.();
           if (id === 'banka') onSwitchToBanking?.();
+          if (id === 'borsa') onSwitchToBorsa?.();
+          if (id === 'yatirimlarim') onSwitchToInvestments?.();
         }}
         subHeader={
           <div className="flex flex-wrap items-center justify-between gap-2">

@@ -1,10 +1,10 @@
 {
-  "version": "1.2.6",
+  "version": "1.2.7",
   "buildDate": "2026-11-24",
   "mandatory": false,
   "notes": [
-    "Tüm menüler telefonlar için ferah tek sütunlu arayüzle yenilendi",
-    "Rakip firmalar ve bankalar için özel kurumsal logolar eklendi",
-    "Oyun günü/takvim göstergesi ve Şube Müdürü tam otomasyonu aktif edildi"
+    "Sol üst bar sadeleştirildi, alt menü Harita-Yönetim-Finans-Haberler-Görevler-Menü olarak düzenlendi",
+    "Merkez şehir ve ilk işletmeye otomatik odaklanma eklendi",
+    "Kaydırma çubuklu kredi çekme ve Borsa Yatırımlarım sekmesi eklendi"
   ]
 }

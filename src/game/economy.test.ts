@@ -14,6 +14,7 @@ import {
   calculateTakeoverPrice,
   checkMinDistance75m,
   claimMissionReward,
+  createHeadquartersForCity,
   createInitialEmpireState,
   formatGameClock,
   getCompanyTier,
@@ -21,6 +22,7 @@ import {
   hasFactorySupplySynergy,
   hasParkingSynergyForBusiness,
   purchaseBusiness,
+  resolveInitialFocusTarget,
   takeoverCompetitorBusiness,
   tickEconomy,
 } from './economy.ts';
@@ -463,9 +465,9 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.2.6');
-  assert.equal(compareSemver('1.2.5', '1.2.6'), 1);
-  assert.equal(compareSemver('1.2.6', '1.2.6'), 0);
+  assert.equal(APP_VERSION, '1.2.7');
+  assert.equal(compareSemver('1.2.6', '1.2.7'), 1);
+  assert.equal(compareSemver('1.2.7', '1.2.7'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
 
@@ -768,5 +770,56 @@ test('v1.2.6 Calendar Day-End Summary, 7-Day Weekly Dividend, 30-Day Monthly Clo
   assert.equal(formatGameClock(day30End.state.gameMinutes).day, 1);
 });
 
+test('v1.2.7 Headquarters (HQ) city and first business coordinates persist permanently for map auto-focus', () => {
+  const now = 900_000;
+  const hqIzmir = createHeadquartersForCity(35);
+  assert.equal(hqIzmir.cityPlate, 35);
+  assert.equal(hqIzmir.cityName, 'İzmir');
+  assert.equal(hqIzmir.businessId, undefined);
 
+  // Starting a new game in İzmir focuses İzmir by default
+  let state = createInitialEmpireState(now, 35);
+  state.cash = 1_000_000;
+  assert.equal(state.hq?.cityPlate, 35);
+  assert.equal(state.hq?.cityName, 'İzmir');
+  const initialFocus = resolveInitialFocusTarget(state);
+  assert.equal(initialFocus.cityPlate, 35);
+  assert.equal(initialFocus.lat, hqIzmir.lat);
+  assert.equal(initialFocus.lng, hqIzmir.lng);
 
+  // Building the first business in Ankara permanently locks HQ to that exact branch
+  const owner = { id: 'p1', name: 'Patron' };
+  const firstBuilt = purchaseBusiness(
+    state,
+    'kafe',
+    landPin(39.9208, 32.8541, 6),
+    'Anıtkabir Kafe',
+    owner,
+    [],
+    now
+  );
+  assert.equal(firstBuilt.ok, true);
+  assert.equal(firstBuilt.state.hq?.cityPlate, 6);
+  assert.equal(firstBuilt.state.hq?.businessId, firstBuilt.business!.id);
+  assert.equal(firstBuilt.state.hq?.lat, 39.9208);
+  assert.equal(firstBuilt.state.hq?.lng, 32.8541);
+  assert.equal(firstBuilt.state.hq?.zoom, 15);
+
+  // Building a second business in İstanbul MUST NOT overwrite the original HQ
+  const secondBuilt = purchaseBusiness(
+    firstBuilt.state,
+    'kafe',
+    landPin(41.0422, 29.0067, 34),
+    'Beşiktaş Kafe',
+    owner,
+    [],
+    now + 100
+  );
+  assert.equal(secondBuilt.ok, true);
+  assert.equal(secondBuilt.state.hq?.businessId, firstBuilt.business!.id);
+  const focusAfterSecond = resolveInitialFocusTarget(secondBuilt.state);
+  assert.equal(focusAfterSecond.cityPlate, 6);
+  assert.equal(focusAfterSecond.lat, 39.9208);
+  assert.equal(focusAfterSecond.lng, 32.8541);
+  assert.equal(focusAfterSecond.zoom, 15);
+});

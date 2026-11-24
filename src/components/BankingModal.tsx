@@ -8,6 +8,7 @@ import {
   Lock,
   BarChart3,
   FileSpreadsheet,
+  Wallet,
 } from 'lucide-react';
 import type { BankRecord, EmpireState, ProvinceInfo } from '../types/game';
 import { BANK_MIN_NET_WORTH } from '../game/catalog';
@@ -47,12 +48,14 @@ interface BankingModalProps {
     baseInterestRate?: number;
     minCreditScore?: number;
   }) => void;
-  onSwitchToBorsa?: () => void;
   onSwitchToAccounting?: () => void;
+  onSwitchToBorsa?: () => void;
+  onSwitchToInvestments?: () => void;
   onClose: () => void;
 }
 
 const BANK_COLORS = ['#0F766E', '#1D4ED8', '#B45309', '#7C3AED', '#BE123C', '#0891B2'];
+const MIN_LOAN_AMOUNT = 25_000;
 
 export function BankingModal({
   open,
@@ -65,8 +68,9 @@ export function BankingModal({
   onRepayLoan,
   onCreateBank,
   onUpdateBank,
-  onSwitchToBorsa,
   onSwitchToAccounting,
+  onSwitchToBorsa,
+  onSwitchToInvestments,
   onClose,
 }: BankingModalProps) {
   const [subTab, setSubTab] = useState<'loans' | 'own-bank'>('loans');
@@ -98,14 +102,27 @@ export function BankingModal({
     ? calculateBusinessValuation(chosenBiz, state.activeEvent, now)
     : 0;
 
+  const maxLoanForPlayer = Math.max(
+    MIN_LOAN_AMOUNT,
+    Math.min(
+      tier.maxLoanAmount > 0 ? tier.maxLoanAmount : MIN_LOAN_AMOUNT,
+      selectedBank?.poolCapital ?? tier.maxLoanAmount
+    )
+  );
+  const sliderStep =
+    maxLoanForPlayer >= 10_000_000 ? 100_000 : maxLoanForPlayer >= 2_000_000 ? 50_000 : 25_000;
+  const clampedLoanAmount = Math.min(maxLoanForPlayer, Math.max(MIN_LOAN_AMOUNT, loanAmount));
+
   const effRate = selectedBank
     ? calculateEffectiveInterestRate(selectedBank.baseInterestRate, creditScore)
     : 0.12;
-  const totalRepayment = Math.round(loanAmount * (1 + effRate));
-  const reqCollateral = calculateRequiredCollateral(loanAmount, creditScore);
+  const totalInterest = Math.round(clampedLoanAmount * effRate);
+  const totalRepayment = clampedLoanAmount + totalInterest;
+  const reqCollateral = calculateRequiredCollateral(clampedLoanAmount, creditScore);
   const activeLoans = (state.activeLoans ?? []).filter(
     (l) => l.status === 'active' || l.status === 'garnishing'
   );
+  const holdingCount = (state.stockPortfolio ?? []).filter((h) => h.shares > 0).length;
 
   const canOpenOwnBank = Boolean(state.ownBank) || netWorth >= BANK_MIN_NET_WORTH;
   const effectiveSubTab = subTab === 'own-bank' && !canOpenOwnBank ? 'loans' : subTab;
@@ -114,18 +131,28 @@ export function BankingModal({
     Boolean(selectedBank) &&
     tier.maxLoanAmount > 0 &&
     creditScore >= (selectedBank?.minCreditScore ?? 700) &&
-    loanAmount >= 25_000 &&
-    loanAmount <= Math.min(tier.maxLoanAmount, selectedBank?.poolCapital ?? 0) &&
+    clampedLoanAmount >= MIN_LOAN_AMOUNT &&
+    clampedLoanAmount <= Math.min(tier.maxLoanAmount, selectedBank?.poolCapital ?? 0) &&
     Boolean(chosenBiz) &&
     chosenBizVal >= reqCollateral;
 
   const topTabs: MobileModalTab[] = [
-    ...(onSwitchToBorsa
-      ? [{ id: 'borsa', label: 'Borsa', icon: <BarChart3 className="h-4 w-4" /> }]
-      : []),
-    { id: 'banka', label: 'Banka & Kredi', icon: <Landmark className="h-4 w-4" /> },
     ...(onSwitchToAccounting
       ? [{ id: 'muhasebe', label: 'Muhasebe', icon: <FileSpreadsheet className="h-4 w-4" /> }]
+      : []),
+    { id: 'banka', label: 'Banka & Kredi', icon: <Landmark className="h-4 w-4" /> },
+    ...(onSwitchToBorsa
+      ? [{ id: 'borsa', label: 'Borsa & Yatırım', icon: <BarChart3 className="h-4 w-4" /> }]
+      : []),
+    ...(onSwitchToInvestments
+      ? [
+          {
+            id: 'yatirimlarim',
+            label: 'Yatırımlarım',
+            badge: holdingCount > 0 ? holdingCount : undefined,
+            icon: <Wallet className="h-4 w-4" />,
+          },
+        ]
       : []),
   ];
 
@@ -138,8 +165,9 @@ export function BankingModal({
         tabs={topTabs}
         activeTabId="banka"
         onSelectTab={(id) => {
-          if (id === 'borsa') onSwitchToBorsa?.();
           if (id === 'muhasebe') onSwitchToAccounting?.();
+          if (id === 'borsa') onSwitchToBorsa?.();
+          if (id === 'yatirimlarim') onSwitchToInvestments?.();
         }}
         subHeader={
           <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
@@ -302,25 +330,73 @@ export function BankingModal({
                 })}
               </div>
 
-              {/* Loan Inputs */}
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {/* Loan Amount Fluid Range Slider & Collateral Selector */}
+              <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/75 p-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300">
-                    Kredi Tutarı (₺)
-                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor="loan-amount-range"
+                      className="text-xs font-semibold text-slate-300"
+                    >
+                      Kredi Tutarı (Kaydırma Çubuğu)
+                    </label>
+                    <span
+                      data-testid="loan-slider-amount"
+                      className="font-mono-num text-base font-black text-amber-300"
+                    >
+                      {formatTL(clampedLoanAmount)}
+                    </span>
+                  </div>
+
                   <input
-                    type="number"
-                    min={25000}
-                    max={Math.max(25000, tier.maxLoanAmount)}
-                    step={25000}
-                    value={loanAmount}
+                    id="loan-amount-range"
+                    data-testid="loan-amount-slider"
+                    type="range"
+                    min={MIN_LOAN_AMOUNT}
+                    max={maxLoanForPlayer}
+                    step={sliderStep}
+                    disabled={tier.maxLoanAmount <= 0}
+                    value={clampedLoanAmount}
                     onChange={(e) => setLoanAmount(Number(e.target.value))}
-                    className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 font-mono-num text-sm font-bold text-white"
+                    className="mt-2 h-2.5 w-full cursor-pointer accent-amber-400 disabled:opacity-40"
                   />
+
+                  <div className="mt-1 flex items-center justify-between font-mono-num text-[11px] text-slate-400">
+                    <span>Min: {formatTL(MIN_LOAN_AMOUNT, true)}</span>
+                    <span>Limit: {formatTL(maxLoanForPlayer, true)}</span>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-4 gap-1.5">
+                    {[
+                      { label: '%25', ratio: 0.25 },
+                      { label: '%50', ratio: 0.5 },
+                      { label: '%75', ratio: 0.75 },
+                      { label: 'Maks', ratio: 1 },
+                    ].map((preset) => {
+                      const raw = Math.round((maxLoanForPlayer * preset.ratio) / sliderStep) * sliderStep;
+                      const val = Math.min(maxLoanForPlayer, Math.max(MIN_LOAN_AMOUNT, raw));
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          disabled={tier.maxLoanAmount <= 0}
+                          onClick={() => setLoanAmount(val)}
+                          className={`min-h-[34px] rounded-lg border text-xs font-bold transition ${
+                            clampedLoanAmount === val
+                              ? 'border-amber-400 bg-amber-400 text-slate-950'
+                              : 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-300">
-                    Teminat İşletme (Min {formatTL(reqCollateral, true)})
+                    Teminat İşletme (Gerekli: {formatTL(reqCollateral, true)})
                   </label>
                   <select
                     value={chosenBiz?.id ?? ''}
@@ -345,9 +421,24 @@ export function BankingModal({
 
               {/* Repayment Summary + Confirm CTA directly beneath */}
               <div className="rounded-xl border border-slate-700/80 bg-slate-950/90 p-3 space-y-2.5">
+                <div className="grid grid-cols-2 gap-2 border-b border-slate-800 pb-2 text-xs">
+                  <div>
+                    <div className="text-[11px] text-slate-400">Anapara · Etkin Faiz</div>
+                    <div className="font-mono-num font-bold text-white">
+                      {formatTL(clampedLoanAmount, true)} · %{(effRate * 100).toFixed(1)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[11px] text-slate-400">Faiz Tutarı</div>
+                    <div className="font-mono-num font-bold text-rose-400">
+                      +{formatTL(totalInterest, true)}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-slate-300">
-                    Toplam Geri Ödeme (%{(effRate * 100).toFixed(1)} faiz):
+                    Toplam Geri Ödeme:
                   </span>
                   <strong className="font-mono-num text-base font-black text-amber-300">
                     {formatTL(totalRepayment)}
@@ -361,7 +452,7 @@ export function BankingModal({
                   onClick={() =>
                     selectedBank &&
                     chosenBiz &&
-                    onTakeLoan(selectedBank.id, loanAmount, chosenBiz.id)
+                    onTakeLoan(selectedBank.id, clampedLoanAmount, chosenBiz.id)
                   }
                   className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none"
                 >
@@ -375,7 +466,7 @@ export function BankingModal({
                       ? 'Krediyi Onayla ve Çek (Önce İşletme Kurun)'
                       : chosenBizVal < reqCollateral
                       ? `Teminat Yetersiz (Gerekli: ${formatTL(reqCollateral, true)})`
-                      : `Krediyi Onayla ve Çek · ${formatTL(loanAmount)}`}
+                      : `Krediyi Onayla ve Çek · ${formatTL(clampedLoanAmount)}`}
                   </span>
                 </button>
               </div>

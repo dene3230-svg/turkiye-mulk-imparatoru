@@ -8,6 +8,7 @@ import {
   BarChart3,
   Landmark,
   FileSpreadsheet,
+  Wallet,
 } from 'lucide-react';
 import type { EmpireState, StockQuote } from '../types/game';
 import {
@@ -20,14 +21,16 @@ import { BrandLogo } from './BrandLogo';
 
 interface BorsaModalProps {
   open: boolean;
+  mode: 'market' | 'portfolio';
   state: EmpireState;
   quotes: StockQuote[];
   netWorth: number;
   onBuyStock: (ticker: string, qty: number) => void;
   onSellStock: (ticker: string, qty: number) => void;
   onLaunchIpo: (ticker: string, holdingName: string) => void;
-  onSwitchToBanking?: () => void;
   onSwitchToAccounting?: () => void;
+  onSwitchToBanking?: () => void;
+  onSwitchMode?: (mode: 'market' | 'portfolio') => void;
   onClose: () => void;
 }
 
@@ -62,14 +65,16 @@ function MiniSparkline({ values, positive }: { values: number[]; positive: boole
 
 export function BorsaModal({
   open,
+  mode,
   state,
   quotes,
   netWorth,
   onBuyStock,
   onSellStock,
   onLaunchIpo,
-  onSwitchToBanking,
   onSwitchToAccounting,
+  onSwitchToBanking,
+  onSwitchMode,
   onClose,
 }: BorsaModalProps) {
   const [subTab, setSubTab] = useState<'bist' | 'ipo'>('bist');
@@ -80,21 +85,31 @@ export function BorsaModal({
 
   const bistQuotes = quotes.filter((q) => !q.isPlayerIpo);
   const ipoQuotes = quotes.filter((q) => q.isPlayerIpo);
+  const holdings = (state.stockPortfolio ?? []).filter((h) => h.shares > 0);
   const portfolioValue = calculatePortfolioMarketValue(state, quotes);
+  const portfolioCost = holdings.reduce((sum, h) => sum + Math.round(h.shares * h.avgCost), 0);
+  const portfolioPnl = portfolioValue - portfolioCost;
+  const portfolioPnlPct = portfolioCost > 0 ? (portfolioPnl / portfolioCost) * 100 : 0;
   const ipoElig = checkIpoEligibility(state, netWorth);
 
   const topTabs: MobileModalTab[] = [
-    { id: 'borsa', label: 'Borsa', icon: <BarChart3 className="h-4 w-4" /> },
-    ...(onSwitchToBanking
-      ? [{ id: 'banka', label: 'Banka & Kredi', icon: <Landmark className="h-4 w-4" /> }]
-      : []),
     ...(onSwitchToAccounting
       ? [{ id: 'muhasebe', label: 'Muhasebe', icon: <FileSpreadsheet className="h-4 w-4" /> }]
       : []),
+    ...(onSwitchToBanking
+      ? [{ id: 'banka', label: 'Banka & Kredi', icon: <Landmark className="h-4 w-4" /> }]
+      : []),
+    { id: 'borsa', label: 'Borsa & Yatırım', icon: <BarChart3 className="h-4 w-4" /> },
+    {
+      id: 'yatirimlarim',
+      label: 'Yatırımlarım',
+      badge: holdings.length > 0 ? holdings.length : undefined,
+      icon: <Wallet className="h-4 w-4" />,
+    },
   ];
 
   const renderQuoteCard = (q: StockQuote) => {
-    const holding = (state.stockPortfolio ?? []).find((h) => h.ticker === q.ticker);
+    const holding = holdings.find((h) => h.ticker === q.ticker);
     const changePct = q.openPrice > 0 ? ((q.price - q.openPrice) / q.openPrice) * 100 : 0;
     const positive = changePct >= 0;
     const pnl = holding ? Math.round((q.price - holding.avgCost) * holding.shares) : 0;
@@ -187,11 +202,15 @@ export function BorsaModal({
   };
 
   return (
-    <div data-testid="borsa-modal">
+    <div data-testid={mode === 'portfolio' ? 'investments-modal' : 'borsa-modal'}>
       <MobileGameModal
         title="Finans Merkezi"
-        subtitle="Borsa & Halka Arz (IPO)"
-        icon={<BarChart3 className="h-4 w-4" />}
+        subtitle={
+          mode === 'portfolio'
+            ? 'Yatırımlarım (Borsa Portföyü)'
+            : 'Borsa & Halka Arz (IPO)'
+        }
+        icon={mode === 'portfolio' ? <Wallet className="h-4 w-4" /> : <BarChart3 className="h-4 w-4" />}
         headerRight={
           <div className="hidden items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/90 px-2.5 py-1 text-xs sm:flex">
             <span className="text-slate-400">Hisse:</span>
@@ -201,50 +220,191 @@ export function BorsaModal({
           </div>
         }
         tabs={topTabs}
-        activeTabId="borsa"
+        activeTabId={mode === 'portfolio' ? 'yatirimlarim' : 'borsa'}
         onSelectTab={(id) => {
-          if (id === 'banka') onSwitchToBanking?.();
           if (id === 'muhasebe') onSwitchToAccounting?.();
+          if (id === 'banka') onSwitchToBanking?.();
+          if (id === 'borsa') onSwitchMode?.('market');
+          if (id === 'yatirimlarim') onSwitchMode?.('portfolio');
         }}
         subHeader={
-          <div className="flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                data-testid="borsa-tab-bist"
-                onClick={() => setSubTab('bist')}
-                className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition ${
-                  subTab === 'bist'
-                    ? 'bg-amber-400 text-slate-950 font-bold'
-                    : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+          mode === 'market' ? (
+            <div className="flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="borsa-tab-bist"
+                  onClick={() => setSubTab('bist')}
+                  className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition ${
+                    subTab === 'bist'
+                      ? 'bg-amber-400 text-slate-950 font-bold'
+                      : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  <Briefcase className="h-4 w-4" />
+                  <span>BIST Devleri ({bistQuotes.length})</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="borsa-tab-ipo"
+                  onClick={() => setSubTab('ipo')}
+                  className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition ${
+                    subTab === 'ipo'
+                      ? 'bg-amber-400 text-slate-950 font-bold'
+                      : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  <Rocket className="h-4 w-4" />
+                  <span>Oyuncu Holdingleri (IPO)</span>
+                </button>
+              </div>
+              <div className="shrink-0 font-mono-num text-xs text-slate-300">
+                Nakit: <strong className="text-white">{formatTL(state.cash, true)}</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-3 font-mono-num">
+                <span className="text-slate-300">
+                  Portföy: <strong className="text-white">{formatTL(portfolioValue)}</strong>
+                </span>
+                <span className="text-slate-400">
+                  Maliyet: <strong className="text-slate-200">{formatTL(portfolioCost)}</strong>
+                </span>
+              </div>
+              <span
+                className={`rounded-lg px-2.5 py-1 font-mono-num font-black ${
+                  portfolioPnl >= 0
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-rose-500/20 text-rose-300'
                 }`}
               >
-                <Briefcase className="h-4 w-4" />
-                <span>BIST Devleri ({bistQuotes.length})</span>
-              </button>
-              <button
-                type="button"
-                data-testid="borsa-tab-ipo"
-                onClick={() => setSubTab('ipo')}
-                className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition ${
-                  subTab === 'ipo'
-                    ? 'bg-amber-400 text-slate-950 font-bold'
-                    : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
-                }`}
-              >
-                <Rocket className="h-4 w-4" />
-                <span>Oyuncu Holdingleri (IPO)</span>
-              </button>
+                {portfolioPnl >= 0 ? '+' : ''}
+                {formatTL(portfolioPnl)} ({portfolioPnlPct >= 0 ? '+' : ''}
+                {portfolioPnlPct.toFixed(2)}%)
+              </span>
             </div>
-            <div className="shrink-0 font-mono-num text-xs text-slate-300">
-              Nakit: <strong className="text-white">{formatTL(state.cash, true)}</strong>
-            </div>
-          </div>
+          )
         }
         onClose={onClose}
         zIndexClass="z-[1260]"
       >
-        {subTab === 'bist' ? (
+        {mode === 'portfolio' ? (
+          holdings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/60 px-4 py-10 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/20 text-amber-300">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <h3 className="mt-3 text-base font-bold text-white">Henüz Hisse Yatırımınız Yok</h3>
+              <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-300">
+                Borsa & Yatırım sekmesinden BIST Devleri veya Oyuncu Holdingleri hisselerini satın
+                alarak haftalık temettü ve sermaye kazancı elde edebilirsiniz.
+              </p>
+              <button
+                type="button"
+                onClick={() => onSwitchMode?.('market')}
+                className="mt-4 min-h-[42px] rounded-xl bg-amber-400 px-5 text-xs font-bold text-slate-950 hover:bg-amber-300"
+              >
+                Borsa & Yatırım Ekranına Git
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
+              {holdings.map((holding) => {
+                const quote = quotes.find((q) => q.ticker === holding.ticker);
+                const currentPrice = quote?.price ?? holding.avgCost;
+                const costBasis = Math.round(holding.shares * holding.avgCost);
+                const currentVal = Math.round(holding.shares * currentPrice);
+                const pnl = currentVal - costBasis;
+                const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
+                const positive = pnl >= 0;
+                const halfShares = Math.max(1, Math.floor(holding.shares / 2));
+
+                return (
+                  <div
+                    key={holding.ticker}
+                    data-testid={`holding-card-${holding.ticker}`}
+                    className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/85 p-3.5"
+                  >
+                    <div className="flex items-center justify-between gap-2.5">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <BrandLogo brandKey={holding.ticker} size={42} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded-md bg-slate-800 px-1.5 py-0.5 font-mono-num text-xs font-black text-amber-300">
+                              {holding.ticker}
+                            </span>
+                            <span className="truncate text-sm font-bold text-white">
+                              {quote?.name ?? holding.ticker}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            <strong className="font-mono-num text-slate-200">
+                              {holding.shares} lot
+                            </strong>{' '}
+                            · Temettü %{((quote?.dividendYieldAnnual ?? 0.05) * 100).toFixed(1)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <div className="font-mono-num text-sm font-black text-white">
+                          {formatTL(currentVal)}
+                        </div>
+                        <div
+                          className={`font-mono-num text-xs font-bold ${
+                            positive ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          {positive ? '+' : ''}
+                          {formatTL(pnl)} ({positive ? '+' : ''}
+                          {pnlPct.toFixed(2)}%)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 font-mono-num text-xs">
+                      <div>
+                        <div className="text-[11px] text-slate-400">Alış Ort.</div>
+                        <div className="font-bold text-slate-200">
+                          ₺{holding.avgCost.toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-400">Güncel</div>
+                        <div className="font-bold text-white">₺{currentPrice.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-400">Maliyet</div>
+                        <div className="font-bold text-slate-300">{formatTL(costBasis, true)}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {holding.shares >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => onSellStock(holding.ticker, halfShares)}
+                          className="min-h-[40px] flex-1 rounded-xl border border-rose-500/50 bg-rose-500/15 px-3 font-mono-num text-xs font-bold text-rose-300 hover:bg-rose-500/25 whitespace-nowrap"
+                        >
+                          %50 Sat ({halfShares} Lot)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        data-testid={`sell-all-${holding.ticker}`}
+                        onClick={() => onSellStock(holding.ticker, holding.shares)}
+                        className="min-h-[40px] flex-1 rounded-xl bg-rose-500 px-3 font-mono-num text-xs font-bold text-white hover:bg-rose-400 whitespace-nowrap"
+                      >
+                        Tümünü Sat ({formatTL(currentVal, true)})
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : subTab === 'bist' ? (
           <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
             {bistQuotes.map(renderQuoteCard)}
           </div>

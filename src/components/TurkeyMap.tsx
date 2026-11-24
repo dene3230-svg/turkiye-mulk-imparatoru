@@ -24,6 +24,7 @@ interface TurkeyMapProps {
   droppedPin: PinLocationInfo | null;
   droppedPinBlocked: boolean;
   pinDropMode: boolean;
+  initialCenter?: { lat: number; lng: number; zoom: number };
   flyTarget: { lat: number; lng: number; zoom: number; nonce: number } | null;
   onMapClick: (lat: number, lng: number) => void;
   onSelectOwnBusiness: (businessId: string) => void;
@@ -75,6 +76,7 @@ export function TurkeyMap({
   droppedPin,
   droppedPinBlocked,
   pinDropMode,
+  initialCenter,
   flyTarget,
   onMapClick,
   onSelectOwnBusiness,
@@ -86,7 +88,8 @@ export function TurkeyMap({
   const circleLayerRef = useRef<L.LayerGroup | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const droppedPinMarkerRef = useRef<L.Marker | null>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(13);
+  const initialCenterRef = useRef(initialCenter);
+  const [zoomLevel, setZoomLevel] = useState<number>(initialCenter?.zoom ?? 13);
 
   const onMapClickRef = useRef(onMapClick);
   const onSelectOwnRef = useRef(onSelectOwnBusiness);
@@ -100,9 +103,14 @@ export function TurkeyMap({
     if (!containerRef.current || mapRef.current) return;
 
     const initialProv = getProvinceByPlate(DEFAULT_PROVINCE_PLATE);
-    const map = L.map(containerRef.current, {
-      center: [initialProv.lat, initialProv.lng],
+    const startView = initialCenterRef.current ?? {
+      lat: initialProv.lat,
+      lng: initialProv.lng,
       zoom: initialProv.zoom,
+    };
+    const map = L.map(containerRef.current, {
+      center: [startView.lat, startView.lng],
+      zoom: startView.zoom,
       minZoom: 6,
       maxZoom: 18,
       maxBounds: L.latLngBounds(

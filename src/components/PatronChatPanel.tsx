@@ -5,15 +5,26 @@ import type { ChatMessage, ProvinceInfo } from '../types/game';
 interface PatronChatPanelProps {
   activeProvince: ProvinceInfo;
   messages: ChatMessage[];
+  open?: boolean;
+  onOpenChange?: (nextOpen: boolean) => void;
+  hideFloatingButton?: boolean;
   onSendMessage: (channel: 'global' | string, text: string) => void;
 }
 
 export function PatronChatPanel({
   activeProvince,
   messages,
+  open: controlledOpen,
+  onOpenChange,
+  hideFloatingButton = false,
   onSendMessage,
 }: PatronChatPanelProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next);
+    else setInternalOpen(next);
+  };
   const [scope, setScope] = useState<'city' | 'global'>('city');
   const [draft, setDraft] = useState('');
 
@@ -29,6 +40,7 @@ export function PatronChatPanel({
   };
 
   if (!open) {
+    if (hideFloatingButton) return null;
     return (
       <button
         type="button"

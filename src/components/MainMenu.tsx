@@ -12,6 +12,7 @@ import {
   Bell,
 } from 'lucide-react';
 import type { ThemeMode, UserProfile } from '../types/game';
+import { TURKEY_PROVINCES } from '../game/provinces81';
 import { APP_VERSION } from '../services/otaUpdate';
 
 interface MainMenuProps {
@@ -20,6 +21,8 @@ interface MainMenuProps {
   user: UserProfile | null;
   authLoading: boolean;
   authError: string | null;
+  startingCityPlate: number;
+  onSelectStartingCity: (plate: number) => void;
   onGuestLogin: () => void;
   onGoogleLogin: () => void;
   onContinueLoggedIn: () => void;
@@ -36,6 +39,8 @@ export function MainMenu({
   user,
   authLoading,
   authError,
+  startingCityPlate,
+  onSelectStartingCity,
   onGuestLogin,
   onGoogleLogin,
   onContinueLoggedIn,
@@ -243,6 +248,30 @@ export function MainMenu({
                   İlerlemeniz cihazınızda güvenle saklanır; Google ile bulutta senkronize edin.
                 </p>
               </div>
+
+              {savedBusinessCount === 0 && (
+                <div>
+                  <label
+                    htmlFor="hq-city-select"
+                    className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                  >
+                    Merkez Şehir (Başlangıç İli)
+                  </label>
+                  <select
+                    id="hq-city-select"
+                    data-testid="starting-city-select"
+                    value={startingCityPlate}
+                    onChange={(e) => onSelectStartingCity(Number(e.target.value))}
+                    className="mt-1 min-h-[40px] w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-xs font-bold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    {TURKEY_PROVINCES.map((prov) => (
+                      <option key={prov.plate} value={prov.plate}>
+                        {prov.code} {prov.name} ({prov.region})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <button
                 type="button"
