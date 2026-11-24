@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "buildDate": "2026-11-24",
+  "mandatory": false,
+  "notes": [
+    "Türkiye Mülk İmparatoru ilk sürüm yayında!",
+    "Haritada istenilen noktaya pin bırakarak işletme kurma özelliği eklendi.",
+    "Canlı güncelleme ve bildirim altyapısı aktif edildi."
+  ]
+}

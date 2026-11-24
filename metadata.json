@@ -1,0 +1,6 @@
+{
+  "name": "Türkiye Mülk İmparatoru",
+  "description": "Haritada istenilen noktaya pin bırakarak işletme kurma, canlı güncelleme (OTA) ve bildirim altyapısına sahip Türk emlak ve işletme yönetimi tycoon oyunu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
