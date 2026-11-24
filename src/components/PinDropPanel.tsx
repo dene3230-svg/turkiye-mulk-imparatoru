@@ -3,29 +3,43 @@ import {
   X,
   MapPin,
   Coffee,
+  Monitor,
+  Gamepad2,
+  Sparkles,
   Utensils,
-  Home,
-  Laptop,
-  ShoppingBag,
+  ShoppingCart,
   Hotel,
-  Truck,
   Building2,
   Check,
   AlertTriangle,
+  Waves,
+  Lock,
+  Loader2,
+  ShieldCheck,
+  Ruler,
 } from 'lucide-react';
-import type { BusinessBlueprint, PinLocationInfo } from '../types/game';
-import { BUSINESS_BLUEPRINTS } from '../game/catalog';
+import type {
+  BusinessBlueprint,
+  BusinessTypeId,
+  PinLocationInfo,
+} from '../types/game';
+import { BUSINESS_BLUEPRINTS, MIN_BUSINESS_DISTANCE_METERS } from '../game/catalog';
 import {
   calculateEstablishmentCost,
   formatTL,
   getAffinityMultiplier,
+  type DistanceCheckResult,
 } from '../game/economy';
-import { suggestBusinessName } from '../game/turkeyGeo';
+import { suggestBusinessName } from '../game/provinces81';
 
 interface PinDropPanelProps {
   location: PinLocationInfo;
   cash: number;
-  onEstablish: (blueprintId: string, customName: string) => void;
+  companyLevel: number;
+  ownBranchCount: number;
+  maxBranches: number;
+  distanceCheck: DistanceCheckResult;
+  onEstablish: (blueprintId: BusinessTypeId, customName: string) => void;
   onClose: () => void;
 }
 
@@ -34,18 +48,18 @@ function BlueprintIcon({ iconKey }: { iconKey: BusinessBlueprint['iconKey'] }) {
   switch (iconKey) {
     case 'coffee':
       return <Coffee className={cls} />;
+    case 'monitor':
+      return <Monitor className={cls} />;
+    case 'gamepad':
+      return <Gamepad2 className={cls} />;
+    case 'sparkles':
+      return <Sparkles className={cls} />;
     case 'utensils':
       return <Utensils className={cls} />;
-    case 'home':
-      return <Home className={cls} />;
-    case 'laptop':
-      return <Laptop className={cls} />;
-    case 'shopping-bag':
-      return <ShoppingBag className={cls} />;
+    case 'shopping-cart':
+      return <ShoppingCart className={cls} />;
     case 'hotel':
       return <Hotel className={cls} />;
-    case 'truck':
-      return <Truck className={cls} />;
     default:
       return <Building2 className={cls} />;
   }
@@ -54,10 +68,14 @@ function BlueprintIcon({ iconKey }: { iconKey: BusinessBlueprint['iconKey'] }) {
 export function PinDropPanel({
   location,
   cash,
+  companyLevel,
+  ownBranchCount,
+  maxBranches,
+  distanceCheck,
   onEstablish,
   onClose,
 }: PinDropPanelProps) {
-  const [selectedId, setSelectedId] = useState<string>(BUSINESS_BLUEPRINTS[0].id);
+  const [selectedId, setSelectedId] = useState<BusinessTypeId>('kafe');
   const [customName, setCustomName] = useState<string>(() =>
     suggestBusinessName(location.districtName, BUSINESS_BLUEPRINTS[0].shortName)
   );
@@ -74,8 +92,27 @@ export function PinDropPanel({
 
   const cost = calculateEstablishmentCost(selectedBlueprint, location);
   const affinity = getAffinityMultiplier(selectedBlueprint, location);
-  const estIncomePerSec = Math.round(selectedBlueprint.baseIncomePerSec * affinity);
+  const estHourly = Math.round((selectedBlueprint.baseHourlyIncome * affinity) / 50) * 50;
+  const estPerSec = Math.round(selectedBlueprint.baseIncomePerSec * affinity);
+
+  const isChecking = location.landStatus === 'checking';
+  const isWaterOrInvalid =
+    !location.isWithinTurkey ||
+    location.landStatus === 'water' ||
+    location.landStatus === 'invalid';
+  const isTooClose = !distanceCheck.allowed;
+  const isQuotaFull = ownBranchCount >= maxBranches;
+  const isLevelLocked = companyLevel < selectedBlueprint.minCompanyLevel;
   const canAfford = cash >= cost;
+
+  const canSubmit =
+    !isChecking &&
+    !isWaterOrInvalid &&
+    !isTooClose &&
+    !isQuotaFull &&
+    !isLevelLocked &&
+    canAfford &&
+    Boolean(customName.trim());
 
   const handleSelectBlueprint = (bp: BusinessBlueprint) => {
     setSelectedId(bp.id);
@@ -86,7 +123,7 @@ export function PinDropPanel({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!location.isWithinTurkey || !canAfford || !customName.trim()) return;
+    if (!canSubmit) return;
     onEstablish(selectedBlueprint.id, customName.trim());
   };
 
@@ -94,20 +131,19 @@ export function PinDropPanel({
     <aside
       aria-label="Pin Noktasında İşletme Kur"
       data-testid="pin-drop-panel"
-      className="pointer-events-auto flex h-full w-[clamp(290px,34vw,400px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto flex h-full w-[clamp(300px,35vw,415px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+      <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
             <MapPin className="h-3.5 w-3.5 shrink-0" />
-            <span>Seçilen Konum</span>
+            <span>
+              {location.cityCode} {location.cityName} · {location.districtName}
+            </span>
           </div>
-          <h2 className="truncate text-sm font-bold text-slate-900 dark:text-white">
-            {location.cityName} · {location.districtName}
-          </h2>
-          <p className="mt-0.5 font-mono-num text-[11px] text-slate-500 dark:text-slate-400">
-            {location.regionName} · {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+          <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+            {location.resolvedAddress || `${location.regionName} · ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
           </p>
         </div>
 
@@ -115,58 +151,86 @@ export function PinDropPanel({
           type="button"
           onClick={onClose}
           aria-label="Pin Panelini Kapat"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Location Metrics Strip */}
-      <div className="grid grid-cols-4 gap-1 border-b border-slate-200 bg-slate-50/80 px-3 py-2 text-center dark:border-slate-800 dark:bg-slate-950/50">
-        <div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">Arsa</div>
-          <div className="font-mono-num text-xs font-bold text-slate-900 dark:text-slate-100">
-            x{location.landMultiplier.toFixed(2)}
+      {/* Land Verification + Quota + Distance Status Banner */}
+      <div className="border-b border-slate-200 bg-slate-50/90 px-3.5 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+        {isChecking ? (
+          <div
+            data-testid="land-checking"
+            className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400"
+          >
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <span>Kara ve adres doğrulaması yapılıyor...</span>
           </div>
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">Trafik</div>
-          <div className="font-mono-num text-xs font-bold text-emerald-700 dark:text-emerald-400">
-            x{location.footTraffic.toFixed(2)}
+        ) : isWaterOrInvalid ? (
+          <div
+            role="alert"
+            data-testid="water-block-alert"
+            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+          >
+            <Waves className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              {location.landMessage ||
+                'Deniz, boğaz veya göl üzerine inşaat yasaktır! Lütfen kara üzerinde bir nokta seçin.'}
+            </span>
           </div>
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">Turizm</div>
-          <div className="font-mono-num text-xs font-bold text-sky-700 dark:text-sky-400">
-            x{location.tourism.toFixed(2)}
+        ) : isTooClose ? (
+          <div
+            role="alert"
+            data-testid="distance-block-alert"
+            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+          >
+            <Ruler className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Mevcut "{distanceCheck.nearestName}" işletmesine {distanceCheck.nearestMeters}m
+              mesafede! En az {MIN_BUSINESS_DISTANCE_METERS}m mesafe kuralı gereklidir.
+            </span>
           </div>
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">İş/Tic.</div>
-          <div className="font-mono-num text-xs font-bold text-amber-700 dark:text-amber-400">
-            x{location.business.toFixed(2)}
+        ) : (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+              Kara Doğrulandı · Arsa x{location.landMultiplier.toFixed(2)}
+            </span>
+            <span
+              className={`font-mono-num font-bold ${
+                isQuotaFull
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              Şube: {ownBranchCount}/{maxBranches}
+            </span>
           </div>
-        </div>
+        )}
       </div>
 
-      {!location.isWithinTurkey ? (
+      {/* Main Content */}
+      {isWaterOrInvalid ? (
         <div className="flex flex-1 flex-col items-center justify-center p-5 text-center">
-          <AlertTriangle className="h-9 w-9 text-amber-500" />
+          <AlertTriangle className="h-10 w-10 text-red-500" />
           <h3 className="mt-3 text-sm font-bold text-slate-900 dark:text-white">
-            Türkiye Sınırları Dışında
+            İnşaat İzni Reddedildi
           </h3>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            İşletme kurmak için lütfen Türkiye haritası içinde bir noktaya pin bırakın.
+          <p className="mt-1.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            Su kütleleri (deniz, boğaz, göl, nehir) ve Türkiye dışı koordinatlar üzerine pin
+            bırakılamaz. Lütfen haritada cadde veya yerleşim alanı üzerine tıklayın.
           </p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          {/* Scrollable Business Catalog */}
-          <div className="panel-scroll flex-1 space-y-1.5 p-3">
+          {/* 8 Business Sectors List */}
+          <div className="panel-scroll flex-1 space-y-1.5 p-2.5">
             {BUSINESS_BLUEPRINTS.map((bp) => {
               const bpCost = calculateEstablishmentCost(bp, location);
               const bpAff = getAffinityMultiplier(bp, location);
-              const bpInc = Math.round(bp.baseIncomePerSec * bpAff);
+              const bpHourly = Math.round((bp.baseHourlyIncome * bpAff) / 50) * 50;
+              const locked = companyLevel < bp.minCompanyLevel;
               const affordable = cash >= bpCost;
               const isSelected = bp.id === selectedId;
 
@@ -175,17 +239,17 @@ export function PinDropPanel({
                   key={bp.id}
                   type="button"
                   onClick={() => handleSelectBlueprint(bp)}
-                  className={`flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
+                  className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-colors ${
                     isSelected
                       ? 'border-amber-500 bg-amber-50/90 dark:border-amber-500/80 dark:bg-amber-950/35'
                       : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70'
-                  }`}
+                  } ${locked ? 'opacity-70' : ''}`}
                 >
                   <div
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
                     style={{ backgroundColor: bp.accentColor }}
                   >
-                    <BlueprintIcon iconKey={bp.iconKey} />
+                    {locked ? <Lock className="h-4 w-4" /> : <BlueprintIcon iconKey={bp.iconKey} />}
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -195,7 +259,9 @@ export function PinDropPanel({
                       </span>
                       <span
                         className={`shrink-0 font-mono-num text-xs font-bold ${
-                          affordable
+                          locked
+                            ? 'text-slate-500 dark:text-slate-400'
+                            : affordable
                             ? 'text-slate-900 dark:text-amber-300'
                             : 'text-red-600 dark:text-red-400'
                         }`}
@@ -203,15 +269,24 @@ export function PinDropPanel({
                         {formatTL(bpCost)}
                       </span>
                     </div>
-                    <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      <span className="font-mono-num text-emerald-700 dark:text-emerald-400 font-semibold">
-                        +{formatTL(bpInc)}/sn
+                    <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                      {locked ? (
+                        <span className="font-semibold text-amber-700 dark:text-amber-400">
+                          Şirket Sv.{bp.minCompanyLevel} gerekir
+                        </span>
+                      ) : (
+                        <span className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
+                          {formatTL(bpHourly)}/sa
+                        </span>
+                      )}
+                      <span>
+                        Kapasite: {bp.baseCapacity}
+                        {bp.id === 'avm' ? ' · +%25 Şehir Bonusu' : ''}
                       </span>
-                      <span>Bölge Uyumu x{bpAff.toFixed(2)}</span>
                     </div>
                   </div>
 
-                  {isSelected && (
+                  {isSelected && !locked && (
                     <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-600 text-white">
                       <Check className="h-3 w-3" />
                     </div>
@@ -221,7 +296,7 @@ export function PinDropPanel({
             })}
           </div>
 
-          {/* Footer Name Input + Establish CTA */}
+          {/* Footer Name Input + Establish Button */}
           <div className="border-t border-slate-200 bg-slate-50/90 p-3 dark:border-slate-800 dark:bg-slate-950/70">
             <label
               htmlFor="business-name-input"
@@ -238,24 +313,32 @@ export function PinDropPanel({
                 setCustomName(e.target.value);
                 setNameEdited(true);
               }}
-              placeholder="Örn: Beşiktaş Altın Fırın"
-              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              placeholder="Örn: Beşiktaş Altın Kafe"
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
 
-            <div className="mt-2 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-              <span>Tahmini Gelir:</span>
+            <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+              <span>Saatlik / Canlı Akış:</span>
               <span className="font-mono-num font-bold text-emerald-700 dark:text-emerald-400">
-                +{formatTL(estIncomePerSec)}/sn
+                {formatTL(estHourly)}/sa · +{formatTL(estPerSec)}/sn
               </span>
             </div>
 
             <button
               type="submit"
-              disabled={!canAfford || !customName.trim()}
-              className="mt-2.5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
+              disabled={!canSubmit}
+              className="mt-2 flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
             >
               <span>
-                {canAfford
+                {isChecking
+                  ? 'Kara Doğrulanıyor...'
+                  : isTooClose
+                  ? '75m Mesafe Kuralı Engeli'
+                  : isQuotaFull
+                  ? `Şube Kotası Dolu (${ownBranchCount}/${maxBranches})`
+                  : isLevelLocked
+                  ? `Şirket Seviyesi ${selectedBlueprint.minCompanyLevel} Gerekli`
+                  : canAfford
                   ? `İşletmeyi Kur · ${formatTL(cost)}`
                   : `Yetersiz Bakiye (${formatTL(cost)})`}
               </span>

@@ -1,10 +1,10 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "buildDate": "2026-11-24",
   "mandatory": false,
   "notes": [
-    "Türkiye Mülk İmparatoru ilk sürüm yayında!",
-    "Haritada istenilen noktaya pin bırakarak işletme kurma özelliği eklendi.",
-    "Canlı güncelleme ve bildirim altyapısı aktif edildi."
+    "81 ilin tamamı şehir şehir canlı odalar halinde açıldı",
+    "8 yeni işletme türü (Kafe, İnternet Kafe, PS Salonu, Oyun Merkezi, Restoran, Süpermarket, Otel, AVM) eklendi",
+    "Deniz ve göl üzerine inşaat yasağı ve 75m mesafe koruması aktif edildi"
   ]
 }

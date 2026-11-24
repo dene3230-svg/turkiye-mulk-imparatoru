@@ -1,11 +1,11 @@
-import { X, MapPin, Coins, Trophy, TrendingUp, Crown, CheckCircle2 } from 'lucide-react';
+import { X, MapPin, Coins, Trophy, TrendingUp, Crown, CheckCircle2, DoorOpen } from 'lucide-react';
 import type { EmpireState, MissionDef } from '../types/game';
-import { EMPIRE_RANKS, MISSION_CATALOG, getBlueprintById } from '../game/catalog';
+import { COMPANY_TIERS, MISSION_CATALOG, getBlueprintById } from '../game/catalog';
 import {
-  calculateBusinessIncomePerSec,
+  calculateBusinessHourlyIncome,
   calculateNetWorth,
   formatTL,
-  getEmpireRank,
+  getCompanyTier,
   getMissionProgress,
 } from '../game/economy';
 
@@ -17,6 +17,7 @@ interface SideDrawerProps {
   now: number;
   onClose: () => void;
   onSelectBusiness: (businessId: string) => void;
+  onEnterInterior: (businessId: string) => void;
   onCollectBusiness: (businessId: string) => void;
   onClaimMission: (mission: MissionDef) => void;
   onEnablePinMode: () => void;
@@ -28,18 +29,19 @@ export function SideDrawer({
   now,
   onClose,
   onSelectBusiness,
+  onEnterInterior,
   onCollectBusiness,
   onClaimMission,
   onEnablePinMode,
 }: SideDrawerProps) {
   const netWorth = calculateNetWorth(state, now);
-  const currentRank = getEmpireRank(netWorth);
-  const uniqueCities = new Set(state.businesses.map((b) => b.cityId)).size;
+  const currentTier = getCompanyTier(netWorth);
+  const uniqueCities = new Set(state.businesses.map((b) => b.cityPlate)).size;
 
   const titles: Record<DrawerTab, string> = {
     portfolio: 'Mülk Portföyü',
     missions: 'İmparatorluk Görevleri',
-    market: 'Piyasa & Rütbe',
+    market: 'Piyasa & Şirket Seviyesi',
   };
 
   const eventRemaining = state.activeEvent
@@ -50,7 +52,7 @@ export function SideDrawer({
     <aside
       aria-label={titles[tab]}
       data-testid={`drawer-${tab}`}
-      className="pointer-events-auto flex h-full w-[clamp(290px,34vw,400px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto flex h-full w-[clamp(290px,34vw,405px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
@@ -58,10 +60,11 @@ export function SideDrawer({
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">{titles[tab]}</h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             {tab === 'portfolio' &&
-              `${state.businesses.length} işletme · ${uniqueCities} şehir · Net: ${formatTL(netWorth, true)}`}
+              `${state.businesses.length}/${currentTier.maxBranches} şube · ${uniqueCities} il · Net: ${formatTL(netWorth, true)}`}
             {tab === 'missions' &&
               `${state.claimedMissionIds.length}/${MISSION_CATALOG.length} görev tamamlandı`}
-            {tab === 'market' && `Mevcut Rütbe: ${currentRank.title}`}
+            {tab === 'market' &&
+              `Şirket Sv.${currentTier.level} (${currentTier.title}) · ${currentTier.maxBranches} Şube Kotası`}
           </p>
         </div>
 
@@ -88,8 +91,8 @@ export function SideDrawer({
                   Henüz İşletmeniz Yok
                 </h3>
                 <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  Türkiye haritasında istediğiniz bir noktaya tıklayıp pin bırakarak ilk
-                  işletmenizi kurun.
+                  81 ilden birini seçin, kara üzerinde bir noktaya pin bırakıp ilk işletmenizi
+                  kurun (Başlangıç kotası: 3 şube).
                 </p>
                 <button
                   type="button"
@@ -103,7 +106,12 @@ export function SideDrawer({
               <div className="space-y-2">
                 {state.businesses.map((biz) => {
                   const bp = getBlueprintById(biz.blueprintId);
-                  const inc = calculateBusinessIncomePerSec(biz, state.activeEvent, now);
+                  const hourly = calculateBusinessHourlyIncome(
+                    biz,
+                    state.activeEvent,
+                    now,
+                    state.businesses
+                  );
                   const pending = Math.floor(biz.pendingCash);
 
                   return (
@@ -121,23 +129,35 @@ export function SideDrawer({
                             {biz.customName}
                           </div>
                           <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                            {biz.cityName} · {biz.districtName} · Sv.{biz.level} · {bp?.shortName}
+                            {String(biz.cityPlate).padStart(2, '0')} {biz.cityName} ·{' '}
+                            {biz.districtName} · Sv.{biz.level} · {bp?.shortName}
                           </div>
                         </button>
 
                         <span className="shrink-0 font-mono-num text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                          +{formatTL(inc)}/sn
+                          {formatTL(hourly)}/sa
                         </span>
                       </div>
 
                       <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200/70 pt-2 dark:border-slate-800">
-                        <button
-                          type="button"
-                          onClick={() => onSelectBusiness(biz.id)}
-                          className="text-[11px] font-semibold text-amber-700 hover:underline dark:text-amber-400"
-                        >
-                          Haritada Göster & Yönet
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => onSelectBusiness(biz.id)}
+                            className="text-[11px] font-semibold text-amber-700 hover:underline dark:text-amber-400"
+                          >
+                            Haritada Gör
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onEnterInterior(biz.id)}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:underline dark:text-sky-400"
+                          >
+                            <DoorOpen className="h-3 w-3" />
+                            <span>İçeri Gir</span>
+                          </button>
+                        </div>
+
                         {pending > 0 && (
                           <button
                             type="button"
@@ -235,7 +255,6 @@ export function SideDrawer({
 
         {tab === 'market' && (
           <div className="space-y-3">
-            {/* Active Market Event */}
             {state.activeEvent && (
               <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3 dark:border-amber-800/70 dark:bg-amber-950/35">
                 <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-300">
@@ -252,42 +271,42 @@ export function SideDrawer({
                   {state.activeEvent.description}
                 </p>
                 <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
-                  <span>
-                    Gelir x{state.activeEvent.incomeMultiplier.toFixed(2)}
-                  </span>
+                  <span>Gelir x{state.activeEvent.incomeMultiplier.toFixed(2)}</span>
                   <span aria-hidden="true">·</span>
-                  <span>
-                    Mülk Değeri x{state.activeEvent.valuationMultiplier.toFixed(2)}
-                  </span>
+                  <span>Mülk Değeri x{state.activeEvent.valuationMultiplier.toFixed(2)}</span>
                 </div>
               </div>
             )}
 
-            {/* Empire Rank Ladder */}
             <div>
               <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
                 <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <span>İmparatorluk Rütbeleri</span>
+                <span>Şirket Seviyeleri ve Şube Kotaları</span>
               </div>
               <div className="space-y-1.5">
-                {EMPIRE_RANKS.map((rank) => {
-                  const unlocked = netWorth >= rank.minNetWorth;
-                  const isCurrent = rank.id === currentRank.id;
+                {COMPANY_TIERS.map((tier) => {
+                  const unlocked = netWorth >= tier.minNetWorth;
+                  const isCurrent = tier.level === currentTier.level;
                   return (
                     <div
-                      key={rank.id}
-                      className={`flex items-center justify-between rounded-xl border px-3 py-2 text-xs ${
+                      key={tier.level}
+                      className={`rounded-xl border px-3 py-2 text-xs ${
                         isCurrent
-                          ? 'border-amber-500 bg-amber-50 font-bold text-slate-900 dark:border-amber-500/80 dark:bg-amber-950/40 dark:text-white'
+                          ? 'border-amber-500 bg-amber-50 text-slate-900 dark:border-amber-500/80 dark:bg-amber-950/40 dark:text-white'
                           : unlocked
                           ? 'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200'
                           : 'border-slate-200/60 bg-slate-50/60 text-slate-400 dark:border-slate-800/60 dark:bg-slate-950/40 dark:text-slate-500'
                       }`}
                     >
-                      <span>{rank.title}</span>
-                      <span className="font-mono-num text-[11px]">
-                        {formatTL(rank.minNetWorth, true)}
-                      </span>
+                      <div className="flex items-center justify-between font-bold">
+                        <span>
+                          Sv.{tier.level} · {tier.title}
+                        </span>
+                        <span className="font-mono-num text-[11px]">
+                          {formatTL(tier.minNetWorth, true)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[10px] opacity-80">{tier.unlocksText}</div>
                     </div>
                   );
                 })}

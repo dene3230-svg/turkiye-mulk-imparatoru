@@ -1,24 +1,30 @@
 import type {
   BusinessBlueprint,
-  EmpireRank,
+  BusinessTypeId,
+  CompanyTier,
   EmpireState,
   MarketEvent,
   MissionDef,
   OwnedBusiness,
   PinLocationInfo,
+  RemoteBusinessRecord,
 } from '../types/game';
 import {
+  AVM_SYNERGY_MULTIPLIER,
   BUSINESS_BLUEPRINTS,
-  EMPIRE_RANKS,
+  COMPANY_TIERS,
   MARKET_EVENT_TEMPLATES,
+  MIN_BUSINESS_DISTANCE_METERS,
   STARTING_CASH,
+  TAKEOVER_VALUATION_MULTIPLIER,
   getBlueprintById,
 } from './catalog';
+import { getProvinceByPlate, haversineMeters } from './provinces81';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 
 export function createInitialEmpireState(now = Date.now()): EmpireState {
-  const initialTemplate = MARKET_EVENT_TEMPLATES[2]; // Konut Kredisi Kampanyası
+  const initialTemplate = MARKET_EVENT_TEMPLATES[2]; // Ticari Emlak Canlanması
   return {
     cash: STARTING_CASH,
     totalEarnedLifetime: 0,
@@ -35,7 +41,7 @@ export function createInitialEmpireState(now = Date.now()): EmpireState {
 
 export function getAffinityMultiplier(
   blueprint: BusinessBlueprint,
-  location: PinLocationInfo
+  location: Pick<PinLocationInfo, 'footTraffic' | 'tourism' | 'business'>
 ): number {
   switch (blueprint.zoneAffinity) {
     case 'footTraffic':
@@ -44,8 +50,6 @@ export function getAffinityMultiplier(
       return location.tourism;
     case 'business':
       return location.business;
-    case 'logistics':
-      return location.logistics;
     default:
       return 1;
   }
@@ -53,15 +57,29 @@ export function getAffinityMultiplier(
 
 export function calculateEstablishmentCost(
   blueprint: BusinessBlueprint,
-  location: PinLocationInfo
+  location: Pick<PinLocationInfo, 'landMultiplier'>
 ): number {
   return Math.round((blueprint.baseCost * location.landMultiplier) / 1000) * 1000;
+}
+
+export function hasAvmSynergyForBusiness(
+  business: OwnedBusiness,
+  allOwnBusinesses: OwnedBusiness[]
+): boolean {
+  if (business.blueprintId === 'avm') return false;
+  return allOwnBusinesses.some(
+    (other) =>
+      other.id !== business.id &&
+      other.blueprintId === 'avm' &&
+      other.cityPlate === business.cityPlate
+  );
 }
 
 export function calculateBusinessIncomePerSec(
   business: OwnedBusiness,
   activeEvent: MarketEvent | null,
-  now = Date.now()
+  now = Date.now(),
+  allOwnBusinesses?: OwnedBusiness[]
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
@@ -69,10 +87,18 @@ export function calculateBusinessIncomePerSec(
   const levelMultiplier = 1 + (business.level - 1) * 0.45;
   const staffMultiplier = 1 + business.staffCount * 0.14;
   const boostMultiplier = business.boostEndsAt > now ? 2.0 : 1.0;
+  const avmSynergy =
+    allOwnBusinesses && hasAvmSynergyForBusiness(business, allOwnBusinesses)
+      ? AVM_SYNERGY_MULTIPLIER
+      : 1.0;
 
   let eventMultiplier = 1.0;
   if (activeEvent && activeEvent.endsAt > now) {
-    if (activeEvent.category === 'all' || activeEvent.category === bp.category) {
+    if (
+      activeEvent.category === 'all' ||
+      activeEvent.category === bp.category ||
+      (activeEvent.category === 'retail' && bp.category === 'mall')
+    ) {
       eventMultiplier = activeEvent.incomeMultiplier;
     }
   }
@@ -83,15 +109,37 @@ export function calculateBusinessIncomePerSec(
       levelMultiplier *
       staffMultiplier *
       boostMultiplier *
+      avmSynergy *
       eventMultiplier
   );
+}
+
+export function calculateBusinessHourlyIncome(
+  business: OwnedBusiness,
+  activeEvent: MarketEvent | null,
+  now = Date.now(),
+  allOwnBusinesses?: OwnedBusiness[]
+): number {
+  const bp = getBlueprintById(business.blueprintId);
+  if (!bp) return 0;
+  const perSec = calculateBusinessIncomePerSec(business, activeEvent, now, allOwnBusinesses);
+  const ratio = bp.baseHourlyIncome / Math.max(1, bp.baseIncomePerSec);
+  return Math.round((perSec * ratio) / 50) * 50;
+}
+
+export function calculateBusinessCapacity(business: OwnedBusiness): number {
+  const bp = getBlueprintById(business.blueprintId);
+  if (!bp) return 10;
+  return Math.round(bp.baseCapacity * (1 + (business.level - 1) * 0.35 + business.staffCount * 0.08));
 }
 
 export function calculateVaultCapacity(business: OwnedBusiness): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
   const levelScale = 1 + (business.level - 1) * 0.5;
-  return Math.round(bp.baseIncomePerSec * bp.vaultCapacitySec * business.affinityMultiplier * levelScale);
+  return Math.round(
+    bp.baseIncomePerSec * bp.vaultCapacitySec * business.affinityMultiplier * levelScale
+  );
 }
 
 export function calculateUpgradeCost(business: OwnedBusiness): number {
@@ -127,12 +175,16 @@ export function calculateBusinessValuation(
   const invested =
     business.purchaseCost * (1 + (business.level - 1) * 0.52) +
     business.staffCount * (bp?.staffCostBase ?? 15_000) * 0.5;
-  return Math.round((invested * 0.85 * valMult) / 1000) * 1000;
+  return Math.round((invested * 0.9 * valMult) / 1000) * 1000;
+}
+
+export function calculateTakeoverPrice(valuation: number): number {
+  return Math.round((valuation * TAKEOVER_VALUATION_MULTIPLIER) / 1000) * 1000;
 }
 
 export function calculateTotalIncomePerSec(state: EmpireState, now = Date.now()): number {
   return state.businesses.reduce(
-    (sum, b) => sum + calculateBusinessIncomePerSec(b, state.activeEvent, now),
+    (sum, b) => sum + calculateBusinessIncomePerSec(b, state.activeEvent, now, state.businesses),
     0
   );
 }
@@ -149,23 +201,61 @@ export function calculateNetWorth(state: EmpireState, now = Date.now()): number 
   return Math.floor(state.cash) + assetsValue;
 }
 
-export function getEmpireRank(netWorth: number): EmpireRank {
-  let current = EMPIRE_RANKS[0];
-  for (const rank of EMPIRE_RANKS) {
-    if (netWorth >= rank.minNetWorth) {
-      current = rank;
+export function getCompanyTier(netWorth: number): CompanyTier {
+  let current = COMPANY_TIERS[0];
+  for (const tier of COMPANY_TIERS) {
+    if (netWorth >= tier.minNetWorth) {
+      current = tier;
     }
   }
   return current;
 }
 
-export function getNextEmpireRank(netWorth: number): EmpireRank | null {
-  for (const rank of EMPIRE_RANKS) {
-    if (netWorth < rank.minNetWorth) {
-      return rank;
+export function getNextCompanyTier(netWorth: number): CompanyTier | null {
+  for (const tier of COMPANY_TIERS) {
+    if (netWorth < tier.minNetWorth) {
+      return tier;
     }
   }
   return null;
+}
+
+export interface DistanceCheckResult {
+  allowed: boolean;
+  nearestMeters: number | null;
+  nearestName?: string;
+}
+
+export function checkMinDistance75m(
+  lat: number,
+  lng: number,
+  existingPoints: Array<{ lat: number; lng: number; name: string }>,
+  minMeters = MIN_BUSINESS_DISTANCE_METERS
+): DistanceCheckResult {
+  let nearestMeters: number | null = null;
+  let nearestName: string | undefined;
+
+  for (const pt of existingPoints) {
+    const dist = haversineMeters(lat, lng, pt.lat, pt.lng);
+    if (nearestMeters === null || dist < nearestMeters) {
+      nearestMeters = dist;
+      nearestName = pt.name;
+    }
+  }
+
+  if (nearestMeters !== null && nearestMeters < minMeters) {
+    return {
+      allowed: false,
+      nearestMeters: Math.round(nearestMeters),
+      nearestName,
+    };
+  }
+
+  return {
+    allowed: true,
+    nearestMeters: nearestMeters !== null ? Math.round(nearestMeters) : null,
+    nearestName,
+  };
 }
 
 export interface ActionResult {
@@ -178,9 +268,11 @@ export interface ActionResult {
 
 export function purchaseBusiness(
   state: EmpireState,
-  blueprintId: string,
+  blueprintId: BusinessTypeId,
   location: PinLocationInfo,
   customName: string,
+  owner: { id: string; name: string },
+  nearbyExisting: Array<{ lat: number; lng: number; name: string }> = [],
   now = Date.now()
 ): ActionResult {
   const bp = getBlueprintById(blueprintId);
@@ -190,6 +282,44 @@ export function purchaseBusiness(
   if (!location.isWithinTurkey) {
     return { state, ok: false, error: 'Lütfen Türkiye sınırları içinde bir nokta seçin.' };
   }
+  if (location.landStatus === 'water' || location.landStatus === 'invalid') {
+    return {
+      state,
+      ok: false,
+      error: location.landMessage || 'Deniz, göl veya su yüzeyi üzerine inşaat yapılamaz.',
+    };
+  }
+
+  const netWorth = calculateNetWorth(state, now);
+  const tier = getCompanyTier(netWorth);
+  if (state.businesses.length >= tier.maxBranches) {
+    return {
+      state,
+      ok: false,
+      error: `Şube kotanız doldu (${state.businesses.length}/${tier.maxBranches}). Şirket seviyenizi yükselterek yeni şube açabilirsiniz.`,
+    };
+  }
+  if (tier.level < bp.minCompanyLevel) {
+    return {
+      state,
+      ok: false,
+      error: `${bp.name} için Şirket Seviyesi ${bp.minCompanyLevel} gereklidir.`,
+    };
+  }
+
+  const allExistingPoints = [
+    ...state.businesses.map((b) => ({ lat: b.lat, lng: b.lng, name: b.customName })),
+    ...nearbyExisting,
+  ];
+  const distCheck = checkMinDistance75m(location.lat, location.lng, allExistingPoints);
+  if (!distCheck.allowed) {
+    return {
+      state,
+      ok: false,
+      error: `Mevcut "${distCheck.nearestName}" işletmesine ${distCheck.nearestMeters}m mesafedesiniz. En az ${MIN_BUSINESS_DISTANCE_METERS}m mesafe gereklidir.`,
+    };
+  }
+
   const cost = calculateEstablishmentCost(bp, location);
   if (state.cash < cost) {
     return { state, ok: false, error: 'Yetersiz bakiye.' };
@@ -202,12 +332,14 @@ export function purchaseBusiness(
 
   const affinityMultiplier = getAffinityMultiplier(bp, location);
   const newBusiness: OwnedBusiness = {
-    id: `biz-${now}-${Math.floor(Math.random() * 10000)}`,
+    id: `biz-${now}-${Math.floor(Math.random() * 100000)}`,
+    ownerId: owner.id,
+    ownerName: owner.name,
     blueprintId: bp.id,
     customName: trimmedName.slice(0, 42),
     lat: location.lat,
     lng: location.lng,
-    cityId: location.cityId,
+    cityPlate: location.cityPlate,
     cityName: location.cityName,
     districtName: location.districtName,
     level: 1,
@@ -229,6 +361,72 @@ export function purchaseBusiness(
       ...state,
       cash: state.cash - cost,
       businesses: [newBusiness, ...state.businesses],
+      lastSavedAt: now,
+    },
+  };
+}
+
+export function takeoverCompetitorBusiness(
+  state: EmpireState,
+  target: RemoteBusinessRecord,
+  newOwner: { id: string; name: string },
+  now = Date.now()
+): ActionResult {
+  if (target.owner_id === newOwner.id) {
+    return { state, ok: false, error: 'Bu işletme zaten size ait.' };
+  }
+
+  const bp = getBlueprintById(target.business_type) ?? BUSINESS_BLUEPRINTS[0];
+  const netWorth = calculateNetWorth(state, now);
+  const tier = getCompanyTier(netWorth);
+  if (state.businesses.length >= tier.maxBranches) {
+    return {
+      state,
+      ok: false,
+      error: `Devralma için boş şube kotası gerekiyor (${state.businesses.length}/${tier.maxBranches}).`,
+    };
+  }
+
+  const takeoverPrice = calculateTakeoverPrice(target.valuation);
+  if (state.cash < takeoverPrice) {
+    return {
+      state,
+      ok: false,
+      error: `Devralma için ${formatTL(takeoverPrice)} gereklidir (yetersiz bakiye).`,
+    };
+  }
+
+  const prov = getProvinceByPlate(target.city_plate);
+  const acquired: OwnedBusiness = {
+    id: target.id,
+    ownerId: newOwner.id,
+    ownerName: newOwner.name,
+    blueprintId: bp.id,
+    customName: target.business_name,
+    lat: target.lat,
+    lng: target.lng,
+    cityPlate: target.city_plate,
+    cityName: target.city_name,
+    districtName: target.district || prov.districts[0] || target.city_name,
+    level: Math.max(1, target.level),
+    staffCount: Math.min(bp.maxStaff, Math.max(1, target.level)),
+    purchaseCost: Math.max(bp.baseCost, target.valuation),
+    landMultiplier: prov.landMultiplier,
+    affinityMultiplier: getAffinityMultiplier(bp, prov),
+    pendingCash: 0,
+    totalEarned: 0,
+    boostEndsAt: 0,
+    createdAt: now,
+    notifiedHighVault: false,
+  };
+
+  return {
+    ok: true,
+    business: acquired,
+    state: {
+      ...state,
+      cash: state.cash - takeoverPrice,
+      businesses: [acquired, ...state.businesses.filter((b) => b.id !== acquired.id)],
       lastSavedAt: now,
     },
   };
@@ -270,11 +468,10 @@ export function tickEconomy(
   let totalGenerated = 0;
 
   const updatedBusinesses = state.businesses.map((b) => {
-    const incomePerSec = calculateBusinessIncomePerSec(b, activeEvent, now);
+    const incomePerSec = calculateBusinessIncomePerSec(b, activeEvent, now, state.businesses);
     const earned = incomePerSec * safeDt;
     const capacity = calculateVaultCapacity(b);
 
-    // Managers (staff >= 3) auto-transfer 35% straight to treasury
     const autoRate = b.staffCount >= 3 ? 0.35 : 0;
     const directCash = earned * autoRate;
     const vaultGain = earned - directCash;
@@ -494,7 +691,7 @@ export function getMissionProgress(state: EmpireState, mission: MissionDef, now 
     case 'businessCount':
       return state.businesses.length;
     case 'cityCount':
-      return new Set(state.businesses.map((b) => b.cityId)).size;
+      return new Set(state.businesses.map((b) => b.cityPlate)).size;
     case 'netWorth':
       return calculateNetWorth(state, now);
     case 'maxLevel':

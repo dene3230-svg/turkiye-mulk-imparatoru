@@ -10,41 +10,54 @@ import {
   Trophy,
   Sun,
   Moon,
-  ChevronDown,
+  Globe2,
+  Radio,
 } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
 import type {
+  BusinessTypeId,
   EmpireState,
   GameSettings,
   MissionDef,
   NotificationItem,
   OtaCheckResult,
   PinLocationInfo,
+  ProvinceInfo,
+  RemoteBusinessRecord,
   ScreenState,
   UserProfile,
 } from './types/game';
-import { MISSION_CATALOG } from './game/catalog';
+import { MISSION_CATALOG, isValidBusinessType } from './game/catalog';
 import {
   activateMarketingBoost,
+  calculateBusinessHourlyIncome,
+  calculateBusinessValuation,
   calculateNetWorth,
   calculateTotalIncomePerSec,
   calculateTotalPendingCash,
+  checkMinDistance75m,
   claimMissionReward,
   collectAllCash,
   collectBusinessCash,
   createInitialEmpireState,
   formatTL,
-  getEmpireRank,
+  getCompanyTier,
   getMissionProgress,
   hireStaff,
   purchaseBusiness,
   sellBusiness,
+  takeoverCompetitorBusiness,
   tickEconomy,
   upgradeBusiness,
 } from './game/economy';
-import { TURKEY_CITIES, resolvePinLocation } from './game/turkeyGeo';
+import {
+  DEFAULT_PROVINCE_PLATE,
+  getProvinceByPlate,
+  resolvePinLocation,
+} from './game/provinces81';
+import { validateLandCoordinate } from './game/waterShield';
 import {
   createOrLoadGuestProfile,
   loadEmpireStateLocal,
@@ -54,6 +67,15 @@ import {
   signOutAccount,
   supabase,
 } from './lib/supabase';
+import {
+  fetchCityBusinesses,
+  ownedToRemoteRecord,
+  publishBusinessToRoom,
+  removeBusinessFromRoom,
+  subscribeToCityRoom,
+  updateBusinessInRoom,
+  type RoomSyncStatus,
+} from './services/cityRoom';
 import { applyOtaUpdate, checkForOtaUpdate } from './services/otaUpdate';
 import {
   requestNotificationPermission,
@@ -67,6 +89,9 @@ import { MainMenu } from './components/MainMenu';
 import { TurkeyMap } from './components/TurkeyMap';
 import { PinDropPanel } from './components/PinDropPanel';
 import { BusinessInspector } from './components/BusinessInspector';
+import { CompetitorInspector } from './components/CompetitorInspector';
+import { BusinessInteriorModal } from './components/BusinessInteriorModal';
+import { CityPickerModal } from './components/CityPickerModal';
 import { SideDrawer, type DrawerTab } from './components/SideDrawer';
 import { NotificationCenter, NotificationToasts } from './components/NotificationCenter';
 import { SettingsModal } from './components/SettingsModal';
@@ -90,10 +115,38 @@ function loadSettings(): GameSettings {
     // ignore storage errors
   }
   return {
-    theme: 'light', // Default: crisp Light Theme
+    theme: 'light',
     notificationsEnabled: true,
     soundEnabled: true,
     mapStyle: 'osm',
+  };
+}
+
+// Clean migration for v1.0.0 saved games so players never lose progress on v1.1.0 update
+function migrateSavedEmpire(saved: EmpireState | null, owner: UserProfile): EmpireState {
+  if (!saved) return createInitialEmpireState();
+  const migratedBusinesses = saved.businesses.map((raw) => {
+    const legacy = raw as unknown as Record<string, unknown>;
+    const rawType = String(legacy.blueprintId ?? 'kafe');
+    const blueprintId: BusinessTypeId = isValidBusinessType(rawType) ? rawType : 'kafe';
+    const plate =
+      typeof legacy.cityPlate === 'number' && legacy.cityPlate >= 1 && legacy.cityPlate <= 81
+        ? legacy.cityPlate
+        : DEFAULT_PROVINCE_PLATE;
+    const prov = getProvinceByPlate(plate);
+    return {
+      ...raw,
+      ownerId: (legacy.ownerId as string) || owner.id,
+      ownerName: (legacy.ownerName as string) || owner.name,
+      blueprintId,
+      cityPlate: plate,
+      cityName: (legacy.cityName as string) || prov.name,
+      districtName: (legacy.districtName as string) || prov.districts[0] || prov.name,
+    };
+  });
+  return {
+    ...saved,
+    businesses: migratedBusinesses,
   };
 }
 
@@ -119,15 +172,22 @@ export default function App() {
   const [empire, setEmpire] = useState<EmpireState>(() => {
     const initialUser = autostart ? createOrLoadGuestProfile() : null;
     if (initialUser) {
-      const saved = loadEmpireStateLocal(initialUser.id);
-      if (saved) return saved;
+      return migrateSavedEmpire(loadEmpireStateLocal(initialUser.id), initialUser);
     }
     return createInitialEmpireState();
   });
 
+  // Active 81-province live room state (default: 34 İstanbul)
+  const [activePlate, setActivePlate] = useState<number>(DEFAULT_PROVINCE_PLATE);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [roomRecords, setRoomRecords] = useState<RemoteBusinessRecord[]>([]);
+  const [roomStatus, setRoomStatus] = useState<RoomSyncStatus>('connecting');
+
   const [now, setNow] = useState<number>(() => Date.now());
   const [droppedPin, setDroppedPin] = useState<PinLocationInfo | null>(null);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
+  const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null);
+  const [interiorBusinessId, setInteriorBusinessId] = useState<string | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [pinDropMode, setPinDropMode] = useState<boolean>(true);
   const [flyTarget, setFlyTarget] = useState<{
@@ -139,9 +199,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-1',
-      title: 'Türkiye Mülk İmparatoru Hoş Geldiniz',
-      body: 'Haritada istediğiniz noktaya tıklayıp pin bırakarak ilk işletmenizi kurabilirsiniz.',
+      id: 'welcome-v110',
+      title: 'Türkiye Mülk İmparatoru v1.1.0',
+      body: '81 il canlı odalarla açıldı! 34 İstanbul odasındasınız — kara üzerinde bir noktaya pin bırakıp işletmenizi kurun.',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -157,16 +217,17 @@ export default function App() {
   const [otaUpdating, setOtaUpdating] = useState(false);
 
   const [cashPopups, setCashPopups] = useState<FloatingCashPopup[]>([]);
-  const prevRankIdRef = useRef<string | null>(null);
+  const prevTierLevelRef = useRef<number | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const landCheckAbortRef = useRef<AbortController | null>(null);
 
-  // Sync document.body data-state for reliable automation & accessibility
+  const activeProvince = useMemo(() => getProvinceByPlate(activePlate), [activePlate]);
+
   useEffect(() => {
     document.body.dataset.state = screen;
   }, [screen]);
 
-  // Apply Light/Dark theme class to <html> and persist settings
   useEffect(() => {
     const root = document.documentElement;
     if (settings.theme === 'dark') {
@@ -220,13 +281,12 @@ export default function App() {
     }, 1200);
   }, []);
 
-  // Request native/web notification permissions on first launch & check OTA updates
+  // Request notification permissions & check OTA updates on startup
   useEffect(() => {
     if (settingsRef.current.notificationsEnabled) {
       requestNotificationPermission().catch(() => {});
     }
 
-    // Check OTA updates silently on startup
     checkForOtaUpdate().then((res) => {
       setOtaResult(res);
       if (res.hasUpdate && res.remoteManifest) {
@@ -251,8 +311,7 @@ export default function App() {
         if (!mounted || !data.session) return;
         const profile = sessionToUserProfile(data.session);
         setUser(profile);
-        const saved = loadEmpireStateLocal(profile.id);
-        if (saved) setEmpire(saved);
+        setEmpire(migrateSavedEmpire(loadEmpireStateLocal(profile.id), profile));
       })
       .catch(() => {});
 
@@ -261,17 +320,11 @@ export default function App() {
       if (session) {
         const profile = sessionToUserProfile(session);
         setUser(profile);
-        const saved = loadEmpireStateLocal(profile.id);
-        if (saved) {
-          setEmpire(saved);
-        } else {
-          setEmpire(createInitialEmpireState());
-        }
+        setEmpire(migrateSavedEmpire(loadEmpireStateLocal(profile.id), profile));
         setScreen('playing');
       }
     });
 
-    // Native Android deep link listener for com.fugames.turkiyemulkimparatoru://login-callback
     let capHandle: { remove: () => Promise<void> } | null = null;
     if (Capacitor.isNativePlatform()) {
       CapacitorApp.addListener('appUrlOpen', async (event) => {
@@ -299,7 +352,50 @@ export default function App() {
     };
   }, []);
 
-  // Persist empire state automatically whenever user & empire change
+  // Subscribe to Supabase Realtime city room (`public.businesses`) for the currently selected province
+  useEffect(() => {
+    if (screen !== 'playing') return;
+    let active = true;
+
+    setRoomRecords([]);
+    setRoomStatus('connecting');
+
+    fetchCityBusinesses(activePlate).then(({ records, connected }) => {
+      if (!active) return;
+      setRoomRecords(records);
+      if (!connected) {
+        setRoomStatus('offline');
+      }
+    });
+
+    const unsubscribe = subscribeToCityRoom(activePlate, {
+      onUpsert: (rec) => {
+        if (!active) return;
+        setRoomRecords((prev) => {
+          const exists = prev.some((r) => r.id === rec.id);
+          if (exists) {
+            return prev.map((r) => (r.id === rec.id ? rec : r));
+          }
+          return [rec, ...prev];
+        });
+      },
+      onDelete: (id) => {
+        if (!active) return;
+        setRoomRecords((prev) => prev.filter((r) => r.id !== id));
+      },
+      onStatus: (status) => {
+        if (!active) return;
+        setRoomStatus(status);
+      },
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [screen, activePlate]);
+
+  // Persist empire state automatically
   useEffect(() => {
     if (!user) return;
     saveEmpireStateLocal(user.id, empire);
@@ -346,28 +442,53 @@ export default function App() {
     return () => clearInterval(timer);
   }, [screen, pushNotification]);
 
-  // Watch empire rank promotion
+  // Derived empire metrics
   const netWorth = useMemo(() => calculateNetWorth(empire, now), [empire, now]);
-  const empireRank = useMemo(() => getEmpireRank(netWorth), [netWorth]);
+  const companyTier = useMemo(() => getCompanyTier(netWorth), [netWorth]);
   const totalIncomePerSec = useMemo(
     () => calculateTotalIncomePerSec(empire, now),
     [empire, now]
   );
   const totalPendingCash = useMemo(() => calculateTotalPendingCash(empire), [empire]);
 
+  // Competitor records in current city room (excluding own businesses)
+  const ownIds = useMemo(() => new Set(empire.businesses.map((b) => b.id)), [empire.businesses]);
+  const competitorBusinesses = useMemo(
+    () =>
+      roomRecords.filter(
+        (rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id)
+      ),
+    [roomRecords, user?.id, ownIds]
+  );
+
+  // 75m minimum distance check for currently dropped pin
+  const allExistingPoints = useMemo(
+    () => [
+      ...empire.businesses.map((b) => ({ lat: b.lat, lng: b.lng, name: b.customName })),
+      ...competitorBusinesses.map((r) => ({ lat: r.lat, lng: r.lng, name: r.business_name })),
+    ],
+    [empire.businesses, competitorBusinesses]
+  );
+
+  const droppedPinDistanceCheck = useMemo(() => {
+    if (!droppedPin) return { allowed: true, nearestMeters: null };
+    return checkMinDistance75m(droppedPin.lat, droppedPin.lng, allExistingPoints);
+  }, [droppedPin, allExistingPoints]);
+
+  // Company level promotion alert
   useEffect(() => {
     if (screen !== 'playing') return;
-    if (prevRankIdRef.current && prevRankIdRef.current !== empireRank.id) {
+    if (prevTierLevelRef.current !== null && companyTier.level > prevTierLevelRef.current) {
       pushNotification(
-        'Yeni İmparatorluk Rütbesi!',
-        `Tebrikler! "${empireRank.title}" rütbesine yükseldiniz.`,
+        `Şirket Seviyesi ${companyTier.level}!`,
+        `"${companyTier.title}" oldunuz. ${companyTier.unlocksText}`,
         'milestone',
         true
       );
       soundEngine.playUpgrade();
     }
-    prevRankIdRef.current = empireRank.id;
-  }, [empireRank, screen, pushNotification]);
+    prevTierLevelRef.current = companyTier.level;
+  }, [companyTier, screen, pushNotification]);
 
   const claimableMissionCount = useMemo(() => {
     return MISSION_CATALOG.filter(
@@ -404,12 +525,7 @@ export default function App() {
     setAuthError(null);
     const guest = createOrLoadGuestProfile();
     setUser(guest);
-    const saved = loadEmpireStateLocal(guest.id);
-    if (saved) {
-      setEmpire(saved);
-    } else {
-      setEmpire(createInitialEmpireState());
-    }
+    setEmpire(migrateSavedEmpire(loadEmpireStateLocal(guest.id), guest));
     setScreen('playing');
   };
 
@@ -460,50 +576,163 @@ export default function App() {
     await applyOtaUpdate();
   };
 
-  const handleMapClick = useCallback((lat: number, lng: number) => {
-    const info = resolvePinLocation(lat, lng);
-    setDroppedPin(info);
+  const handleSelectProvince = (prov: ProvinceInfo) => {
+    soundEngine.playClick();
+    setActivePlate(prov.plate);
+    setDroppedPin(null);
     setSelectedBusinessId(null);
-    setActiveDrawer(null);
-    setPinDropMode(true);
-    soundEngine.playPinDrop();
-  }, []);
+    setSelectedCompetitorId(null);
+    setFlyTarget({ lat: prov.lat, lng: prov.lng, zoom: prov.zoom, nonce: Date.now() });
+    pushNotification(
+      `${prov.code} ${prov.name} Odasına Geçildi`,
+      `${prov.region} bölgesi canlı harita odası yüklendi.`,
+      'system',
+      false
+    );
+  };
 
-  const handleEstablishBusiness = (blueprintId: string, customName: string) => {
-    if (!droppedPin) return;
-    const res = purchaseBusiness(empire, blueprintId, droppedPin, customName, Date.now());
+  const handleMapClick = useCallback(
+    (lat: number, lng: number) => {
+      landCheckAbortRef.current?.abort();
+      const abort = new AbortController();
+      landCheckAbortRef.current = abort;
+
+      const info = resolvePinLocation(lat, lng, activePlate);
+      setDroppedPin(info);
+      setSelectedBusinessId(null);
+      setSelectedCompetitorId(null);
+      setActiveDrawer(null);
+      setPinDropMode(true);
+      soundEngine.playPinDrop();
+
+      validateLandCoordinate(lat, lng, abort.signal).then((validation) => {
+        if (abort.signal.aborted) return;
+        setDroppedPin((current) => {
+          if (!current || current.lat !== info.lat || current.lng !== info.lng) {
+            return current;
+          }
+          return {
+            ...current,
+            districtName: validation.resolvedDistrict || current.districtName,
+            landStatus: validation.status,
+            landMessage: validation.reason,
+            resolvedAddress: validation.resolvedAddress,
+          };
+        });
+      });
+    },
+    [activePlate]
+  );
+
+  const handleEstablishBusiness = (blueprintId: BusinessTypeId, customName: string) => {
+    if (!droppedPin || !user) return;
+    const res = purchaseBusiness(
+      empire,
+      blueprintId,
+      droppedPin,
+      customName,
+      { id: user.id, name: user.name },
+      competitorBusinesses.map((r) => ({ lat: r.lat, lng: r.lng, name: r.business_name })),
+      Date.now()
+    );
     if (!res.ok || !res.business) {
       if (res.error) {
-        pushNotification('Kurulum Başarısız', res.error, 'system', false);
+        pushNotification('Kurulum Engellendi', res.error, 'system', false);
       }
       return;
     }
 
+    const created = res.business;
     soundEngine.playPurchase();
     setEmpire(res.state);
     setDroppedPin(null);
-    setSelectedBusinessId(res.business.id);
+    setSelectedBusinessId(created.id);
+
+    // Sync to Supabase public.businesses live city room
+    const hourly = calculateBusinessHourlyIncome(
+      created,
+      res.state.activeEvent,
+      Date.now(),
+      res.state.businesses
+    );
+    const valuation = calculateBusinessValuation(created, res.state.activeEvent, Date.now());
+    publishBusinessToRoom(ownedToRemoteRecord(created, hourly, valuation)).catch(() => {});
+
     pushNotification(
       'Yeni İşletme Açıldı!',
-      `${res.business.customName} (${res.business.cityName} · ${res.business.districtName}) hizmete başladı.`,
+      `${created.customName} (${String(created.cityPlate).padStart(2, '0')} ${created.cityName}) canlı haritada yayında.`,
       'milestone',
       true
     );
   };
 
-  const handleSelectBusiness = useCallback(
+  const handleSelectOwnBusiness = useCallback(
     (businessId: string) => {
       const target = empire.businesses.find((b) => b.id === businessId);
       setSelectedBusinessId(businessId);
+      setSelectedCompetitorId(null);
       setDroppedPin(null);
       setActiveDrawer(null);
       soundEngine.playClick();
       if (target) {
-        setFlyTarget({ lat: target.lat, lng: target.lng, zoom: 14, nonce: Date.now() });
+        if (target.cityPlate !== activePlate) {
+          setActivePlate(target.cityPlate);
+        }
+        setFlyTarget({ lat: target.lat, lng: target.lng, zoom: 15, nonce: Date.now() });
       }
     },
-    [empire.businesses]
+    [empire.businesses, activePlate]
   );
+
+  const handleSelectCompetitor = useCallback((record: RemoteBusinessRecord) => {
+    setSelectedCompetitorId(record.id);
+    setSelectedBusinessId(null);
+    setDroppedPin(null);
+    setActiveDrawer(null);
+    soundEngine.playClick();
+    setFlyTarget({ lat: record.lat, lng: record.lng, zoom: 15, nonce: Date.now() });
+  }, []);
+
+  const handleTakeoverCompetitor = (record: RemoteBusinessRecord) => {
+    if (!user) return;
+    const res = takeoverCompetitorBusiness(
+      empire,
+      record,
+      { id: user.id, name: user.name },
+      Date.now()
+    );
+    if (!res.ok || !res.business) {
+      if (res.error) {
+        pushNotification('Devralma Başarısız', res.error, 'system', false);
+      }
+      return;
+    }
+
+    const acquired = res.business;
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    setSelectedCompetitorId(null);
+    setSelectedBusinessId(acquired.id);
+
+    // Update ownership in Supabase live room
+    updateBusinessInRoom(record.id, {
+      owner_id: user.id,
+      owner_name: user.name,
+    }).catch(() => {});
+
+    setRoomRecords((prev) =>
+      prev.map((r) =>
+        r.id === record.id ? { ...r, owner_id: user.id, owner_name: user.name } : r
+      )
+    );
+
+    pushNotification(
+      'Rakip İşletme Devralındı!',
+      `${acquired.customName} artık sizin portföyünüzde.`,
+      'milestone',
+      true
+    );
+  };
 
   const handleCollectBusiness = (businessId: string) => {
     const res = collectBusinessCash(empire, businessId, Date.now());
@@ -526,6 +755,20 @@ export default function App() {
     if (!res.ok || !res.business) return;
     soundEngine.playUpgrade();
     setEmpire(res.state);
+
+    const hourly = calculateBusinessHourlyIncome(
+      res.business,
+      res.state.activeEvent,
+      Date.now(),
+      res.state.businesses
+    );
+    const valuation = calculateBusinessValuation(res.business, res.state.activeEvent, Date.now());
+    updateBusinessInRoom(res.business.id, {
+      level: res.business.level,
+      hourly_income: hourly,
+      valuation,
+    }).catch(() => {});
+
     pushNotification(
       'İşletme Yükseltildi',
       `${res.business.customName} Seviye ${res.business.level} oldu!`,
@@ -560,7 +803,9 @@ export default function App() {
     soundEngine.playCashCollect();
     setEmpire(res.state);
     setSelectedBusinessId(null);
+    if (interiorBusinessId === businessId) setInteriorBusinessId(null);
     spawnCashPopup(res.collectedAmount);
+    removeBusinessFromRoom(businessId).catch(() => {});
   };
 
   const handleClaimMission = (mission: MissionDef) => {
@@ -582,6 +827,8 @@ export default function App() {
     setEmpire(fresh);
     setDroppedPin(null);
     setSelectedBusinessId(null);
+    setSelectedCompetitorId(null);
+    setInteriorBusinessId(null);
     setActiveDrawer(null);
     if (user) {
       saveEmpireStateLocal(user.id, fresh);
@@ -594,19 +841,21 @@ export default function App() {
     );
   };
 
-  const handleCityJump = (cityId: string) => {
-    const city = TURKEY_CITIES.find((c) => c.id === cityId);
-    if (!city) return;
-    soundEngine.playClick();
-    setFlyTarget({ lat: city.lat, lng: city.lng, zoom: city.zoom, nonce: Date.now() });
-  };
-
   const selectedBusiness = useMemo(
     () => empire.businesses.find((b) => b.id === selectedBusinessId) ?? null,
     [empire.businesses, selectedBusinessId]
   );
 
-  // Check saved guest count for main menu metadata
+  const selectedCompetitor = useMemo(
+    () => competitorBusinesses.find((r) => r.id === selectedCompetitorId) ?? null,
+    [competitorBusinesses, selectedCompetitorId]
+  );
+
+  const interiorBusiness = useMemo(
+    () => empire.businesses.find((b) => b.id === interiorBusinessId) ?? null,
+    [empire.businesses, interiorBusinessId]
+  );
+
   const menuSavedCount = useMemo(() => {
     if (empire.businesses.length > 0) return empire.businesses.length;
     const guest = createOrLoadGuestProfile();
@@ -615,13 +864,10 @@ export default function App() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-slate-100 text-slate-900 dark:bg-[#0B1221] dark:text-slate-100">
-      {/* Landscape-Only Guard (shown whenever device is held vertically) */}
       <OrientationGuard />
 
-      {/* 1. Studio Intro */}
       {screen === 'intro' && <StudioIntro onComplete={() => setScreen('menu')} />}
 
-      {/* 2. Main Menu */}
       {screen === 'menu' && (
         <MainMenu
           theme={settings.theme}
@@ -640,20 +886,23 @@ export default function App() {
         />
       )}
 
-      {/* 3. Active Tycoon Map Gameplay Shell */}
       {screen === 'playing' && (
         <div className="relative h-full w-full overflow-hidden">
-          {/* Full-bleed Interactive Turkey Map */}
           <TurkeyMap
             theme={settings.theme}
             mapStyle={settings.mapStyle}
-            businesses={empire.businesses}
+            activePlate={activePlate}
+            ownBusinesses={empire.businesses}
+            competitorBusinesses={competitorBusinesses}
             selectedBusinessId={selectedBusinessId}
+            selectedCompetitorId={selectedCompetitorId}
             droppedPin={droppedPin}
+            droppedPinBlocked={!droppedPinDistanceCheck.allowed}
             pinDropMode={pinDropMode}
             flyTarget={flyTarget}
             onMapClick={handleMapClick}
-            onSelectBusiness={handleSelectBusiness}
+            onSelectOwnBusiness={handleSelectOwnBusiness}
+            onSelectCompetitor={handleSelectCompetitor}
           />
 
           {/* Top Compact Landscape HUD Overlay */}
@@ -661,7 +910,7 @@ export default function App() {
             aria-label="Oyun Durum Çubuğu"
             className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex items-center justify-between gap-2 px-[max(10px,var(--safe-left))] pr-[max(10px,var(--safe-right))] pt-[max(8px,var(--safe-top))]"
           >
-            {/* Left Economy Cluster */}
+            {/* Left Economy & Quota Cluster */}
             <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-slate-200/95 bg-white/95 px-2.5 py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95">
               <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-amber-500/50 bg-[#0B1426]">
                 <img
@@ -674,16 +923,15 @@ export default function App() {
 
               <div className="relative pr-1">
                 <div className="text-[10px] font-semibold leading-none text-amber-700 dark:text-amber-400">
-                  {empireRank.title}
+                  Sv.{companyTier.level} · {companyTier.title}
                 </div>
                 <div
                   data-testid="hud-cash"
-                  className="mt-0.5 font-mono-num text-[clamp(0.88rem,1.45vw,1.1rem)] font-extrabold leading-none text-slate-900 dark:text-white"
+                  className="mt-0.5 font-mono-num text-[clamp(0.86rem,1.4vw,1.08rem)] font-extrabold leading-none text-slate-900 dark:text-white"
                 >
                   {formatTL(empire.cash)}
                 </div>
 
-                {/* Floating +₺ animation */}
                 {cashPopups.map((p) => (
                   <span
                     key={p.id}
@@ -697,7 +945,9 @@ export default function App() {
               <div className="hidden h-7 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
 
               <div className="hidden pr-1 sm:block">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">Pasif Gelir</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Şube {empire.businesses.length}/{companyTier.maxBranches}
+                </div>
                 <div
                   data-testid="hud-income"
                   className="font-mono-num text-xs font-bold leading-none text-emerald-700 dark:text-emerald-400"
@@ -718,24 +968,27 @@ export default function App() {
               )}
             </div>
 
-            {/* Right Utility Cluster */}
+            {/* Right City Room Switcher & Utility Cluster */}
             <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95">
-              {/* City Quick-Jump Selector */}
-              <div className="relative flex items-center">
-                <select
-                  aria-label="Şehre Git"
-                  defaultValue="istanbul"
-                  onChange={(e) => handleCityJump(e.target.value)}
-                  className="h-9 appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-2.5 pr-7 text-xs font-semibold text-slate-800 outline-none hover:bg-slate-100 focus:border-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                >
-                  {TURKEY_CITIES.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-slate-500" />
-              </div>
+              {/* 81-Province Live Room Switcher Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  setCityPickerOpen(true);
+                }}
+                aria-label="Şehir Seç veya Değiştir"
+                data-testid="city-switcher-btn"
+                className="flex h-9 items-center gap-1.5 rounded-xl border border-amber-300/80 bg-amber-50/90 px-2.5 text-xs font-bold text-slate-900 transition-colors hover:bg-amber-100 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/50 whitespace-nowrap"
+              >
+                <Globe2 className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
+                <span className="font-mono-num">{activeProvince.code}</span>
+                <span>{activeProvince.name}</span>
+                <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 lg:inline-flex">
+                  · <Radio className="h-3 w-3" />
+                  {roomStatus === 'live' ? 'Canlı' : 'Oda'}
+                </span>
+              </button>
 
               <button
                 type="button"
@@ -796,7 +1049,7 @@ export default function App() {
             </div>
           </header>
 
-          {/* Bottom-Left Compact Dock (Thumb-Friendly Landscape Navigation) */}
+          {/* Bottom-Left Compact Dock */}
           <nav
             aria-label="Oyun Araç Çubuğu"
             className="pointer-events-auto fixed bottom-[max(10px,var(--safe-bottom))] left-[max(10px,var(--safe-left))] z-[600] flex items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl dark:border-slate-700/90 dark:bg-slate-900/95"
@@ -808,13 +1061,13 @@ export default function App() {
                 setPinDropMode(true);
                 setActiveDrawer(null);
                 setSelectedBusinessId(null);
+                setSelectedCompetitorId(null);
                 if (!droppedPin) {
-                  // Offer immediate pin at Istanbul center if player taps Pin button directly
-                  handleMapClick(41.022, 29.005);
+                  handleMapClick(activeProvince.lat, activeProvince.lng);
                 }
               }}
               className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
-                droppedPin || (!activeDrawer && !selectedBusiness)
+                droppedPin || (!activeDrawer && !selectedBusiness && !selectedCompetitor)
                   ? 'bg-amber-600 text-white shadow-xs'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
@@ -829,6 +1082,7 @@ export default function App() {
                 soundEngine.playClick();
                 setDroppedPin(null);
                 setSelectedBusinessId(null);
+                setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'portfolio' ? null : 'portfolio'));
               }}
               className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
@@ -838,7 +1092,9 @@ export default function App() {
               }`}
             >
               <Building2 className="h-4 w-4 shrink-0" />
-              <span>Portföy ({empire.businesses.length})</span>
+              <span>
+                Portföy ({empire.businesses.length}/{companyTier.maxBranches})
+              </span>
             </button>
 
             <button
@@ -847,6 +1103,7 @@ export default function App() {
                 soundEngine.playClick();
                 setDroppedPin(null);
                 setSelectedBusinessId(null);
+                setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'missions' ? null : 'missions'));
               }}
               className={`relative flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
@@ -870,6 +1127,7 @@ export default function App() {
                 soundEngine.playClick();
                 setDroppedPin(null);
                 setSelectedBusinessId(null);
+                setSelectedCompetitorId(null);
                 setActiveDrawer((prev) => (prev === 'market' ? null : 'market'));
               }}
               className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors whitespace-nowrap ${
@@ -883,30 +1141,42 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Subtle contextual helper when map is clean and player has 0 businesses */}
-          {empire.businesses.length === 0 && !droppedPin && !activeDrawer && (
-            <div className="pointer-events-none fixed bottom-[max(62px,calc(58px+var(--safe-bottom)))] left-[max(10px,var(--safe-left))] z-[500] max-w-xs rounded-xl border border-amber-300/80 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
-              <strong className="text-amber-700 dark:text-amber-400">İpucu:</strong> Haritada
-              istediğiniz caddeye veya şehre tıklayarak pin bırakın ve ilk işletmenizi kurun.
-            </div>
-          )}
+          {/* Contextual Hint when empty */}
+          {empire.businesses.length === 0 &&
+            !droppedPin &&
+            !activeDrawer &&
+            !selectedCompetitor && (
+              <div className="pointer-events-none fixed bottom-[max(62px,calc(58px+var(--safe-bottom)))] left-[max(10px,var(--safe-left))] z-[500] max-w-xs rounded-xl border border-amber-300/80 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
+                <strong className="text-amber-700 dark:text-amber-400">
+                  {activeProvince.code} {activeProvince.name}:
+                </strong>{' '}
+                Kara üzerinde bir caddeye tıklayıp pin bırakın (deniz/göl yasaktır, 75m mesafe
+                korumalı).
+              </div>
+            )}
 
-          {/* Right Contextual Side Panel Container (never pushes or shrinks the map) */}
-          {(droppedPin || selectedBusiness || activeDrawer) && (
+          {/* Right Contextual Side Panel Container */}
+          {(droppedPin || selectedBusiness || selectedCompetitor || activeDrawer) && (
             <div className="pointer-events-none fixed bottom-[max(10px,var(--safe-bottom))] right-[max(10px,var(--safe-right))] top-[calc(66px+var(--safe-top))] z-[650] flex justify-end">
               {droppedPin ? (
                 <PinDropPanel
                   location={droppedPin}
                   cash={empire.cash}
+                  companyLevel={companyTier.level}
+                  ownBranchCount={empire.businesses.length}
+                  maxBranches={companyTier.maxBranches}
+                  distanceCheck={droppedPinDistanceCheck}
                   onEstablish={handleEstablishBusiness}
                   onClose={() => setDroppedPin(null)}
                 />
               ) : selectedBusiness ? (
                 <BusinessInspector
                   business={selectedBusiness}
+                  allOwnBusinesses={empire.businesses}
                   cash={empire.cash}
                   activeEvent={empire.activeEvent}
                   now={now}
+                  onEnterInterior={(id) => setInteriorBusinessId(id)}
                   onCollect={handleCollectBusiness}
                   onUpgrade={handleUpgradeBusiness}
                   onHireStaff={handleHireStaff}
@@ -914,18 +1184,28 @@ export default function App() {
                   onSell={handleSellBusiness}
                   onClose={() => setSelectedBusinessId(null)}
                 />
+              ) : selectedCompetitor ? (
+                <CompetitorInspector
+                  competitor={selectedCompetitor}
+                  cash={empire.cash}
+                  ownBranchCount={empire.businesses.length}
+                  maxBranches={companyTier.maxBranches}
+                  onTakeover={handleTakeoverCompetitor}
+                  onClose={() => setSelectedCompetitorId(null)}
+                />
               ) : activeDrawer ? (
                 <SideDrawer
                   tab={activeDrawer}
                   state={empire}
                   now={now}
                   onClose={() => setActiveDrawer(null)}
-                  onSelectBusiness={handleSelectBusiness}
+                  onSelectBusiness={handleSelectOwnBusiness}
+                  onEnterInterior={(id) => setInteriorBusinessId(id)}
                   onCollectBusiness={handleCollectBusiness}
                   onClaimMission={handleClaimMission}
                   onEnablePinMode={() => {
                     setActiveDrawer(null);
-                    handleMapClick(41.022, 29.005);
+                    handleMapClick(activeProvince.lat, activeProvince.lng);
                   }}
                 />
               ) : null}
@@ -934,7 +1214,28 @@ export default function App() {
         </div>
       )}
 
-      {/* Global Overlays: Notification Center, Toasts, Settings, OTA Update Modal */}
+      {/* Modals & Drawers */}
+      <CityPickerModal
+        open={cityPickerOpen}
+        activePlate={activePlate}
+        ownBusinesses={empire.businesses}
+        onSelectProvince={handleSelectProvince}
+        onClose={() => setCityPickerOpen(false)}
+      />
+
+      <BusinessInteriorModal
+        business={interiorBusiness}
+        allOwnBusinesses={empire.businesses}
+        cash={empire.cash}
+        activeEvent={empire.activeEvent}
+        now={now}
+        onCollect={handleCollectBusiness}
+        onUpgrade={handleUpgradeBusiness}
+        onHireStaff={handleHireStaff}
+        onBoost={handleBoostBusiness}
+        onClose={() => setInteriorBusinessId(null)}
+      />
+
       <NotificationToasts
         toasts={toasts}
         onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}

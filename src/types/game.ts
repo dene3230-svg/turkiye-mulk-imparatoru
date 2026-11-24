@@ -12,77 +12,117 @@ export interface UserProfile {
   provider: AuthProvider;
 }
 
+export type GeographicRegion =
+  | 'Marmara'
+  | 'Ege'
+  | 'Akdeniz'
+  | 'İç Anadolu'
+  | 'Karadeniz'
+  | 'Doğu Anadolu'
+  | 'Güneydoğu Anadolu';
+
+export type BusinessTypeId =
+  | 'kafe'
+  | 'internet_kafe'
+  | 'ps_salonu'
+  | 'oyun_merkezi'
+  | 'restoran'
+  | 'supermarket'
+  | 'otel'
+  | 'avm';
+
 export type BusinessCategory =
+  | 'cafe'
+  | 'gaming'
   | 'food'
-  | 'residential'
-  | 'office'
   | 'retail'
   | 'tourism'
-  | 'logistics'
-  | 'landmark';
+  | 'mall';
 
 export interface BusinessBlueprint {
-  id: string;
+  id: BusinessTypeId;
   name: string;
   shortName: string;
   category: BusinessCategory;
   description: string;
+  upgradeFocus: string;
   baseCost: number;
-  baseIncomePerSec: number;
-  vaultCapacitySec: number; // How many seconds of revenue fit before full
+  baseHourlyIncome: number; // Real-world scale hourly income (displayed prominently)
+  baseIncomePerSec: number; // Live gameplay income per second
+  baseCapacity: number; // Customer capacity inside the venue
+  vaultCapacitySec: number;
+  minCompanyLevel: number;
   maxLevel: number;
   maxStaff: number;
   staffCostBase: number;
   accentColor: string;
+  interiorTheme: string;
   iconKey:
     | 'coffee'
+    | 'monitor'
+    | 'gamepad'
+    | 'sparkles'
     | 'utensils'
-    | 'home'
-    | 'laptop'
-    | 'shopping-bag'
+    | 'shopping-cart'
     | 'hotel'
-    | 'truck'
     | 'building';
-  zoneAffinity: 'footTraffic' | 'tourism' | 'business' | 'logistics';
+  zoneAffinity: 'footTraffic' | 'tourism' | 'business';
 }
 
-export interface CityRegion {
-  id: string;
+export interface ProvinceInfo {
+  plate: number; // 1..81
+  code: string; // '01'..'81'
   name: string;
-  region: string;
+  region: GeographicRegion;
   lat: number;
   lng: number;
   zoom: number;
   districts: string[];
   landMultiplier: number;
-  footTraffic: number; // 0.8 - 1.5
-  tourism: number; // 0.8 - 1.6
-  business: number; // 0.8 - 1.55
-  logistics: number; // 0.8 - 1.5
+  footTraffic: number;
+  tourism: number;
+  business: number;
+}
+
+export type LandValidationStatus = 'checking' | 'valid' | 'water' | 'invalid';
+
+export interface LandValidationResult {
+  status: Exclude<LandValidationStatus, 'checking'>;
+  isLand: boolean;
+  reason?: string;
+  waterBodyName?: string;
+  resolvedAddress?: string;
+  resolvedDistrict?: string;
+  source: 'local-shield' | 'nominatim' | 'fallback';
 }
 
 export interface PinLocationInfo {
   lat: number;
   lng: number;
-  cityId: string;
+  cityPlate: number;
+  cityCode: string;
   cityName: string;
   districtName: string;
-  regionName: string;
+  regionName: GeographicRegion;
   landMultiplier: number;
   footTraffic: number;
   tourism: number;
   business: number;
-  logistics: number;
   isWithinTurkey: boolean;
+  landStatus: LandValidationStatus;
+  landMessage?: string;
+  resolvedAddress?: string;
 }
 
 export interface OwnedBusiness {
   id: string;
-  blueprintId: string;
+  ownerId: string;
+  ownerName: string;
+  blueprintId: BusinessTypeId;
   customName: string;
   lat: number;
   lng: number;
-  cityId: string;
+  cityPlate: number;
   cityName: string;
   districtName: string;
   level: number;
@@ -92,9 +132,26 @@ export interface OwnedBusiness {
   affinityMultiplier: number;
   pendingCash: number;
   totalEarned: number;
-  boostEndsAt: number; // timestamp ms
+  boostEndsAt: number;
   createdAt: number;
   notifiedHighVault?: boolean;
+}
+
+export interface RemoteBusinessRecord {
+  id: string;
+  owner_id: string;
+  owner_name: string;
+  city_plate: number;
+  city_name: string;
+  district: string;
+  business_name: string;
+  business_type: BusinessTypeId;
+  lat: number;
+  lng: number;
+  level: number;
+  hourly_income: number;
+  valuation: number;
+  created_at: string;
 }
 
 export interface MarketEvent {
@@ -102,18 +159,20 @@ export interface MarketEvent {
   title: string;
   description: string;
   category: BusinessCategory | 'all';
-  incomeMultiplier: number; // e.g., 1.35 for +35%
-  valuationMultiplier: number; // e.g., 1.15 for +15%
+  incomeMultiplier: number;
+  valuationMultiplier: number;
   durationSec: number;
   startedAt: number;
   endsAt: number;
 }
 
-export interface EmpireRank {
-  id: string;
+export interface CompanyTier {
+  level: number;
   title: string;
   minNetWorth: number;
+  maxBranches: number;
   badgeColor: string;
+  unlocksText: string;
 }
 
 export interface MissionDef {
