@@ -1,11 +1,10 @@
 {
-  "version": "1.2.3",
+  "version": "1.2.6",
   "buildDate": "2026-11-24",
   "mandatory": false,
   "notes": [
-    "Tüm telefon ve tablet ekranları için evrensel responsive panel düzeni ve kenardan kenara tam ekran modu eklendi.",
-    "Sağ İşletme Kur çekmecesi üst ve alt bar arasında sabitlenerek 2 sütunlu akıcı kaydırılabilir 13 sektör kartına geçirildi.",
-    "Android 10–15+ için Edge-to-Edge tam ekran ve kamera çentiği (shortEdges) koruması eklendi.",
-    "Zaman hızı (Durdur/1x/2x/4x), Muhasebe & Gelir-Gider bilançosu, dinamik görevler ve üst yönetici saatlik otomatik tahsilatı aktif."
+    "Tüm menüler telefonlar için ferah tek sütunlu arayüzle yenilendi",
+    "Rakip firmalar ve bankalar için özel kurumsal logolar eklendi",
+    "Oyun günü/takvim göstergesi ve Şube Müdürü tam otomasyonu aktif edildi"
   ]
 }

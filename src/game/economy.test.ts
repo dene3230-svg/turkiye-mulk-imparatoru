@@ -30,14 +30,20 @@ import {
   GEOGRAPHIC_REGIONS,
   TURKEY_PROVINCES,
   getProvinceByPlate,
+  haversineMeters,
   resolvePinLocation,
 } from './provinces81.ts';
 import { checkLocalWaterShield, evaluateNominatimReverse } from './waterShield.ts';
 import {
+  MAX_BRANCH_ASSISTANT_MANAGERS,
+  MAX_BRANCH_MANAGERS,
+  MAX_BRANCH_WORKERS,
   generateCandidatePool,
+  getBranchStaffSlots,
   hireCandidateFromPool,
   resolveBusinessAutomation,
 } from './hrEngine.ts';
+import { generateSeedCityRivals } from '../services/cityRoom.ts';
 import {
   SEED_FRANCHISE_BRANDS,
   createFranchiseBrand,
@@ -457,17 +463,19 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.2.3');
-  assert.equal(compareSemver('1.2.2', '1.2.3'), 1);
-  assert.equal(compareSemver('1.2.3', '1.2.3'), 0);
+  assert.equal(APP_VERSION, '1.2.6');
+  assert.equal(compareSemver('1.2.5', '1.2.6'), 1);
+  assert.equal(compareSemver('1.2.6', '1.2.6'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
 
-test('v1.2.2 Time & Speed controls: pause freezes clock/income, 1x/2x/4x scale clock and hours accurately', () => {
+test('v1.2.6 Time & Calendar controls: pause freezes clock/income, 1x/4x scale accurately, formatGameClock shows Gün/Ay/HH:MM', () => {
   const now = 300_000;
   let state = createInitialEmpireState(now);
   assert.equal(state.gameMinutes, STARTING_GAME_MINUTES);
-  assert.equal(formatGameClock(STARTING_GAME_MINUTES).label, 'Gün 1 • 09:00');
+  const startClock = formatGameClock(STARTING_GAME_MINUTES);
+  assert.equal(startClock.label, 'Gün 1 • 1. Ay • 09:00');
+  assert.equal(startClock.totalDaysLabel, 'Toplam 1. Gün');
 
   const owner = { id: 'p1', name: 'Patron' };
   const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Saat Kafe', owner, [], now);
@@ -479,6 +487,8 @@ test('v1.2.2 Time & Speed controls: pause freezes clock/income, 1x/2x/4x scale c
   assert.equal(pausedTick.state.gameMinutes, STARTING_GAME_MINUTES);
   assert.equal(pausedTick.state.businesses[0].pendingCash, 0);
   assert.equal(pausedTick.hoursPassed, 0);
+  assert.equal(pausedTick.daysPassed, 0);
+  assert.equal(pausedTick.dayEndSummary, null);
 
   // 1x tick (1 sec = +10 game minutes) vs 4x tick (4 sec = +40 game minutes)
   const tick1x = tickEconomy(state, 1, now + 1000);
@@ -487,28 +497,29 @@ test('v1.2.2 Time & Speed controls: pause freezes clock/income, 1x/2x/4x scale c
   assert.equal(tick4x.state.gameMinutes, STARTING_GAME_MINUTES + 40);
   assert.ok(tick4x.state.businesses[0].pendingCash > tick1x.state.businesses[0].pendingCash * 3.5);
 
-  // 6 seconds at 1x = 60 game minutes -> 1 full in-game hour (Gün 1 • 10:00)
+  // 6 seconds at 1x = 60 game minutes -> 1 full in-game hour (Gün 1 • 1. Ay • 10:00)
   const tickHour = tickEconomy(state, 6, now + 6000);
   assert.equal(tickHour.hoursPassed, 1);
-  assert.equal(formatGameClock(tickHour.state.gameMinutes).label, 'Gün 1 • 10:00');
+  assert.equal(formatGameClock(tickHour.state.gameMinutes).label, 'Gün 1 • 1. Ay • 10:00');
 });
 
-test('v1.2.2 Auto-Collect Revenue: strictly Bölge Sorumlusu (4 branches) & Genel Müdür (all city), NOT Şube Müdürü', () => {
+test('v1.2.6 Auto-Collect Revenue: Şube Müdürü, Bölge Sorumlusu & Genel Müdür all auto-collect hourly, Müdür Yrd. does NOT', () => {
   const now = 400_000;
   let state = createInitialEmpireState(now);
   state.cash = 10_000_000;
   const owner = { id: 'p1', name: 'Patron' };
 
-  // Build 2 cafes in Istanbul (34) and 1 cafe in Ankara (6)
+  // Build 2 cafes in Istanbul (34), 1 in Ankara (6), 1 in Izmir (35)
   const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'İstanbul Kafe 1', owner, [], now);
   const b2 = purchaseBusiness(b1.state, 'kafe', landPin(41.0522, 29.0067, 34), 'İstanbul Kafe 2', owner, [], now + 10);
   const b3 = purchaseBusiness(b2.state, 'kafe', landPin(39.9208, 32.8541, 6), 'Ankara Kafe', owner, [], now + 20);
-  state = b3.state;
+  const b4 = purchaseBusiness(b3.state, 'kafe', landPin(38.4237, 27.1428, 35), 'İzmir Kafe', owner, [], now + 25);
+  state = b4.state;
 
   const pool = generateCandidatePool(54321, 'kafe');
   state = { ...state, candidatePool: pool };
 
-  // Hire Şube Müdürü on Ankara Kafe -> fullAutomation true, autoCollectRevenue MUST be FALSE
+  // Hire Şube Müdürü on Ankara Kafe -> fullAutomation true AND autoCollectRevenue MUST be TRUE in v1.2.6
   const bm = pool.find((c) => c.role === 'sube_muduru')!;
   const hiredBm = hireCandidateFromPool(state, bm.id, b3.business!.id, 6, now + 30);
   assert.equal(hiredBm.ok, true);
@@ -518,21 +529,27 @@ test('v1.2.2 Auto-Collect Revenue: strictly Bölge Sorumlusu (4 branches) & Gene
     hiredBm.state.businesses
   );
   assert.equal(ankaraAuto.fullAutomation, true);
-  assert.equal(ankaraAuto.autoCollectRevenue, false);
+  assert.equal(ankaraAuto.autoCollectRevenue, true);
 
-  // Hire Bölge Sorumlusu in Istanbul -> covers Istanbul branches with autoCollectRevenue = TRUE
-  const rm = hiredBm.state.candidatePool.find((c) => c.role === 'bolge_sorumlusu')!;
-  const hiredRm = hireCandidateFromPool(hiredBm.state, rm.id, null, 34, now + 40);
-  assert.equal(hiredRm.ok, true);
-  const istAuto = resolveBusinessAutomation(
-    hiredRm.state.businesses.find((b) => b.id === b1.business!.id)!,
-    hiredRm.state.cityManagers,
-    hiredRm.state.businesses
+  // Hire Müdür Yardımcısı on İzmir Kafe -> autoStock true, autoCollectRevenue MUST be FALSE
+  const am = hiredBm.state.candidatePool.find((c) => c.role === 'mudur_yardimcisi')!;
+  const hiredAm = hireCandidateFromPool(hiredBm.state, am.id, b4.business!.id, 35, now + 35);
+  assert.equal(hiredAm.ok, true);
+  const izmirAuto = resolveBusinessAutomation(
+    hiredAm.state.businesses.find((b) => b.id === b4.business!.id)!,
+    hiredAm.state.cityManagers,
+    hiredAm.state.businesses
   );
-  assert.equal(istAuto.autoCollectRevenue, true);
+  assert.equal(izmirAuto.autoStock, true);
+  assert.equal(izmirAuto.autoCollectRevenue, false);
 
-  // Tick 6 seconds (= 1 full in-game hour): Istanbul branches auto-transfer cash straight into state.cash,
-  // while Ankara (Şube Müdürü only) keeps revenue in pendingCash!
+  // Hire Bölge Sorumlusu in Istanbul (has 2 branches) -> autoCollectRevenue = TRUE
+  const rm = hiredAm.state.candidatePool.find((c) => c.role === 'bolge_sorumlusu')!;
+  const hiredRm = hireCandidateFromPool(hiredAm.state, rm.id, null, 34, now + 40);
+  assert.equal(hiredRm.ok, true);
+
+  // Tick 6 seconds (= 1 full in-game hour): Istanbul (Bölge Sorumlusu) AND Ankara (Şube Müdürü)
+  // both auto-transfer cash into state.cash, while İzmir (Müdür Yrd. only) stays in pendingCash!
   const cashBefore = hiredRm.state.cash;
   const hourTick = tickEconomy(hiredRm.state, 6, now + 6040);
   assert.equal(hourTick.hoursPassed, 1);
@@ -541,8 +558,10 @@ test('v1.2.2 Auto-Collect Revenue: strictly Bölge Sorumlusu (4 branches) & Gene
 
   const ist1After = hourTick.state.businesses.find((b) => b.id === b1.business!.id)!;
   const ankaraAfter = hourTick.state.businesses.find((b) => b.id === b3.business!.id)!;
+  const izmirAfter = hourTick.state.businesses.find((b) => b.id === b4.business!.id)!;
   assert.ok(ist1After.pendingCash < 1, 'Bölge Sorumlusu branch should auto-empty vault hourly');
-  assert.ok(ankaraAfter.pendingCash > 100, 'Şube Müdürü branch should remain manual pendingCash');
+  assert.ok(ankaraAfter.pendingCash < 1, 'Şube Müdürü branch should auto-empty vault hourly in v1.2.6');
+  assert.ok(izmirAfter.pendingCash > 100, 'Müdür Yrd. branch should remain manual pendingCash');
 });
 
 test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply savings, net profit & margin', () => {
@@ -629,5 +648,125 @@ test('v1.2.3 Android Edge-to-Edge Immersive & Display Cutout (shortEdges) native
   assert.ok(mainActivity.includes('LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES'));
   assert.ok(mainActivity.includes('controller.hide(WindowInsetsCompat.Type.systemBars())'));
 });
+
+test('v1.2.6 Strict Per-Branch HR Slots (4 Çalışan, 1 Müd. Yrd., 1 Şube Müdürü), >=2 City Branch Guard & Balanced Costs', () => {
+  const now = 700_000;
+  let state = createInitialEmpireState(now);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Kadıköy Kafe', owner, [], now);
+  assert.equal(b1.ok, true);
+  state = b1.state;
+  const bizId = b1.business!.id;
+
+  // Verify affordable starter 1-2 star worker and Müdür Yardımcısı prices
+  const freshPool = generateCandidatePool(99999, 'kafe');
+  const starterWorker = freshPool.find((c) => c.role === 'calisan' && c.stars <= 2);
+  assert.ok(starterWorker, 'Every candidate pool must include an affordable 1-2 star worker');
+  assert.ok(starterWorker.hireCost >= 3_000 && starterWorker.hireCost <= 12_000);
+  const asstManagers = freshPool.filter((c) => c.role === 'mudur_yardimcisi');
+  assert.ok(asstManagers.every((c) => c.hireCost >= 25_000 && c.hireCost <= 60_000));
+
+  // City-level managers MUST be blocked when player only has 1 branch in that city
+  state = { ...state, candidatePool: freshPool };
+  const rmCandidate = freshPool.find((c) => c.role === 'bolge_sorumlusu')!;
+  const gmCandidate = freshPool.find((c) => c.role === 'genel_mudur')!;
+  assert.equal(hireCandidateFromPool(state, rmCandidate.id, null, 34, now + 1).ok, false);
+  assert.equal(hireCandidateFromPool(state, gmCandidate.id, null, 34, now + 2).ok, false);
+
+  // Fill 4/4 Çalışan and verify 5th is strictly blocked
+  for (let i = 0; i < MAX_BRANCH_WORKERS; i++) {
+    const workerPool = generateCandidatePool(10_000 + i * 37, 'kafe');
+    const worker = workerPool.find((c) => c.role === 'calisan')!;
+    const res = hireCandidateFromPool({ ...state, candidatePool: workerPool }, worker.id, bizId, 34, now + 10 + i);
+    assert.equal(res.ok, true);
+    state = res.state;
+  }
+  const extraWorkerPool = generateCandidatePool(77777, 'kafe');
+  const extraWorker = extraWorkerPool.find((c) => c.role === 'calisan')!;
+  const fifthWorker = hireCandidateFromPool({ ...state, candidatePool: extraWorkerPool }, extraWorker.id, bizId, 34, now + 30);
+  assert.equal(fifthWorker.ok, false);
+
+  // Fill 1/1 Müd. Yrd. and verify 2nd is blocked
+  const am1 = extraWorkerPool.find((c) => c.role === 'mudur_yardimcisi')!;
+  const am1Res = hireCandidateFromPool({ ...state, candidatePool: extraWorkerPool }, am1.id, bizId, 34, now + 31);
+  assert.equal(am1Res.ok, true);
+  state = am1Res.state;
+  const am2 = am1Res.state.candidatePool.find((c) => c.role === 'mudur_yardimcisi')!;
+  assert.equal(hireCandidateFromPool(state, am2.id, bizId, 34, now + 32).ok, false);
+
+  // Fill 1/1 Şube Müdürü and verify 2nd is blocked
+  const bm1 = state.candidatePool.find((c) => c.role === 'sube_muduru')!;
+  const bm1Res = hireCandidateFromPool(state, bm1.id, bizId, 34, now + 33);
+  assert.equal(bm1Res.ok, true);
+  state = bm1Res.state;
+  const bm2 = state.candidatePool.find((c) => c.role === 'sube_muduru')!;
+  assert.equal(hireCandidateFromPool(state, bm2.id, bizId, 34, now + 34).ok, false);
+
+  const slots = getBranchStaffSlots(state.businesses[0]);
+  assert.equal(slots.workers, MAX_BRANCH_WORKERS);
+  assert.equal(slots.assistantManagers, MAX_BRANCH_ASSISTANT_MANAGERS);
+  assert.equal(slots.branchManagers, MAX_BRANCH_MANAGERS);
+});
+
+test('v1.2.6 Calendar Day-End Summary, 7-Day Weekly Dividend, 30-Day Monthly Closing, 3 System Banks & Safe Seed Rivals', () => {
+  const now = 800_000;
+  // 3 system banks including Turkuaz Bank
+  assert.equal(DEFAULT_SYSTEM_BANKS.length, 3);
+  assert.ok(DEFAULT_SYSTEM_BANKS.some((b) => b.bankName === 'Turkuaz Bank'));
+
+  // Seed city rivals in Istanbul: 3 distinct AI holdings, on land, > 400m from city center
+  const istanbul = getProvinceByPlate(34);
+  const rivals = generateSeedCityRivals(34);
+  assert.equal(rivals.length, 3);
+  for (const rival of rivals) {
+    assert.equal(checkLocalWaterShield(rival.lat, rival.lng), null);
+    assert.ok(haversineMeters(istanbul.lat, istanbul.lng, rival.lat, rival.lng) > 400);
+  }
+
+  // Test day-end transition (Day 1 -> Day 2)
+  let state = createInitialEmpireState(now);
+  const quotes = createInitialStockQuotes();
+  const boughtStock = buyStockShares(state, quotes[0], 50, now);
+  assert.equal(boughtStock.ok, true);
+  state = {
+    ...boughtStock.state,
+    gameMinutes: 1440 - 10, // Day 1 23:50
+  };
+
+  // +20 game minutes (2 sec at 1x) crosses midnight -> Day 2 00:10
+  const day1End = tickEconomy(state, 2, now + 2000, undefined, quotes);
+  assert.equal(day1End.daysPassed, 1);
+  assert.ok(day1End.dayEndSummary);
+  assert.equal(day1End.dayEndSummary.completedDay, 1);
+  assert.equal(day1End.dayEndSummary.monthlyClosing, null);
+  assert.equal(day1End.dayEndSummary.weeklyDividendPaid, 0);
+
+  // Day 7 -> Day 8 triggers 7-day weekly dividend!
+  const day7End = tickEconomy(
+    { ...state, gameMinutes: 7 * 1440 - 10 },
+    2,
+    now + 4000,
+    undefined,
+    quotes
+  );
+  assert.equal(day7End.dayEndSummary?.completedDay, 7);
+  assert.ok((day7End.dayEndSummary?.weeklyDividendPaid ?? 0) > 0);
+
+  // Day 30 -> Day 31 (Month 2 Day 1) triggers monthly balance closing!
+  const day30End = tickEconomy(
+    { ...state, gameMinutes: 30 * 1440 - 10 },
+    2,
+    now + 6000,
+    undefined,
+    quotes
+  );
+  assert.equal(day30End.dayEndSummary?.completedDay, 30);
+  assert.equal(day30End.dayEndSummary?.monthlyClosing?.monthNumber, 1);
+  assert.equal(formatGameClock(day30End.state.gameMinutes).month, 2);
+  assert.equal(formatGameClock(day30End.state.gameMinutes).day, 1);
+});
+
 
 

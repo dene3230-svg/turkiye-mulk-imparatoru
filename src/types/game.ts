@@ -157,11 +157,40 @@ export interface AutomationStatus {
   autoStock: boolean;
   autoMaintenance: boolean;
   fullAutomation: boolean;
-  autoCollectRevenue: boolean; // Bölge Sorumlusu (4 şube) & Genel Müdür (il geneli)
+  autoCollectRevenue: boolean; // Şube Müdürü (tek şube), Bölge Sorumlusu (4 şube) & Genel Müdür (il geneli)
   bulkSupplyDiscount: number; // 0..0.35
   efficiencyBonus: number; // e.g. +0.20 from Genel Müdür
   managerLabel: string | null;
   managerRole: StaffRole | null;
+}
+
+export interface BranchStaffSlots {
+  workers: number;
+  maxWorkers: number;
+  assistantManagers: number;
+  maxAssistantManagers: number;
+  branchManagers: number;
+  maxBranchManagers: number;
+}
+
+export interface DayEndSummary {
+  completedDay: number;
+  month: number;
+  dayOfMonth: number;
+  dailyGrossRevenue: number;
+  dailySalariesPaid: number;
+  dailyNetCashFlow: number;
+  creditScoreDelta: number;
+  weeklyDividendPaid: number;
+  monthlyClosing: MonthlyClosingSummary | null;
+}
+
+export interface MonthlyClosingSummary {
+  monthNumber: number;
+  totalDays: number;
+  netWorth: number;
+  branchCount: number;
+  estimatedMonthlyProfit: number;
 }
 
 export interface OwnedBusiness {

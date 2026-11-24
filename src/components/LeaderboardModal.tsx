@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Trophy, Crown, MapPin, Store, Landmark } from 'lucide-react';
+import { Trophy, Crown, MapPin, Store, Landmark } from 'lucide-react';
 import type {
   BankRecord,
   EmpireState,
@@ -9,6 +9,8 @@ import type {
   UserProfile,
 } from '../types/game';
 import { formatTL } from '../game/economy';
+import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
+import { BrandLogo } from './BrandLogo';
 
 interface LeaderboardModalProps {
   open: boolean;
@@ -52,7 +54,9 @@ export function LeaderboardModal({
     ...SEED_HOLDINGS.map((h) => ({ ...h, isSelf: false })),
     {
       id: user?.id ?? 'self',
-      name: state.playerIpo ? `${state.playerIpo.holdingName} [${state.playerIpo.ticker}]` : ownName,
+      name: state.playerIpo
+        ? `${state.playerIpo.holdingName} [${state.playerIpo.ticker}]`
+        : ownName,
       cities: ownCities,
       businesses: state.businesses.length,
       netWorth,
@@ -60,8 +64,10 @@ export function LeaderboardModal({
     },
   ].sort((a, b) => b.netWorth - a.netWorth);
 
-  // Aggregate active province leaders from roomRecords + own branches in activeProvince
-  const cityTotals = new Map<string, { name: string; branches: number; value: number; isSelf: boolean }>();
+  const cityTotals = new Map<
+    string,
+    { name: string; branches: number; value: number; isSelf: boolean }
+  >();
   for (const r of roomRecords) {
     const prev = cityTotals.get(r.owner_id) ?? {
       name: r.owner_name,
@@ -90,196 +96,158 @@ export function LeaderboardModal({
 
   const sortedBanks = [...allBanks].sort((a, b) => b.poolCapital - a.poolCapital);
 
+  const tabs: MobileModalTab[] = [
+    { id: 'holdings', label: 'Holdingler', icon: <Crown className="h-4 w-4" /> },
+    { id: 'city', label: `İl Liderleri (${activeProvince.name})`, icon: <MapPin className="h-4 w-4" /> },
+    { id: 'franchises', label: 'Franchise Markaları', icon: <Store className="h-4 w-4" /> },
+    { id: 'banks', label: 'Bankalar', icon: <Landmark className="h-4 w-4" /> },
+  ];
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Canlı Liderlik Tablosu"
-      data-testid="leaderboard-modal"
-      className="fixed inset-0 z-[1260] flex items-center justify-center bg-slate-950/60 p-2.5 safe-inset"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[calc(100dvh-24px)] w-full max-w-2xl lg:max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+    <div data-testid="leaderboard-modal">
+      <MobileGameModal
+        title="Liderlik Tablosu"
+        subtitle={`${activeProvince.code} ${activeProvince.name} · Türkiye Sıralaması`}
+        icon={<Trophy className="h-4 w-4" />}
+        tabs={tabs}
+        activeTabId={tab}
+        onSelectTab={(id) => setTab(id as 'holdings' | 'city' | 'franchises' | 'banks')}
+        onClose={onClose}
+        zIndexClass="z-[1260]"
       >
-        {/* Header */}
-        <div className="compact-short-pad flex shrink-0 items-center justify-between border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-              <Trophy className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold sm:text-base">Türkiye Canlı Liderlik Tablosu</h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Holdingler · {activeProvince.code} {activeProvince.name} İl Liderleri · Franchise ·
-                Bankalar
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Liderlik Tablosunu Kapat"
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* 4 Exact Tabs */}
-        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/90 px-3.5 py-1.5 dark:border-slate-800 dark:bg-slate-950/60 sm:px-4 sm:py-2">
-          {[
-            { id: 'holdings' as const, label: 'En Zengin Holdingler', icon: Crown },
-            { id: 'city' as const, label: `İl Liderleri (${activeProvince.name})`, icon: MapPin },
-            { id: 'franchises' as const, label: 'En Büyük Franchise Markaları', icon: Store },
-            { id: 'banks' as const, label: 'En Değerli Bankalar', icon: Landmark },
-          ].map((t) => {
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-colors whitespace-nowrap ${
-                  tab === t.id
-                    ? 'bg-amber-600 text-white'
-                    : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Content */}
-        <div className="panel-scroll flex-1 min-h-0 space-y-2 overflow-y-auto overscroll-contain p-3 sm:p-3.5">
-          {tab === 'holdings' &&
-            holdingRows.map((row, idx) => (
+        {tab === 'holdings' && (
+          <div className="grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
+            {holdingRows.map((row, idx) => (
               <div
                 key={row.id}
-                className={`flex items-center justify-between rounded-xl border p-3 ${
+                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${
                   row.isSelf
-                    ? 'border-amber-400 bg-amber-50/80 dark:border-amber-600 dark:bg-amber-950/35'
-                    : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/60'
+                    ? 'border-amber-400 bg-amber-400/12'
+                    : 'border-slate-800 bg-slate-900/80'
                 }`}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 font-mono-num text-xs font-extrabold text-amber-300">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
                     #{idx + 1}
                   </span>
+                  <BrandLogo brandKey={row.name} size={38} />
                   <div className="min-w-0">
-                    <div className="truncate text-xs font-bold">
-                      {row.name} {row.isSelf && '(Siz)'}
+                    <div className="truncate text-sm font-bold text-white">
+                      {row.name} {row.isSelf && <span className="text-amber-300">(Siz)</span>}
                     </div>
-                    <div className="text-[10px] text-slate-500">
+                    <div className="text-xs text-slate-400">
                       {row.businesses} şube · {row.cities} il
                     </div>
                   </div>
                 </div>
-                <span className="font-mono-num text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+                <span className="shrink-0 font-mono-num text-sm font-black text-emerald-400">
                   {formatTL(row.netWorth, true)}
                 </span>
               </div>
             ))}
+          </div>
+        )}
 
-          {tab === 'city' &&
-            (cityLeaders.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500 dark:border-slate-700">
-                {activeProvince.code} {activeProvince.name} odasında henüz kayıtlı şube yok. İlk
-                işletmeyi kurarak il lideri olun!
-              </div>
-            ) : (
-              cityLeaders.map((row, idx) => (
+        {tab === 'city' &&
+          (cityLeaders.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-xs text-slate-400">
+              {activeProvince.code} {activeProvince.name} odasında henüz kayıtlı şube yok. İlk
+              işletmeyi kurarak il lideri olun!
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
+              {cityLeaders.map((row, idx) => (
                 <div
                   key={`${row.name}-${idx}`}
-                  className={`flex items-center justify-between rounded-xl border p-3 ${
+                  className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${
                     row.isSelf
-                      ? 'border-amber-400 bg-amber-50/80 dark:border-amber-600 dark:bg-amber-950/35'
-                      : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/60'
+                      ? 'border-amber-400 bg-amber-400/12'
+                      : 'border-slate-800 bg-slate-900/80'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 font-mono-num text-xs font-extrabold text-amber-300">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
                       #{idx + 1}
                     </span>
-                    <div>
-                      <div className="text-xs font-bold">
-                        {row.name} {row.isSelf && '(Siz)'}
+                    <BrandLogo brandKey={row.name} size={38} />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-white">
+                        {row.name} {row.isSelf && <span className="text-amber-300">(Siz)</span>}
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-xs text-slate-400">
                         {activeProvince.name} içinde {row.branches} şube
                       </div>
                     </div>
                   </div>
-                  <span className="font-mono-num text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+                  <span className="shrink-0 font-mono-num text-sm font-black text-emerald-400">
                     {formatTL(row.value, true)}
                   </span>
                 </div>
-              ))
-            ))}
+              ))}
+            </div>
+          ))}
 
-          {tab === 'franchises' &&
-            sortedFranchises.map((f, idx) => (
+        {tab === 'franchises' && (
+          <div className="grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
+            {sortedFranchises.map((f, idx) => (
               <div
                 key={f.id}
-                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950/60"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 font-mono-num text-xs font-extrabold text-amber-300">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
                     #{idx + 1}
                   </span>
+                  <BrandLogo brandKey={f.id || f.brandName} size={38} />
                   <div className="min-w-0">
-                    <div className="truncate text-xs font-bold">{f.brandName}</div>
-                    <div className="text-[10px] text-slate-500">
-                      {f.ownerName} · %{Math.round(f.royaltyRate * 100)} telif payı
+                    <div className="truncate text-sm font-bold text-white">{f.brandName}</div>
+                    <div className="truncate text-xs text-slate-400">
+                      {f.ownerName} · %{Math.round(f.royaltyRate * 100)} telif
                     </div>
                   </div>
                 </div>
-                <div className="text-right font-mono-num">
-                  <div className="text-xs font-bold text-amber-700 dark:text-amber-400">
-                    {f.branchCount} Bayi
-                  </div>
-                  <div className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                <div className="shrink-0 text-right font-mono-num">
+                  <div className="text-xs font-bold text-amber-300">{f.branchCount} Bayi</div>
+                  <div className="text-xs text-emerald-400">
                     {formatTL(f.totalRoyaltyEarned, true)}
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        )}
 
-          {tab === 'banks' &&
-            sortedBanks.map((b, idx) => (
+        {tab === 'banks' && (
+          <div className="grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
+            {sortedBanks.map((b, idx) => (
               <div
                 key={b.id}
-                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950/60"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 font-mono-num text-xs font-extrabold text-amber-300">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
                     #{idx + 1}
                   </span>
+                  <BrandLogo brandKey={b.id || b.bankName} customColor={b.brandColor} size={38} />
                   <div className="min-w-0">
-                    <div className="truncate text-xs font-bold">
-                      {b.emblem} {b.bankName}
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      {b.hqCityName} · Baz Faiz %{Math.round(b.baseInterestRate * 100)} · Min Puan{' '}
+                    <div className="truncate text-sm font-bold text-white">{b.bankName}</div>
+                    <div className="truncate text-xs text-slate-400">
+                      {b.hqCityName} · Faiz %{Math.round(b.baseInterestRate * 100)} · Min{' '}
                       {b.minCreditScore}
                     </div>
                   </div>
                 </div>
-                <div className="text-right font-mono-num">
-                  <div className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+                <div className="shrink-0 text-right font-mono-num">
+                  <div className="text-sm font-black text-emerald-400">
                     {formatTL(b.poolCapital, true)}
                   </div>
-                  <div className="text-[10px] text-slate-500">Kredi Havuzu</div>
+                  <div className="text-[11px] text-slate-400">Havuz</div>
                 </div>
               </div>
             ))}
-        </div>
-      </div>
+          </div>
+        )}
+      </MobileGameModal>
     </div>
   );
 }

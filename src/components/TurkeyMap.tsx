@@ -11,6 +11,7 @@ import type {
 import { MIN_BUSINESS_DISTANCE_METERS } from '../game/catalog';
 import { calculateVaultCapacity } from '../game/economy';
 import { DEFAULT_PROVINCE_PLATE, TURKEY_BOUNDS, TURKEY_CENTER, getProvinceByPlate } from '../game/provinces81';
+import { getBrandLogoSvgString } from './BrandLogo';
 
 interface TurkeyMapProps {
   theme: ThemeMode;
@@ -340,38 +341,46 @@ export function TurkeyMap({
         ? item.id === selectedBusinessId
         : item.id === selectedCompetitorId;
 
-      // Own = Gold / Emerald, Rival = Crimson Red / Deep Navy
-      const bgStyle = item.isOwn
-        ? 'linear-gradient(135deg,#D97706,#059669)'
-        : 'linear-gradient(135deg,#DC2626,#1E293B)';
+      const markerSize = isSelected ? 44 : 38;
       const borderStyle = isSelected
         ? '3px solid #FEF08A'
         : item.isOwn
         ? '2.5px solid #ECFDF5'
-        : '2.5px solid #FEE2E2';
+        : '2.5px solid #FCA5A5';
+
+      const innerContent =
+        !item.isOwn && item.competitor
+          ? getBrandLogoSvgString(item.competitor.owner_name, markerSize - 6)
+          : `<span>${glyph}</span>`;
+
+      // Own = Gold / Emerald, Rival = Corporate Vector Emblem on Crimson-Slate Frame
+      const bgStyle = item.isOwn
+        ? 'linear-gradient(135deg,#D97706,#059669)'
+        : 'linear-gradient(135deg,#7F1D1D,#0F172A)';
 
       const icon = L.divIcon({
         className: item.isOwn ? 'own-business-marker' : 'rival-business-marker',
         html: `
           <div style="position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;">
             <div style="
-              width:${isSelected ? '44px' : '38px'};
-              height:${isSelected ? '44px' : '38px'};
+              width:${markerSize}px;
+              height:${markerSize}px;
               border-radius:12px;
               background:${bgStyle};
               border:${borderStyle};
-              box-shadow:0 6px 18px rgba(15,23,42,${isSelected ? '0.52' : '0.38'});
+              box-shadow:0 6px 18px rgba(15,23,42,${isSelected ? '0.52' : '0.4'});
               display:flex;align-items:center;justify-content:center;
               font-size:${isSelected ? '18px' : '16px'};
               position:relative;
+              overflow:visible;
             ">
-              <span>${glyph}</span>
+              ${innerContent}
               <span style="
                 position:absolute;bottom:-6px;right:-6px;
-                background:${item.isOwn ? '#064E3B' : '#7F1D1D'};color:#FEF08A;
+                background:${item.isOwn ? '#064E3B' : '#991B1B'};color:#FEF08A;
                 font-size:9px;font-weight:800;
                 padding:1px 4px;border-radius:5px;
-                border:1px solid rgba(255,255,255,0.75);
+                border:1px solid rgba(255,255,255,0.8);
                 line-height:1.1;
               ">S${item.level}</span>
               ${

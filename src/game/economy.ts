@@ -2,10 +2,12 @@ import type {
   BusinessBlueprint,
   BusinessTypeId,
   CompanyTier,
+  DayEndSummary,
   EmpireState,
   FranchiseBrand,
   MarketEvent,
   MissionDef,
+  MonthlyClosingSummary,
   OwnedBusiness,
   PinLocationInfo,
   RemoteBusinessRecord,
@@ -32,8 +34,11 @@ import {
 } from './catalog';
 import { getProvinceByPlate, haversineMeters } from './provinces81';
 import {
+  MAX_BRANCH_WORKERS,
   calculateStaffQualityMultiplier,
+  calculateTotalHourlyPayroll,
   generateCandidatePool,
+  getBranchStaffSlots,
   resolveBusinessAutomation,
 } from './hrEngine';
 import {
@@ -55,25 +60,33 @@ export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
 export const GAME_MINUTES_PER_REAL_SEC = 10; // 1x -> 6 real sec = 1 game hour
 
 export function formatGameClock(gameMinutes: number): {
+  totalDays: number;
   day: number;
+  month: number;
   hour: number;
   minute: number;
   label: string;
   compactLabel: string;
+  totalDaysLabel: string;
 } {
   const safeMin = Math.max(0, Math.floor(gameMinutes));
-  const day = Math.floor(safeMin / 1440) + 1;
+  const totalDays = Math.floor(safeMin / 1440) + 1;
+  const month = Math.floor((totalDays - 1) / 30) + 1;
+  const day = ((totalDays - 1) % 30) + 1;
   const rem = safeMin % 1440;
   const hour = Math.floor(rem / 60);
   const minute = Math.floor((rem % 60) / 10) * 10;
   const hh = String(hour).padStart(2, '0');
   const mm = String(minute).padStart(2, '0');
   return {
+    totalDays,
     day,
+    month,
     hour,
     minute,
-    label: `Gün ${day} • ${hh}:${mm}`,
-    compactLabel: `G${day} ${hh}:${mm}`,
+    label: `Gün ${day} • ${month}. Ay • ${hh}:${mm}`,
+    compactLabel: `G${day}·${month}.Ay ${hh}:${mm}`,
+    totalDaysLabel: `Toplam ${totalDays}. Gün`,
   };
 }
 
@@ -616,6 +629,8 @@ export interface TickResult {
   dividendPaid: number;
   autoCollectedHourlyAmount: number;
   hoursPassed: number;
+  daysPassed: number;
+  dayEndSummary: DayEndSummary | null;
   loanEnforcement: LoanEnforcementResult;
 }
 
@@ -635,6 +650,8 @@ export function tickEconomy(
       dividendPaid: 0,
       autoCollectedHourlyAmount: 0,
       hoursPassed: 0,
+      daysPassed: 0,
+      dayEndSummary: null,
       loanEnforcement: {
         state,
         garnishedTotal: 0,
@@ -646,6 +663,9 @@ export function tickEconomy(
   const prevMinutes = state.gameMinutes ?? STARTING_GAME_MINUTES;
   const nextMinutes = prevMinutes + safeDt * GAME_MINUTES_PER_REAL_SEC;
   const hoursPassed = Math.floor(nextMinutes / 60) - Math.floor(prevMinutes / 60);
+  const prevTotalDay = Math.floor(prevMinutes / 1440) + 1;
+  const nextTotalDay = Math.floor(nextMinutes / 1440) + 1;
+  const daysPassed = Math.max(0, nextTotalDay - prevTotalDay);
 
   const highVaultBusinessIds: string[] = [];
 
@@ -690,10 +710,10 @@ export function tickEconomy(
       nextMaint = Math.max(20, nextMaint - safeDt * 0.16);
     }
 
-    // Strict Auto-Collect Revenue rule:
-    // Only Bölge Sorumlusu (up to 4 branches) & Genel Müdür (all city branches) auto-transfer
-    // accumulated branch revenue straight into the main holding treasury every in-game hour!
-    // Unmanaged branches & Şube Müdürü-only branches accumulate in pendingCash for manual "Topla".
+    // Auto-Collect Revenue rule:
+    // Şube Müdürü (single branch full automation), Bölge Sorumlusu (up to 4 branches),
+    // and Genel Müdür (all city branches) auto-transfer branch revenue straight into
+    // the main holding treasury every in-game hour.
     let nextPending = Math.min(capacity, b.pendingCash + earned);
     let directTransfer = 0;
 
@@ -726,7 +746,7 @@ export function tickEconomy(
   });
 
   // Live stock dividends
-  const dividendPaid = stockQuotes
+  let dividendPaid = stockQuotes
     ? calculateDividendPerTick(state, stockQuotes, safeDt)
     : 0;
 
@@ -736,9 +756,75 @@ export function tickEconomy(
     0
   );
 
+  // Day-end summary, 7-day weekly dividend & 30-day monthly balance closing
+  let dayEndSummary: DayEndSummary | null = null;
+  let weeklyDividendBonus = 0;
+  let nextCreditScore = state.creditScore ?? STARTING_CREDIT_SCORE;
+
+  if (daysPassed > 0) {
+    const completedDay = nextTotalDay - 1;
+    const completedMonth = Math.floor((completedDay - 1) / 30) + 1;
+    const completedDayOfMonth = ((completedDay - 1) % 30) + 1;
+
+    const totalHourlyGross = updatedBusinesses.reduce(
+      (sum, b) =>
+        sum + calculateBusinessHourlyIncome(b, activeEvent, now, updatedBusinesses, state),
+      0
+    );
+    const dailyGrossRevenue = Math.round(totalHourlyGross * 24);
+    const dailySalariesPaid = Math.round(calculateTotalHourlyPayroll(state) * 24);
+    const dailyNetCashFlow = dailyGrossRevenue - dailySalariesPaid;
+
+    // Healthy daily standing gently grows credit score (+5/day), while garnishing reduces it (-10/day)
+    const hasGarnishingLoan = (state.activeLoans ?? []).some((l) => l.status === 'garnishing');
+    const creditScoreDelta = hasGarnishingLoan ? -10 : updatedBusinesses.length > 0 ? 5 : 2;
+    nextCreditScore = Math.max(0, Math.min(1900, nextCreditScore + creditScoreDelta));
+
+    // Weekly Dividend every 7th day
+    if (completedDay % 7 === 0) {
+      const portfolioVal = stockQuotes
+        ? calculatePortfolioMarketValue(state, stockQuotes)
+        : (state.stockPortfolio ?? []).reduce((s, h) => s + Math.round(h.shares * h.avgCost), 0);
+      if (portfolioVal > 0) {
+        weeklyDividendBonus = Math.max(500, Math.round(portfolioVal * 0.012));
+        dividendPaid += weeklyDividendBonus;
+      }
+    }
+
+    // Monthly Balance Sheet Closing every 30th day
+    let monthlyClosing: MonthlyClosingSummary | null = null;
+    if (completedDay % 30 === 0) {
+      const projectedNetWorth = calculateNetWorth(
+        { ...state, businesses: updatedBusinesses },
+        now,
+        stockQuotes
+      );
+      monthlyClosing = {
+        monthNumber: Math.max(1, Math.floor(completedDay / 30)),
+        totalDays: completedDay,
+        netWorth: projectedNetWorth,
+        branchCount: updatedBusinesses.length,
+        estimatedMonthlyProfit: Math.round(dailyNetCashFlow * 30),
+      };
+    }
+
+    dayEndSummary = {
+      completedDay,
+      month: completedMonth,
+      dayOfMonth: completedDayOfMonth,
+      dailyGrossRevenue,
+      dailySalariesPaid,
+      dailyNetCashFlow,
+      creditScoreDelta,
+      weeklyDividendPaid: weeklyDividendBonus,
+      monthlyClosing,
+    };
+  }
+
   const preLoanState: EmpireState = {
     ...state,
     gameMinutes: nextMinutes,
+    creditScore: nextCreditScore,
     cash: state.cash + autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
     totalEarnedLifetime:
       state.totalEarnedLifetime + autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
@@ -762,6 +848,8 @@ export function tickEconomy(
     dividendPaid,
     autoCollectedHourlyAmount,
     hoursPassed,
+    daysPassed,
+    dayEndSummary,
     loanEnforcement,
   };
 }
@@ -871,8 +959,13 @@ export function hireStaff(
   if (!target) return { state, ok: false, error: 'İşletme bulunamadı.' };
   const bp = getBlueprintById(target.blueprintId);
   if (!bp) return { state, ok: false, error: 'Geçersiz işletme.' };
-  if (target.staffCount >= bp.maxStaff) {
-    return { state, ok: false, error: 'Personel kadrosu dolu.' };
+  const slots = getBranchStaffSlots(target);
+  if (slots.workers >= MAX_BRANCH_WORKERS) {
+    return {
+      state,
+      ok: false,
+      error: `Kadro Dolu (${slots.workers}/${MAX_BRANCH_WORKERS} Çalışan). Şube başına en fazla 4 çalışan alınabilir.`,
+    };
   }
   const cost = calculateStaffHireCost(target);
   if (state.cash < cost) {

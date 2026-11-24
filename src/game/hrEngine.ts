@@ -1,5 +1,6 @@
 import type {
   AutomationStatus,
+  BranchStaffSlots,
   BusinessTypeId,
   EmpireState,
   HiredStaff,
@@ -7,7 +8,10 @@ import type {
   StaffCandidate,
   StaffRole,
 } from '../types/game';
-import { getBlueprintById } from './catalog';
+
+export const MAX_BRANCH_WORKERS = 4;
+export const MAX_BRANCH_ASSISTANT_MANAGERS = 1;
+export const MAX_BRANCH_MANAGERS = 1;
 
 export const ROLE_META: Record<
   StaffRole,
@@ -24,24 +28,27 @@ export const ROLE_META: Record<
     label: 'Çalışan',
     shortLabel: 'Çalışan',
     scope: 'branch',
-    description: 'Müşterilere hizmet verir; yıldız seviyesine göre hız ve kapasiteyi artırır.',
-    baseHourlySalary: 350,
-    baseHireCost: 9_000,
+    description:
+      'Müşterilere hizmet verir; hız ve kapasiteyi artırır (Şube başına en fazla 4 çalışan).',
+    baseHourlySalary: 250,
+    baseHireCost: 4_000,
   },
   mudur_yardimcisi: {
     label: 'Müdür Yardımcısı',
     shortLabel: 'Müd. Yrd.',
     scope: 'branch',
-    description: 'Atandığı şubede Otomatik Stok ve Tedarik yetkisine sahip olur.',
-    baseHourlySalary: 850,
-    baseHireCost: 28_000,
+    description:
+      'Atandığı şubede otomatik stok ve malzeme takibi yapar (Şube başına en fazla 1 adet).',
+    baseHourlySalary: 650,
+    baseHireCost: 26_000,
   },
   sube_muduru: {
     label: 'Şube Müdürü',
     shortLabel: 'Şube Müd.',
     scope: 'branch',
-    description: 'Atandığı şubede Tam Operasyonel Otomasyon (stok, bakım, vardiya) sağlar.',
-    baseHourlySalary: 1_650,
+    description:
+      'Atandığı şubede tam otomasyon (otomatik stok, bakım ve saatlik hasılatın otomatik ana kasaya toplanması) sağlar (Şube başına 1 adet).',
+    baseHourlySalary: 1_250,
     baseHireCost: 65_000,
   },
   bolge_sorumlusu: {
@@ -49,8 +56,8 @@ export const ROLE_META: Record<
     shortLabel: 'Bölge Sor.',
     scope: 'city',
     description:
-      'Aynı şehirde 4 şubeye kadar tam otomasyon, %15 tedarik indirimi ve saatlik Otomatik Hasılat Toplama sağlar.',
-    baseHourlySalary: 3_900,
+      'Çok şubeli şehirlerde 4 şubeye kadar ortak tam otomasyon, %15 tedarik indirimi ve otomatik hasılat toplama sağlar (Min. 2 şube).',
+    baseHourlySalary: 3_600,
     baseHireCost: 195_000,
   },
   genel_mudur: {
@@ -58,11 +65,73 @@ export const ROLE_META: Record<
     shortLabel: 'Genel Müdür',
     scope: 'city',
     description:
-      'Şehirdeki TÜM şubeleri yönetir: tam otomasyon, +%20 verimlilik ve saatlik Otomatik Hasılat Toplama sağlar.',
-    baseHourlySalary: 9_500,
-    baseHireCost: 580_000,
+      'Şehirdeki tüm zincir şubelerde ortak tam otomasyon, +%20 verimlilik bonusu ve otomatik hasılat toplama sağlar (Min. 2 şube).',
+    baseHourlySalary: 8_500,
+    baseHireCost: 560_000,
   },
 };
+
+const ROLE_STAR_PRICING: Record<
+  StaffRole,
+  Record<1 | 2 | 3 | 4 | 5, { hireCost: number; hourlySalary: number }>
+> = {
+  calisan: {
+    1: { hireCost: 4_000, hourlySalary: 250 },
+    2: { hireCost: 9_500, hourlySalary: 400 },
+    3: { hireCost: 16_500, hourlySalary: 650 },
+    4: { hireCost: 28_000, hourlySalary: 1_050 },
+    5: { hireCost: 44_000, hourlySalary: 1_600 },
+  },
+  mudur_yardimcisi: {
+    1: { hireCost: 26_000, hourlySalary: 650 },
+    2: { hireCost: 34_000, hourlySalary: 850 },
+    3: { hireCost: 42_500, hourlySalary: 1_100 },
+    4: { hireCost: 51_000, hourlySalary: 1_400 },
+    5: { hireCost: 59_000, hourlySalary: 1_750 },
+  },
+  sube_muduru: {
+    1: { hireCost: 65_000, hourlySalary: 1_200 },
+    2: { hireCost: 82_000, hourlySalary: 1_550 },
+    3: { hireCost: 105_000, hourlySalary: 1_950 },
+    4: { hireCost: 132_000, hourlySalary: 2_400 },
+    5: { hireCost: 168_000, hourlySalary: 2_950 },
+  },
+  bolge_sorumlusu: {
+    1: { hireCost: 165_000, hourlySalary: 2_800 },
+    2: { hireCost: 195_000, hourlySalary: 3_200 },
+    3: { hireCost: 235_000, hourlySalary: 3_800 },
+    4: { hireCost: 310_000, hourlySalary: 4_800 },
+    5: { hireCost: 410_000, hourlySalary: 6_200 },
+  },
+  genel_mudur: {
+    1: { hireCost: 440_000, hourlySalary: 6_500 },
+    2: { hireCost: 510_000, hourlySalary: 7_500 },
+    3: { hireCost: 590_000, hourlySalary: 8_800 },
+    4: { hireCost: 760_000, hourlySalary: 11_200 },
+    5: { hireCost: 960_000, hourlySalary: 14_200 },
+  },
+};
+
+export function getBranchStaffSlots(business: OwnedBusiness): BranchStaffSlots {
+  const employees = business.employees ?? [];
+  const typedWorkers = employees.filter((e) => e.role === 'calisan').length;
+  const assistantManagers = employees.filter((e) => e.role === 'mudur_yardimcisi').length;
+  const branchManagers = employees.filter((e) => e.role === 'sube_muduru').length;
+  // Support legacy businesses where staffCount existed before detailed employee records
+  const workers =
+    employees.length === 0 && business.staffCount > 0
+      ? Math.min(MAX_BRANCH_WORKERS, business.staffCount)
+      : typedWorkers;
+
+  return {
+    workers,
+    maxWorkers: MAX_BRANCH_WORKERS,
+    assistantManagers,
+    maxAssistantManagers: MAX_BRANCH_ASSISTANT_MANAGERS,
+    branchManagers,
+    maxBranchManagers: MAX_BRANCH_MANAGERS,
+  };
+}
 
 export const STAR_EFFICIENCY_MULTIPLIER: Record<1 | 2 | 3 | 4 | 5, number> = {
   1: 1.06,
@@ -167,6 +236,9 @@ export function generateCandidatePool(
       stars = r > 0.65 ? 5 : r > 0.3 ? 4 : 3;
     } else if (role === 'sube_muduru') {
       stars = r > 0.78 ? 5 : r > 0.45 ? 4 : r > 0.15 ? 3 : 2;
+    } else if (role === 'calisan' && idx === 0) {
+      // Guarantee an affordable starter 1-2 star worker in every pool (₺3.000 - ₺12.000)
+      stars = r > 0.45 ? 2 : 1;
     } else {
       stars = r > 0.86 ? 5 : r > 0.64 ? 4 : r > 0.36 ? 3 : r > 0.14 ? 2 : 1;
     }
@@ -176,7 +248,7 @@ export function generateCandidatePool(
     const first = FIRST_NAMES[Math.floor(rand() * FIRST_NAMES.length)];
     const last = LAST_NAMES[Math.floor(rand() * LAST_NAMES.length)];
     const meta = ROLE_META[role];
-    const starCostMult = Math.pow(1.42, stars - 1);
+    const pricing = ROLE_STAR_PRICING[role][stars];
 
     const roleTitle = role === 'calisan' ? SECTOR_WORKER_TITLE[sectorHint] : meta.label;
 
@@ -189,8 +261,8 @@ export function generateCandidatePool(
       speed: jitter(),
       efficiency: jitter(),
       leadership: role === 'calisan' ? Math.max(20, jitter() - 15) : Math.min(99, jitter() + 8),
-      hourlySalary: Math.round((meta.baseHourlySalary * starCostMult) / 50) * 50,
-      hireCost: Math.round((meta.baseHireCost * starCostMult) / 500) * 500,
+      hourlySalary: pricing.hourlySalary,
+      hireCost: pricing.hireCost,
     };
   });
 }
@@ -252,7 +324,7 @@ export function resolveBusinessAutomation(
       autoStock: true,
       autoMaintenance: true,
       fullAutomation: true,
-      autoCollectRevenue: false,
+      autoCollectRevenue: true, // Şube Müdürü tam otomasyon: otomatik stok, bakım ve saatlik otomatik hasılat toplama!
       bulkSupplyDiscount: 0.05,
       efficiencyBonus: 0.06 + branchManager.stars * 0.02,
       managerLabel: `Şube Müdürü · ${branchManager.name} (${branchManager.stars}★)`,
@@ -370,14 +442,14 @@ export function hireCandidateFromPool(
       return {
         state,
         ok: false,
-        error: 'Bölge Sorumlusu atamak için bu şehirde en az 2 şubeniz olmalıdır.',
+        error: 'Bölge Sorumlusu yalnızca birden fazla şubeniz olduğunda (min. 2 şube) atanabilir.',
       };
     }
-    if (candidate.role === 'genel_mudur' && cityBranches.length < 1) {
+    if (candidate.role === 'genel_mudur' && cityBranches.length < 2) {
       return {
         state,
         ok: false,
-        error: 'Genel Müdür atamak için bu şehirde en az 1 şubeniz olmalıdır.',
+        error: 'Genel Müdür yalnızca bu şehirde en az 2 şubeli bir zinciriniz olduğunda atanabilir.',
       };
     }
     if (
@@ -426,22 +498,33 @@ export function hireCandidateFromPool(
     };
   }
 
-  // Branch-level hire
+  // Branch-level hire with strict slot enforcement (4 Çalışan, 1 Müd. Yrd., 1 Şube Müdürü)
   const biz = state.businesses.find((b) => b.id === targetBusinessId);
   if (!biz) {
     return { state, ok: false, error: 'Atama yapılacak işletme seçilmedi.' };
   }
-  const bp = getBlueprintById(biz.blueprintId);
-  const currentEmps = biz.employees ?? [];
+  const slots = getBranchStaffSlots(biz);
 
-  if (candidate.role === 'mudur_yardimcisi' && currentEmps.some((e) => e.role === 'mudur_yardimcisi')) {
-    return { state, ok: false, error: 'Bu şubede zaten bir Müdür Yardımcısı var.' };
+  if (candidate.role === 'mudur_yardimcisi' && slots.assistantManagers >= slots.maxAssistantManagers) {
+    return {
+      state,
+      ok: false,
+      error: `Kadro Dolu (${slots.assistantManagers}/${slots.maxAssistantManagers} Müd. Yrd.). Şube başına en fazla 1 Müdür Yardımcısı alınabilir.`,
+    };
   }
-  if (candidate.role === 'sube_muduru' && currentEmps.some((e) => e.role === 'sube_muduru')) {
-    return { state, ok: false, error: 'Bu şubede zaten bir Şube Müdürü var.' };
+  if (candidate.role === 'sube_muduru' && slots.branchManagers >= slots.maxBranchManagers) {
+    return {
+      state,
+      ok: false,
+      error: `Kadro Dolu (${slots.branchManagers}/${slots.maxBranchManagers} Şube Müdürü). Şube başına en fazla 1 Şube Müdürü alınabilir.`,
+    };
   }
-  if (candidate.role === 'calisan' && bp && biz.staffCount >= bp.maxStaff) {
-    return { state, ok: false, error: 'Bu şubenin çalışan kadrosu dolu.' };
+  if (candidate.role === 'calisan' && slots.workers >= slots.maxWorkers) {
+    return {
+      state,
+      ok: false,
+      error: `Kadro Dolu (${slots.workers}/${slots.maxWorkers} Çalışan). Bu şubeye en fazla 4 çalışan alınabilir.`,
+    };
   }
 
   const roleTitle =

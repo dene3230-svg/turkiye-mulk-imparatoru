@@ -1,9 +1,104 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import type { OwnedBusiness, RemoteBusinessRecord } from '../types/game';
+import type { BusinessTypeId, OwnedBusiness, RemoteBusinessRecord } from '../types/game';
 import { isValidBusinessType } from '../game/catalog';
+import { getProvinceByPlate } from '../game/provinces81';
+import { checkLocalWaterShield } from '../game/waterShield';
 
 export type RoomSyncStatus = 'connecting' | 'live' | 'offline';
+
+const SEED_RIVAL_PROFILES: Array<{
+  ownerId: string;
+  ownerName: string;
+  businessType: BusinessTypeId;
+  suffix: string;
+  level: number;
+  hourlyIncome: number;
+  valuation: number;
+  offsetCandidates: Array<[number, number]>;
+}> = [
+  {
+    ownerId: 'ai-rival-demirhan',
+    ownerName: 'Demirhan Holding A.Ş.',
+    businessType: 'avm',
+    suffix: 'Plaza AVM',
+    level: 4,
+    hourlyIncome: 195_000,
+    valuation: 4_850_000,
+    offsetCandidates: [
+      [0.011, 0.014],
+      [-0.012, 0.012],
+      [0.014, -0.011],
+      [0.008, 0.009],
+    ],
+  },
+  {
+    ownerId: 'ai-rival-anadolu',
+    ownerName: 'Anadolu Sanayi Grubu',
+    businessType: 'supermarket',
+    suffix: 'Merkez Market',
+    level: 3,
+    hourlyIncome: 68_000,
+    valuation: 1_420_000,
+    offsetCandidates: [
+      [-0.01, -0.013],
+      [0.013, -0.012],
+      [-0.013, 0.01],
+      [-0.008, -0.008],
+    ],
+  },
+  {
+    ownerId: 'ai-rival-ege',
+    ownerName: 'Ege Yatırım & Turizm',
+    businessType: 'otel',
+    suffix: 'Grand Otel',
+    level: 3,
+    hourlyIncome: 112_000,
+    valuation: 2_650_000,
+    offsetCandidates: [
+      [0.009, -0.014],
+      [-0.011, 0.014],
+      [0.015, 0.008],
+      [-0.009, 0.008],
+    ],
+  },
+];
+
+export function generateSeedCityRivals(cityPlate: number): RemoteBusinessRecord[] {
+  const prov = getProvinceByPlate(cityPlate);
+  return SEED_RIVAL_PROFILES.map((profile, idx) => {
+    let lat = prov.lat + profile.offsetCandidates[0][0];
+    let lng = prov.lng + profile.offsetCandidates[0][1];
+
+    for (const [dLat, dLng] of profile.offsetCandidates) {
+      const candidateLat = prov.lat + dLat;
+      const candidateLng = prov.lng + dLng;
+      if (!checkLocalWaterShield(candidateLat, candidateLng)) {
+        lat = candidateLat;
+        lng = candidateLng;
+        break;
+      }
+    }
+
+    const district = prov.districts[idx % prov.districts.length] || prov.name;
+    return {
+      id: `seed-rival-${cityPlate}-${idx + 1}`,
+      owner_id: profile.ownerId,
+      owner_name: profile.ownerName,
+      city_plate: prov.plate,
+      city_name: prov.name,
+      district,
+      business_name: `${district} ${profile.suffix}`,
+      business_type: profile.businessType,
+      lat,
+      lng,
+      level: profile.level,
+      hourly_income: Math.round(profile.hourlyIncome * prov.landMultiplier),
+      valuation: Math.round(profile.valuation * prov.landMultiplier),
+      created_at: '2026-11-24T06:00:00.000Z',
+    };
+  });
+}
 
 function normalizeRecord(row: Record<string, unknown>): RemoteBusinessRecord | null {
   const id = String(row.id ?? '');

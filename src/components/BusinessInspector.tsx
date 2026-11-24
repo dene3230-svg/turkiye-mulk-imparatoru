@@ -32,7 +32,7 @@ import {
   hasFactorySupplySynergy,
   hasParkingSynergyForBusiness,
 } from '../game/economy';
-import { resolveBusinessAutomation } from '../game/hrEngine';
+import { getBranchStaffSlots, resolveBusinessAutomation } from '../game/hrEngine';
 
 interface BusinessInspectorProps {
   business: OwnedBusiness;
@@ -69,6 +69,7 @@ export function BusinessInspector({
     state.cityManagers ?? [],
     state.businesses
   );
+  const slots = getBranchStaffSlots(business);
   const incomePerSec = calculateBusinessIncomePerSec(
     business,
     state.activeEvent,
@@ -288,14 +289,16 @@ export function BusinessInspector({
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-bold text-slate-900 dark:text-white">
-                  Personel & İK Havuzu ({business.staffCount}/{bp?.maxStaff ?? 8})
+                  Personel & İK Havuzu
                 </div>
-                <div className="text-[10px] text-slate-600 dark:text-slate-300">
-                  1–5★ aday seç, Şube / Bölge / Genel Müdür ata
+                <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                  {slots.workers}/{slots.maxWorkers} Çalışan · {slots.assistantManagers}/
+                  {slots.maxAssistantManagers} Yrd. · {slots.branchManagers}/
+                  {slots.maxBranchManagers} Şube Müd.
                 </div>
               </div>
             </div>
-            <span className="shrink-0 rounded-lg bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
+            <span className="shrink-0 rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white">
               Aç
             </span>
           </button>

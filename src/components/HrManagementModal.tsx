@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  X,
   Users,
   Star,
   RefreshCw,
@@ -10,14 +9,17 @@ import {
   UserMinus,
   Briefcase,
   Building2,
+  Zap,
 } from 'lucide-react';
 import type { EmpireState, OwnedBusiness, StaffRole } from '../types/game';
 import {
   ROLE_META,
   calculateTotalHourlyPayroll,
+  getBranchStaffSlots,
   resolveBusinessAutomation,
 } from '../game/hrEngine';
 import { formatTL } from '../game/economy';
+import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
 
 interface HrManagementModalProps {
   open: boolean;
@@ -32,11 +34,11 @@ interface HrManagementModalProps {
   onClose: () => void;
 }
 
-const ROLE_FILTERS: Array<{ id: 'all' | StaffRole; label: string }> = [
+const ROLE_TABS: MobileModalTab[] = [
   { id: 'all', label: 'Tümü' },
-  { id: 'calisan', label: '1. Çalışan' },
-  { id: 'mudur_yardimcisi', label: '2. Müd. Yrd.' },
-  { id: 'sube_muduru', label: '3. Şube Müd.' },
+  { id: 'calisan', label: '1. Çalışan (Max 4)' },
+  { id: 'mudur_yardimcisi', label: '2. Müd. Yrd. (1)' },
+  { id: 'sube_muduru', label: '3. Şube Müd. (1)' },
   { id: 'bolge_sorumlusu', label: '4. Bölge Sor.' },
   { id: 'genel_mudur', label: '5. Genel Müdür' },
 ];
@@ -64,6 +66,7 @@ export function HrManagementModal({
   const automation = business
     ? resolveBusinessAutomation(business, state.cityManagers ?? [], state.businesses)
     : null;
+  const slots = business ? getBranchStaffSlots(business) : null;
   const totalPayroll = calculateTotalHourlyPayroll(state);
 
   const candidates = (state.candidatePool ?? []).filter((c) =>
@@ -71,334 +74,368 @@ export function HrManagementModal({
   );
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Personel ve İK Yönetimi"
-      data-testid="hr-management-modal"
-      className="fixed inset-0 z-[1265] flex items-center justify-center bg-slate-950/60 p-2.5 safe-inset"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl lg:max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-      >
-        {/* Header */}
-        <div className="compact-short-pad flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
-              <Users className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="truncate text-sm font-bold sm:text-base">
-                Personel & İK Havuzu · {business ? business.customName : `${targetCityName} Yönetimi`}
-              </h2>
-              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                1–5 Yıldız Aday Havuzu · 5 Kademeli Kurumsal Otomasyon · Saatlik Bordro:{' '}
-                <span className="font-mono-num font-bold text-slate-800 dark:text-slate-200">
-                  {formatTL(totalPayroll)}/sa
+    <div data-testid="hr-management-modal">
+      <MobileGameModal
+        title="Personel & İK Yönetimi"
+        subtitle={business ? business.customName : `${targetCityName} İl Yönetimi`}
+        icon={<Users className="h-4 w-4" />}
+        headerRight={
+          <button
+            type="button"
+            onClick={onRefreshPool}
+            disabled={state.cash < 2500}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Havuzu Yenile (₺2.500)</span>
+          </button>
+        }
+        tabs={ROLE_TABS}
+        activeTabId={roleFilter}
+        onSelectTab={(id) => setRoleFilter(id as 'all' | StaffRole)}
+        subHeader={
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            {slots ? (
+              <div className="flex flex-wrap items-center gap-2" data-testid="hr-branch-slots">
+                <span
+                  className={`rounded-lg border px-2.5 py-1 font-bold ${
+                    slots.workers >= slots.maxWorkers
+                      ? 'border-amber-400/60 bg-amber-400/15 text-amber-300'
+                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  {slots.workers}/{slots.maxWorkers} Çalışan
                 </span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onRefreshPool}
-              disabled={state.cash < 2500}
-              className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Havuzu Yenile (₺2.500)</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="İK Penceresini Kapat"
-              className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Body: Left Current Team & Automation Status | Right Renewable 1-5 Star Candidate Pool */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden p-2.5 min-[620px]:grid-cols-12 sm:p-3">
-          {/* Left Column: Current Branch / City Automation */}
-          <div className="panel-scroll min-h-0 flex flex-col gap-2.5 overflow-y-auto overscroll-contain min-[620px]:col-span-5">
-            {business && automation ? (
-              <div
-                className={`rounded-xl border p-3 ${
-                  automation.fullAutomation
-                    ? 'border-emerald-300 bg-emerald-50/75 dark:border-emerald-800 dark:bg-emerald-950/35'
-                    : automation.autoStock
-                    ? 'border-amber-300 bg-amber-50/75 dark:border-amber-800 dark:bg-amber-950/35'
-                    : 'border-red-300 bg-red-50/75 dark:border-red-800 dark:bg-red-950/35'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-xs font-bold">
-                    {automation.fullAutomation || automation.autoStock ? (
-                      <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    )}
-                    <span>
-                      {automation.fullAutomation
-                        ? 'Otomasyon Aktif (Tam Yetki)'
-                        : automation.autoStock
-                        ? 'Kısmi Otomasyon (Otomatik Stok)'
-                        : 'Yönetici Eksik — Verim Düşebilir'}
-                    </span>
-                  </span>
-                </div>
-                <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
-                  {automation.managerLabel
-                    ? `Sorumlu: ${automation.managerLabel}${
-                        automation.efficiencyBonus > 0
-                          ? ` · +%${Math.round(automation.efficiencyBonus * 100)} verim`
-                          : ''
-                      }`
-                    : 'Müdür Yardımcısı, Şube Müdürü, Bölge Sorumlusu veya Genel Müdür atayarak şubeyi otomatikleştirin.'}
-                </p>
-
-                {/* Stock & Maintenance Meters */}
-                <div className="mt-2.5 grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="flex justify-between text-[10px] font-semibold">
-                      <span>Stok Durumu</span>
-                      <span className="font-mono-num">{Math.round(business.stockLevel ?? 100)}%</span>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                      <div
-                        className="h-full rounded-full bg-emerald-500"
-                        style={{ width: `${Math.round(business.stockLevel ?? 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-[10px] font-semibold">
-                      <span>Temizlik & Bakım</span>
-                      <span className="font-mono-num">
-                        {Math.round(business.maintenanceLevel ?? 100)}%
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                      <div
-                        className="h-full rounded-full bg-sky-500"
-                        style={{ width: `${Math.round(business.maintenanceLevel ?? 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {((business.stockLevel ?? 100) < 98 || (business.maintenanceLevel ?? 100) < 98) && (
-                  <button
-                    type="button"
-                    onClick={() => onRestockBusiness(business.id)}
-                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700"
-                  >
-                    <Wrench className="h-3.5 w-3.5" />
-                    <span>Manuel Stok & Bakım Yenile (%100)</span>
-                  </button>
-                )}
+                <span
+                  className={`rounded-lg border px-2.5 py-1 font-bold ${
+                    slots.assistantManagers >= slots.maxAssistantManagers
+                      ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-300'
+                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  {slots.assistantManagers}/{slots.maxAssistantManagers} Müd. Yrd.
+                </span>
+                <span
+                  className={`rounded-lg border px-2.5 py-1 font-bold ${
+                    slots.branchManagers >= slots.maxBranchManagers
+                      ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-300'
+                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  {slots.branchManagers}/{slots.maxBranchManagers} Şube Müdürü
+                </span>
               </div>
             ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300">
-                <div className="font-bold text-slate-900 dark:text-white">
-                  {targetCityName} İl Yönetimi ({cityBranches.length} Şube)
-                </div>
-                <p className="mt-1 text-[11px]">
-                  Şehir geneli Bölge Sorumlusu (4 şubeye kadar) veya Genel Müdür (tüm ilde +%20
-                  verim) atamak için sağdaki havuzdan seçim yapabilirsiniz.
-                </p>
-              </div>
+              <span className="font-bold text-slate-200">
+                {targetCityName} İl Yönetimi ({cityBranches.length} Şube)
+              </span>
             )}
+            <span className="font-mono-num text-xs font-bold text-slate-300">
+              Saatlik Bordro: <strong className="text-amber-300">{formatTL(totalPayroll)}/sa</strong>
+            </span>
+          </div>
+        }
+        onClose={onClose}
+        zIndexClass="z-[1265]"
+      >
+        {/* Branch Automation & Stock/Maintenance Card */}
+        {business && automation ? (
+          <section
+            className={`rounded-xl border p-3 space-y-2.5 ${
+              automation.fullAutomation
+                ? 'border-emerald-500/50 bg-emerald-950/30'
+                : automation.autoStock
+                ? 'border-amber-400/50 bg-amber-950/25'
+                : 'border-rose-500/45 bg-rose-950/25'
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-sm font-bold text-white">
+                {automation.fullAutomation || automation.autoStock ? (
+                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-rose-400" />
+                )}
+                <span>
+                  {automation.fullAutomation
+                    ? 'Tam Otomasyon Aktif (Stok + Bakım + Oto Tahsilat)'
+                    : automation.autoStock
+                    ? 'Kısmi Otomasyon (Otomatik Stok)'
+                    : 'Yönetici Eksik — Şube Manuel Çalışıyor'}
+                </span>
+              </span>
+              {automation.autoCollectRevenue && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-0.5 text-xs font-bold text-slate-950">
+                  <Zap className="h-3.5 w-3.5" /> Oto Hasılat Toplama
+                </span>
+              )}
+            </div>
 
-            {/* City-Level Executives */}
-            <div className="rounded-xl border border-slate-200 p-2.5 dark:border-slate-800">
-              <div className="mb-1.5 flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                <span className="flex items-center gap-1">
-                  <Briefcase className="h-3.5 w-3.5 text-amber-600" />
-                  {targetCityName} Üst Yönetimi (İl Kademesi)
-                </span>
-                <span className="font-mono-num text-[10px] text-slate-500">
-                  {cityBranches.length} şube
-                </span>
+            <p className="text-xs text-slate-300">
+              {automation.managerLabel
+                ? `Sorumlu: ${automation.managerLabel}${
+                    automation.efficiencyBonus > 0
+                      ? ` · +%${Math.round(automation.efficiencyBonus * 100)} verim`
+                      : ''
+                  }`
+                : 'Şube Müdürü atayarak bu şubede stok, bakım ve saatlik hasılatın ana kasaya otomatik aktarılmasını hemen aktif edin.'}
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="flex justify-between text-xs font-semibold text-slate-300">
+                  <span>Stok Durumu</span>
+                  <span className="font-mono-num text-white">
+                    {Math.round(business.stockLevel ?? 100)}%
+                  </span>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-emerald-500"
+                    style={{ width: `${Math.round(business.stockLevel ?? 100)}%` }}
+                  />
+                </div>
               </div>
-              {cityExecs.length === 0 ? (
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Henüz Bölge Sorumlusu veya Genel Müdür atanmadı.
+              <div>
+                <div className="flex justify-between text-xs font-semibold text-slate-300">
+                  <span>Temizlik & Bakım</span>
+                  <span className="font-mono-num text-white">
+                    {Math.round(business.maintenanceLevel ?? 100)}%
+                  </span>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-sky-400"
+                    style={{ width: `${Math.round(business.maintenanceLevel ?? 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {((business.stockLevel ?? 100) < 98 || (business.maintenanceLevel ?? 100) < 98) && (
+              <button
+                type="button"
+                onClick={() => onRestockBusiness(business.id)}
+                className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300"
+              >
+                <Wrench className="h-4 w-4" />
+                <span>Manuel Stok & Bakım Yenile (%100)</span>
+              </button>
+            )}
+          </section>
+        ) : (
+          <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 text-xs text-slate-300">
+            <strong className="text-white">{targetCityName} İl Yönetimi:</strong> Birden fazla
+            şubeniz (min. 2 şube) olduğunda Bölge Sorumlusu (4 şube + %15 tedarik indirimi) veya
+            Genel Müdür (tüm il + %20 verimlilik) atayabilirsiniz.
+          </section>
+        )}
+
+        {/* Current Staff & City Executives */}
+        <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
+          {business && (
+            <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-white">
+                <span className="flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4 text-sky-400" />
+                  Şube Kadrosu ({(business.employees ?? []).length})
+                </span>
+                {slots && (
+                  <span className="text-slate-400">
+                    {slots.workers}/4 Çalışan · {slots.assistantManagers}/1 Yrd ·{' '}
+                    {slots.branchManagers}/1 Müdür
+                  </span>
+                )}
+              </div>
+              {(business.employees ?? []).length === 0 ? (
+                <p className="text-xs text-slate-400">
+                  Aşağıdaki aday havuzundan çalışan veya yönetici işe alın.
                 </p>
               ) : (
-                <div className="space-y-1.5">
-                  {cityExecs.map((exec) => (
+                <div className="space-y-2">
+                  {(business.employees ?? []).map((emp) => (
                     <div
-                      key={exec.id}
-                      className="flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs dark:bg-slate-950/70"
+                      key={emp.id}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2"
                     >
                       <div className="min-w-0">
-                        <div className="truncate font-bold">
-                          {exec.name} ·{' '}
-                          <span className="text-amber-600 dark:text-amber-400">
-                            {'★'.repeat(exec.stars)}
-                          </span>
+                        <div className="truncate text-xs font-bold text-white">
+                          {emp.name}{' '}
+                          <span className="text-amber-400">{'★'.repeat(emp.stars)}</span>
                         </div>
-                        <div className="text-[10px] text-slate-500">
-                          {ROLE_META[exec.role].label} · {formatTL(exec.hourlySalary)}/sa
+                        <div className="text-xs text-slate-400">
+                          {emp.roleTitle} · Hız {emp.speed} · Verim {emp.efficiency} ·{' '}
+                          <span className="font-mono-num text-amber-300">
+                            {formatTL(emp.hourlySalary)}/sa
+                          </span>
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => onDismissStaff(exec.id)}
-                        title="Görevden Al"
-                        className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                        onClick={() => onDismissStaff(emp.id, business.id)}
+                        aria-label="İşten Çıkar"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
                       >
-                        <UserMinus className="h-3.5 w-3.5" />
+                        <UserMinus className="h-4 w-4" />
                       </button>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </section>
+          )}
 
-            {/* Branch Staff List */}
-            {business && (
-              <div className="rounded-xl border border-slate-200 p-2.5 dark:border-slate-800">
-                <div className="mb-1.5 flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                  <span className="flex items-center gap-1">
-                    <Building2 className="h-3.5 w-3.5 text-sky-600" />
-                    Şube Kadrosu ({(business.employees ?? []).length})
-                  </span>
-                </div>
-                {(business.employees ?? []).length === 0 ? (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Sağdaki 1–5 yıldızlı aday havuzundan çalışan veya müdür işe alın.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {(business.employees ?? []).map((emp) => (
-                      <div
-                        key={emp.id}
-                        className="flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs dark:bg-slate-950/70"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-bold">
-                            {emp.name}{' '}
-                            <span className="text-amber-500">{'★'.repeat(emp.stars)}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            {emp.roleTitle} · Hız {emp.speed} · Verim {emp.efficiency} ·{' '}
-                            {formatTL(emp.hourlySalary)}/sa
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => onDismissStaff(emp.id, business.id)}
-                          title="İşten Çıkar"
-                          className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                        >
-                          <UserMinus className="h-3.5 w-3.5" />
-                        </button>
+          <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-white">
+              <span className="flex items-center gap-1.5">
+                <Briefcase className="h-4 w-4 text-amber-400" />
+                {targetCityName} Üst Yönetimi (İl Kademesi)
+              </span>
+              <span className="font-mono-num text-slate-400">{cityBranches.length} şube</span>
+            </div>
+            {cityExecs.length === 0 ? (
+              <p className="text-xs text-slate-400">
+                Henüz Bölge Sorumlusu veya Genel Müdür atanmadı (Min. 2 şube gerekir).
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {cityExecs.map((exec) => (
+                  <div
+                    key={exec.id}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-bold text-white">
+                        {exec.name}{' '}
+                        <span className="text-amber-400">{'★'.repeat(exec.stars)}</span>
                       </div>
-                    ))}
+                      <div className="text-xs text-slate-400">
+                        {ROLE_META[exec.role].label} ·{' '}
+                        <span className="font-mono-num text-amber-300">
+                          {formatTL(exec.hourlySalary)}/sa
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onDismissStaff(exec.id)}
+                      aria-label="Görevden Al"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </button>
                   </div>
-                )}
+                ))}
               </div>
             )}
+          </section>
+        </div>
+
+        {/* Renewable 1-5 Star Candidate Pool */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white">
+              1–5 Yıldız Aday Havuzu ({candidates.length} Aday)
+            </h3>
+            <span className="text-xs text-slate-400">
+              Nakit: <strong className="font-mono-num text-emerald-400">{formatTL(state.cash, true)}</strong>
+            </span>
           </div>
 
-          {/* Right Column: Renewable 1-5 Star Candidate Pool */}
-          <div className="flex min-h-0 flex-col min-[620px]:col-span-7">
-            {/* 5-Tier Filter Pills */}
-            <div className="mb-1.5 flex shrink-0 items-center gap-1 overflow-x-auto pb-1">
-              {ROLE_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setRoleFilter(f.id)}
-                  className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
-                    roleFilter === f.id
-                      ? 'bg-sky-600 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                  }`}
+          <div className="grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
+            {candidates.map((cand) => {
+              const meta = ROLE_META[cand.role];
+              const isCityRole = meta.scope === 'city';
+              const canAfford = state.cash >= cand.hireCost;
+              const needsBranch = !isCityRole && !business;
+              const needsMultiBranch = isCityRole && cityBranches.length < 2;
+
+              let slotFullLabel: string | null = null;
+              if (slots) {
+                if (cand.role === 'calisan' && slots.workers >= slots.maxWorkers) {
+                  slotFullLabel = `Kadro Dolu (${slots.workers}/${slots.maxWorkers})`;
+                } else if (
+                  cand.role === 'mudur_yardimcisi' &&
+                  slots.assistantManagers >= slots.maxAssistantManagers
+                ) {
+                  slotFullLabel = `Kadro Dolu (${slots.assistantManagers}/${slots.maxAssistantManagers})`;
+                } else if (
+                  cand.role === 'sube_muduru' &&
+                  slots.branchManagers >= slots.maxBranchManagers
+                ) {
+                  slotFullLabel = `Kadro Dolu (${slots.branchManagers}/${slots.maxBranchManagers})`;
+                }
+              }
+
+              const hasCityGmAlready =
+                cand.role === 'genel_mudur' &&
+                cityExecs.some((m) => m.role === 'genel_mudur');
+
+              const disabled =
+                !canAfford ||
+                needsBranch ||
+                needsMultiBranch ||
+                Boolean(slotFullLabel) ||
+                hasCityGmAlready;
+
+              const buttonLabel = slotFullLabel
+                ? slotFullLabel
+                : hasCityGmAlready
+                ? 'Genel Müdür Mevcut'
+                : needsMultiBranch
+                ? 'Min. 2 Şube Gerekir'
+                : needsBranch
+                ? 'Önce Şube Seçin'
+                : `İşe Al · ${formatTL(cand.hireCost)}`;
+
+              return (
+                <div
+                  key={cand.id}
+                  className="flex flex-col justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
                 >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="panel-scroll flex-1 min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-1">
-              {candidates.map((cand) => {
-                const meta = ROLE_META[cand.role];
-                const isCityRole = meta.scope === 'city';
-                const canAfford = state.cash >= cand.hireCost;
-                const needsBranch = !isCityRole && !business;
-                const needsTwoBranches =
-                  cand.role === 'bolge_sorumlusu' && cityBranches.length < 2;
-                const needsOneBranch = cand.role === 'genel_mudur' && cityBranches.length < 1;
-                const disabled = !canAfford || needsBranch || needsTwoBranches || needsOneBranch;
-
-                return (
-                  <div
-                    key={cand.id}
-                    className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-800 dark:bg-slate-950/60"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            {cand.name}
-                          </span>
-                          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                            {meta.label}
-                          </span>
-                          <span className="flex items-center gap-0.5 text-amber-500">
-                            {Array.from({ length: cand.stars }).map((_, idx) => (
-                              <Star key={idx} className="h-3 w-3 fill-amber-400 text-amber-500" />
-                            ))}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                          {meta.description}
-                        </p>
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-sm font-bold text-white">{cand.name}</span>
+                        <span className="rounded-md bg-slate-800 px-2 py-0.5 text-xs font-bold text-sky-300">
+                          {meta.label}
+                        </span>
                       </div>
-
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() =>
-                          onHireCandidate(cand.id, business?.id ?? null, targetPlate)
-                        }
-                        className="shrink-0 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 whitespace-nowrap"
-                      >
-                        İşe Al · {formatTL(cand.hireCost)}
-                      </button>
+                      <span className="flex items-center gap-0.5 text-amber-400">
+                        {Array.from({ length: cand.stars }).map((_, idx) => (
+                          <Star key={idx} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                        ))}
+                      </span>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-[10px] dark:border-slate-800/80">
-                      <div className="flex items-center gap-3 font-mono-num font-semibold text-slate-600 dark:text-slate-300">
+                    <p className="text-xs text-slate-300">{meta.description}</p>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-2 font-mono-num text-xs">
+                      <div className="flex items-center gap-3 text-slate-300">
                         <span>Hız: {cand.speed}</span>
-                        <span>Verimlilik: {cand.efficiency}</span>
-                        <span>Liderlik: {cand.leadership}</span>
+                        <span>Verim: {cand.efficiency}</span>
+                        <span>Lider: {cand.leadership}</span>
                       </div>
-                      <div className="font-mono-num font-bold text-slate-700 dark:text-amber-300">
+                      <span className="font-bold text-amber-300">
                         Maaş: {formatTL(cand.hourlySalary)}/sa
-                        {needsTwoBranches && (
-                          <span className="ml-2 text-red-600 dark:text-red-400">
-                            (Min 2 şube gerekir)
-                          </span>
-                        )}
-                      </div>
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onHireCandidate(cand.id, business?.id ?? null, targetPlate)}
+                    className="min-h-[42px] w-full rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-400"
+                  >
+                    {buttonLabel}
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        </div>
-      </div>
+        </section>
+      </MobileGameModal>
     </div>
   );
 }

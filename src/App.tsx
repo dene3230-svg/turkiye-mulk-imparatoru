@@ -110,6 +110,7 @@ import {
 } from './lib/supabase';
 import {
   fetchCityBusinesses,
+  generateSeedCityRivals,
   ownedToRemoteRecord,
   publishBusinessToRoom,
   removeBusinessFromRoom,
@@ -337,9 +338,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v123',
-      title: 'Türkiye Mülk İmparatoru v1.2.3',
-      body: 'Tüm telefon ve tablet ekranları için evrensel responsive panel düzeni ve kenardan kenara tam ekran modu aktif!',
+      id: 'welcome-v126',
+      title: 'Türkiye Mülk İmparatoru v1.2.6',
+      body: 'Ferah mobil menü şablonu, özel kurumsal vektör logolar, oyun takvimi ve Şube Müdürü tam otomasyonu aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -631,6 +632,52 @@ export default function App() {
           );
         }
 
+        if (result.dayEndSummary) {
+          const summary = result.dayEndSummary;
+          const netLabel = `${summary.dailyNetCashFlow >= 0 ? '+' : ''}${formatTL(
+            summary.dailyNetCashFlow,
+            true
+          )}`;
+          const scoreDeltaLabel =
+            summary.creditScoreDelta >= 0
+              ? `+${summary.creditScoreDelta}`
+              : `${summary.creditScoreDelta}`;
+
+          pushNotification(
+            `Gün Sonu Özeti · Gün ${summary.completedDay} (${summary.month}. Ay)`,
+            `Günlük Net: ${netLabel} · Maaşlar: ${formatTL(
+              summary.dailySalariesPaid,
+              true
+            )} · Kredi Puanı: ${scoreDeltaLabel}`,
+            'finance',
+            false
+          );
+
+          if (summary.weeklyDividendPaid > 0) {
+            spawnCashPopup(summary.weeklyDividendPaid);
+            pushNotification(
+              `Haftalık Temettü Ödendi! (${summary.completedDay}. Gün)`,
+              `Borsa portföyünüzden +${formatTL(
+                summary.weeklyDividendPaid
+              )} haftalık temettü kasanıza aktarıldı.`,
+              'revenue',
+              true
+            );
+          }
+
+          if (summary.monthlyClosing) {
+            pushNotification(
+              `${summary.monthlyClosing.monthNumber}. Ay Bilanço Kapanışı`,
+              `${summary.monthlyClosing.totalDays} gün tamamlandı · ${summary.monthlyClosing.branchCount} şube · Net Varlık: ${formatTL(
+                summary.monthlyClosing.netWorth,
+                true
+              )}`,
+              'milestone',
+              true
+            );
+          }
+        }
+
         if (result.loanEnforcement.seizedLoans.length > 0) {
           for (const seized of result.loanEnforcement.seizedLoans) {
             pushNotification(
@@ -707,11 +754,19 @@ export default function App() {
     return Array.from(map.values());
   }, [remoteBanks, empire.ownBank]);
 
-  // Competitor records in current city room (excluding own businesses)
+  // Competitor records in current city room (merged with deterministic AI city rivals if room has none)
   const ownIds = useMemo(() => new Set(empire.businesses.map((b) => b.id)), [empire.businesses]);
+  const seedCityRivals = useMemo(() => generateSeedCityRivals(activePlate), [activePlate]);
+  const effectiveRoomRecords = useMemo(() => {
+    const liveRivals = roomRecords.filter((rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id));
+    if (liveRivals.length > 0) return roomRecords;
+    const filteredSeeds = seedCityRivals.filter((seed) => !ownIds.has(seed.id));
+    return [...roomRecords, ...filteredSeeds];
+  }, [roomRecords, seedCityRivals, user?.id, ownIds]);
+
   const competitorBusinesses = useMemo(
-    () => roomRecords.filter((rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id)),
-    [roomRecords, user?.id, ownIds]
+    () => effectiveRoomRecords.filter((rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id)),
+    [effectiveRoomRecords, user?.id, ownIds]
   );
 
   // 75m minimum distance check for currently dropped pin
@@ -1577,7 +1632,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Center Compact Time & Speed Control Capsule (Durdur / 1x / 2x / 4x) */}
+            {/* Center Compact Game Calendar & Time Speed Capsule (Durdur / 1x / 2x / 4x) */}
             <div
               data-testid="time-speed-capsule"
               className={`pointer-events-auto flex shrink-0 items-center gap-1 rounded-2xl border px-1.5 py-1 shadow-lg transition-colors ${
@@ -1588,20 +1643,24 @@ export default function App() {
             >
               <div
                 data-testid="hud-game-clock"
+                title={gameClock.totalDaysLabel}
                 className="flex items-center gap-1 pl-1 pr-0.5 whitespace-nowrap"
               >
                 <Clock
                   className={`h-3.5 w-3.5 shrink-0 ${
                     gameSpeed === 0
                       ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-slate-500 dark:text-slate-400'
+                      : 'text-amber-600 dark:text-amber-400'
                   }`}
                 />
-                <span className="hidden font-mono-num text-[clamp(10.5px,1.25vw,12px)] font-extrabold text-slate-900 dark:text-white min-[760px]:inline">
+                <span className="hidden font-mono-num text-[clamp(10.5px,1.2vw,12px)] font-extrabold text-slate-900 dark:text-white min-[740px]:inline">
                   {gameClock.label}
                 </span>
-                <span className="font-mono-num text-[10.5px] font-extrabold text-slate-900 dark:text-white min-[760px]:hidden">
+                <span className="font-mono-num text-[10.5px] font-extrabold text-slate-900 dark:text-white min-[740px]:hidden">
                   {gameClock.compactLabel}
+                </span>
+                <span className="hidden rounded-md bg-amber-400/20 px-1.5 py-0.5 font-mono-num text-[10px] font-bold text-amber-800 dark:text-amber-300 xl:inline">
+                  {gameClock.totalDaysLabel}
                 </span>
               </div>
 
@@ -1629,8 +1688,8 @@ export default function App() {
                       className={`flex h-7 min-w-[26px] items-center justify-center rounded-lg px-1.5 font-mono-num text-[10.5px] font-extrabold transition-colors sm:h-8 sm:min-w-[30px] sm:text-[11px] whitespace-nowrap ${
                         active
                           ? item.speed === 0
-                            ? 'bg-amber-600 text-white shadow-xs'
-                            : 'bg-slate-900 text-white shadow-xs dark:bg-amber-500 dark:text-slate-950'
+                            ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
+                            : 'bg-slate-900 text-white shadow-xs dark:bg-amber-400 dark:text-slate-950 dark:font-bold'
                           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
                       }`}
                     >
@@ -1752,8 +1811,8 @@ export default function App() {
               }}
               className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(10px,1.8vw,16px)] text-[clamp(11.5px,1.5vw,13px)] font-bold transition-colors whitespace-nowrap ${
                 droppedPin || (!activeDrawer && !selectedBusiness && !selectedCompetitor)
-                  ? 'bg-amber-600 text-white shadow-sm hover:bg-amber-700'
-                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
+                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm hover:bg-amber-300'
+                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60'
               }`}
             >
               <MapPin className="h-4 w-4 shrink-0" />
@@ -1841,7 +1900,7 @@ export default function App() {
             )}
 
           {/* Right Contextual Side Panel Container — pinned cleanly between Top HUD & Bottom Dock */}
-          {(droppedPin || selectedBusiness || selectedCompetitor || activeDrawer) && (
+          {(droppedPin || selectedBusiness || selectedCompetitor) && (
             <div
               data-testid="right-panel-container"
               className="pointer-events-none fixed bottom-[var(--panel-bottom-offset)] right-[var(--hud-right-gap)] top-[var(--panel-top-offset)] z-[650] flex justify-end overflow-hidden"
@@ -1884,28 +1943,32 @@ export default function App() {
                   onTakeover={handleTakeoverCompetitor}
                   onClose={() => setSelectedCompetitorId(null)}
                 />
-              ) : activeDrawer ? (
-                <SideDrawer
-                  tab={activeDrawer}
-                  state={empire}
-                  stockQuotes={stockQuotes}
-                  now={now}
-                  onClose={() => setActiveDrawer(null)}
-                  onSelectBusiness={handleSelectOwnBusiness}
-                  onEnterInterior={(id) => setInteriorBusinessId(id)}
-                  onOpenHrModal={(id) => {
-                    setHrTargetBusinessId(id);
-                    setHrModalOpen(true);
-                  }}
-                  onCollectBusiness={handleCollectBusiness}
-                  onClaimMission={handleClaimMission}
-                  onEnablePinMode={() => {
-                    setActiveDrawer(null);
-                    handleMapClick(activeProvince.lat, activeProvince.lng);
-                  }}
-                />
               ) : null}
             </div>
+          )}
+
+          {/* Unified MobileGameModal for Portföy, Görevler & Piyasa Haberleri */}
+          {activeDrawer && (
+            <SideDrawer
+              tab={activeDrawer}
+              state={empire}
+              stockQuotes={stockQuotes}
+              now={now}
+              onSwitchTab={(nextTab) => setActiveDrawer(nextTab)}
+              onClose={() => setActiveDrawer(null)}
+              onSelectBusiness={handleSelectOwnBusiness}
+              onEnterInterior={(id) => setInteriorBusinessId(id)}
+              onOpenHrModal={(id) => {
+                setHrTargetBusinessId(id);
+                setHrModalOpen(true);
+              }}
+              onCollectBusiness={handleCollectBusiness}
+              onClaimMission={handleClaimMission}
+              onEnablePinMode={() => {
+                setActiveDrawer(null);
+                handleMapClick(activeProvince.lat, activeProvince.lng);
+              }}
+            />
           )}
         </div>
       )}
@@ -2059,7 +2122,7 @@ export default function App() {
         state={empire}
         netWorth={netWorth}
         activeProvince={activeProvince}
-        roomRecords={roomRecords}
+        roomRecords={effectiveRoomRecords}
         allFranchises={allFranchises}
         allBanks={allBanks}
         onClose={() => setLeaderboardModalOpen(false)}

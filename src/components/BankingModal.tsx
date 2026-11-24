@@ -1,20 +1,15 @@
 import { useState } from 'react';
 import {
-  X,
   Landmark,
   ShieldAlert,
   CheckCircle2,
   Coins,
   Building2,
-  AlertTriangle,
+  Lock,
   BarChart3,
   FileSpreadsheet,
 } from 'lucide-react';
-import type {
-  BankRecord,
-  EmpireState,
-  ProvinceInfo,
-} from '../types/game';
+import type { BankRecord, EmpireState, ProvinceInfo } from '../types/game';
 import { BANK_MIN_NET_WORTH } from '../game/catalog';
 import {
   CREDIT_TIERS,
@@ -23,6 +18,8 @@ import {
   getCreditTier,
 } from '../game/bankingEngine';
 import { calculateBusinessValuation, formatTL } from '../game/economy';
+import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
+import { BrandLogo } from './BrandLogo';
 
 interface BankingModalProps {
   open: boolean;
@@ -55,8 +52,7 @@ interface BankingModalProps {
   onClose: () => void;
 }
 
-const BANK_COLORS = ['#0F766E', '#1D4ED8', '#B45309', '#7C3AED', '#BE123C', '#0F172A'];
-const BANK_EMBLEMS = ['🏦', '🏛️', '💎', '👑', '🦅', '🛡️'];
+const BANK_COLORS = ['#0F766E', '#1D4ED8', '#B45309', '#7C3AED', '#BE123C', '#0891B2'];
 
 export function BankingModal({
   open,
@@ -73,7 +69,7 @@ export function BankingModal({
   onSwitchToAccounting,
   onClose,
 }: BankingModalProps) {
-  const [tab, setTab] = useState<'loans' | 'own-bank'>('loans');
+  const [subTab, setSubTab] = useState<'loans' | 'own-bank'>('loans');
   const [selectedBankId, setSelectedBankId] = useState<string>(allBanks[0]?.id ?? '');
   const [loanAmount, setLoanAmount] = useState<number>(100_000);
   const [collateralBizId, setCollateralBizId] = useState<string>(
@@ -83,7 +79,6 @@ export function BankingModal({
   // Own Bank creation / management form
   const [bankName, setBankName] = useState('');
   const [brandColor, setBrandColor] = useState(BANK_COLORS[2]);
-  const [emblem, setEmblem] = useState(BANK_EMBLEMS[0]);
   const [poolCapital, setPoolCapital] = useState(5_000_000);
   const [baseRatePct, setBaseRatePct] = useState(12);
   const [minScore, setMinScore] = useState(1000);
@@ -106,10 +101,14 @@ export function BankingModal({
   const effRate = selectedBank
     ? calculateEffectiveInterestRate(selectedBank.baseInterestRate, creditScore)
     : 0.12;
+  const totalRepayment = Math.round(loanAmount * (1 + effRate));
   const reqCollateral = calculateRequiredCollateral(loanAmount, creditScore);
   const activeLoans = (state.activeLoans ?? []).filter(
     (l) => l.status === 'active' || l.status === 'garnishing'
   );
+
+  const canOpenOwnBank = Boolean(state.ownBank) || netWorth >= BANK_MIN_NET_WORTH;
+  const effectiveSubTab = subTab === 'own-bank' && !canOpenOwnBank ? 'loans' : subTab;
 
   const canBorrow =
     Boolean(selectedBank) &&
@@ -120,282 +119,281 @@ export function BankingModal({
     Boolean(chosenBiz) &&
     chosenBizVal >= reqCollateral;
 
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Finans ve Banka Merkezi"
-      data-testid="banking-modal"
-      className="fixed inset-0 z-[1260] flex items-center justify-center bg-slate-950/60 p-2.5 safe-inset"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl lg:max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-      >
-        {/* Header with Unified Finance Switcher (Borsa | Banka | Muhasebe) */}
-        <div className="compact-short-pad flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 sm:flex">
-              <Landmark className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="truncate text-[clamp(0.84rem,1.6vw,1rem)] font-bold">
-                Finans Merkezi · Banka & Kredi Piyasası
-              </h2>
-              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                0–1900 Kredi Puanı · Teminatlı Kredi · Özel Banka & Haciz
-              </p>
-            </div>
-          </div>
+  const topTabs: MobileModalTab[] = [
+    ...(onSwitchToBorsa
+      ? [{ id: 'borsa', label: 'Borsa', icon: <BarChart3 className="h-4 w-4" /> }]
+      : []),
+    { id: 'banka', label: 'Banka & Kredi', icon: <Landmark className="h-4 w-4" /> },
+    ...(onSwitchToAccounting
+      ? [{ id: 'muhasebe', label: 'Muhasebe', icon: <FileSpreadsheet className="h-4 w-4" /> }]
+      : []),
+  ];
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            {(onSwitchToBorsa || onSwitchToAccounting) && (
-              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
-                {onSwitchToBorsa && (
-                  <button
-                    type="button"
-                    data-testid="finance-switch-borsa"
-                    onClick={onSwitchToBorsa}
-                    className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
-                  >
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    <span>Borsa</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  data-testid="finance-switch-banka"
-                  className="flex min-h-[34px] items-center gap-1 rounded-lg bg-sky-600 px-2.5 text-xs font-bold text-white shadow-xs whitespace-nowrap"
-                >
-                  <Landmark className="h-3.5 w-3.5" />
-                  <span>Banka</span>
-                </button>
-                {onSwitchToAccounting && (
-                  <button
-                    type="button"
-                    data-testid="finance-switch-accounting"
-                    onClick={onSwitchToAccounting}
-                    className="flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white whitespace-nowrap"
-                  >
-                    <FileSpreadsheet className="h-3.5 w-3.5" />
-                    <span>Muhasebe</span>
-                  </button>
-                )}
-              </div>
-            )}
+  return (
+    <div data-testid="banking-modal">
+      <MobileGameModal
+        title="Finans Merkezi"
+        subtitle="Banka & Kredi Piyasası"
+        icon={<Landmark className="h-4 w-4" />}
+        tabs={topTabs}
+        activeTabId="banka"
+        onSelectTab={(id) => {
+          if (id === 'borsa') onSwitchToBorsa?.();
+          if (id === 'muhasebe') onSwitchToAccounting?.();
+        }}
+        subHeader={
+          <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
             <button
               type="button"
-              onClick={onClose}
-              aria-label="Banka Penceresini Kapat"
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              data-testid="bank-tab-loans"
+              onClick={() => setSubTab('loans')}
+              className={`min-h-[40px] shrink-0 rounded-xl px-3.5 text-xs font-bold transition ${
+                effectiveSubTab === 'loans'
+                  ? 'bg-emerald-500 text-slate-950 font-bold'
+                  : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+              }`}
             >
-              <X className="h-4 w-4" />
+              Kredi Çek & Borçlar ({activeLoans.length})
+            </button>
+            <button
+              type="button"
+              data-testid="bank-tab-own"
+              disabled={!canOpenOwnBank}
+              title={
+                !canOpenOwnBank
+                  ? `Kendi bankanızı kurmak için ₺25.000.000 net değer gerekir (Mevcut: ${formatTL(netWorth, true)})`
+                  : undefined
+              }
+              onClick={() => canOpenOwnBank && setSubTab('own-bank')}
+              className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition ${
+                !canOpenOwnBank
+                  ? 'cursor-not-allowed border border-slate-800 bg-slate-900/70 text-slate-500 opacity-70'
+                  : effectiveSubTab === 'own-bank'
+                  ? 'bg-amber-400 text-slate-950 font-bold'
+                  : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+              }`}
+            >
+              {!canOpenOwnBank && <Lock className="h-3.5 w-3.5" />}
+              <span>
+                {state.ownBank
+                  ? `Bankam: ${state.ownBank.bankName}`
+                  : 'Kendi Bankanı Kur (₺25 Mln)'}
+              </span>
             </button>
           </div>
-        </div>
-
-        {/* Credit Score Strip (0-1900) */}
-        <div className="border-b border-slate-200 bg-slate-50/90 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-950/60">
+        }
+        onClose={onClose}
+        zIndexClass="z-[1260]"
+      >
+        {/* Credit Score Card */}
+        <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-600 dark:text-slate-300">
-                Kredi Puanınız:
-              </span>
+              <span className="font-semibold text-slate-300">Kredi Puanı:</span>
               <span
                 data-testid="credit-score-value"
-                className="font-mono-num text-sm font-extrabold"
+                className="font-mono-num text-sm font-black"
                 style={{ color: tier.badgeColor }}
               >
                 {creditScore} / 1900
               </span>
               <span
-                className="rounded-md px-2 py-0.5 text-[10px] font-bold text-white"
+                className="rounded-md px-2 py-0.5 text-xs font-bold text-white"
                 style={{ backgroundColor: tier.badgeColor }}
               >
                 {tier.label}
               </span>
             </div>
-            <div className="font-mono-num text-[11px] text-slate-600 dark:text-slate-300">
-              Limit: <strong>{formatTL(tier.maxLoanAmount, true)}</strong> · Faiz Farkı:{' '}
-              <strong>
-                {tier.rateSpread === 0
-                  ? '%0 (Baz)'
-                  : tier.rateSpread > 0
-                  ? `+%${Math.round(tier.rateSpread * 100)}`
-                  : `%${Math.round(tier.rateSpread * 100)} VIP`}
-              </strong>{' '}
-              · Teminat: <strong>{tier.collateralMultiplier}×</strong>
+            <div className="font-mono-num text-xs text-slate-300">
+              Limit: <strong className="text-white">{formatTL(tier.maxLoanAmount, true)}</strong> ·
+              Teminat: <strong className="text-amber-300">{tier.collateralMultiplier}×</strong>
             </div>
           </div>
-          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full rounded-full transition-all duration-300"
               style={{ width: `${scorePct}%`, backgroundColor: tier.badgeColor }}
             />
           </div>
-          <div className="mt-1 grid grid-cols-5 gap-1 text-[9px] text-slate-500">
+          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <span>
+              Faiz Farkı:{' '}
+              <strong className="text-slate-100">
+                {tier.rateSpread === 0
+                  ? '%0 (Baz)'
+                  : tier.rateSpread > 0
+                  ? `+%${Math.round(tier.rateSpread * 100)}`
+                  : `%${Math.round(tier.rateSpread * 100)} VIP`}
+              </strong>
+            </span>
+            <span>
+              Net Değeriniz: <strong className="font-mono-num text-emerald-400">{formatTL(netWorth, true)}</strong>
+              {!canOpenOwnBank && (
+                <span className="ml-1.5 text-slate-400">(Banka Lisansı: ₺25 Mln)</span>
+              )}
+            </span>
+          </div>
+          <div className="mt-2 hidden grid-cols-5 gap-1 text-[11px] text-slate-400 min-[900px]:grid">
             {CREDIT_TIERS.map((t) => (
               <div
                 key={t.key}
-                className={t.key === tier.key ? 'font-bold text-slate-900 dark:text-white' : ''}
+                className={t.key === tier.key ? 'font-bold text-amber-300' : ''}
               >
                 {t.minScore}–{t.maxScore} {t.label}
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1.5 border-b border-slate-200 px-4 py-2 dark:border-slate-800">
-          <button
-            type="button"
-            data-testid="bank-tab-loans"
-            onClick={() => setTab('loans')}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors ${
-              tab === 'loans'
-                ? 'bg-emerald-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
-          >
-            Kredi Çek & Borçlar ({activeLoans.length})
-          </button>
-          <button
-            type="button"
-            data-testid="bank-tab-own"
-            onClick={() => setTab('own-bank')}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors ${
-              tab === 'own-bank'
-                ? 'bg-amber-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
-          >
-            {state.ownBank ? `Bankam: ${state.ownBank.bankName}` : 'Kendi Bankanı Kur (₺25 Mn)'}
-          </button>
-        </div>
+        {effectiveSubTab === 'loans' ? (
+          <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
+            {/* Borrow Card */}
+            <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Banka Seç & Kredi Kullan</h3>
+                <span className="text-xs font-semibold text-slate-400">
+                  {allBanks.length} Banka
+                </span>
+              </div>
 
-        {/* Tab Body */}
-        <div className="panel-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-3.5">
-          {tab === 'loans' ? (
-            <div className="grid grid-cols-1 gap-3.5 md:grid-cols-12">
-              {/* Left: Borrow Form */}
-              <div className="space-y-2.5 md:col-span-7">
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/60">
-                  <h3 className="text-xs font-bold">Banka Seç & Teminatlı Kredi Kullan</h3>
-
-                  <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {allBanks.map((bank) => {
-                      const rate = calculateEffectiveInterestRate(
-                        bank.baseInterestRate,
-                        creditScore
-                      );
-                      const isSel = selectedBank?.id === bank.id;
-                      return (
-                        <button
-                          key={bank.id}
-                          type="button"
-                          onClick={() => setSelectedBankId(bank.id)}
-                          className={`rounded-xl border p-2 text-left transition-colors ${
-                            isSel
-                              ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/35'
-                              : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between text-xs font-bold">
-                            <span className="truncate">
-                              {bank.emblem} {bank.bankName}
-                            </span>
-                            <span className="font-mono-num text-emerald-700 dark:text-emerald-400">
-                              %{(rate * 100).toFixed(1)}
+              {/* Bank Selector List */}
+              <div className="grid grid-cols-1 gap-2">
+                {allBanks.map((bank) => {
+                  const rate = calculateEffectiveInterestRate(bank.baseInterestRate, creditScore);
+                  const isSel = selectedBank?.id === bank.id;
+                  const scoreOk = creditScore >= bank.minCreditScore;
+                  return (
+                    <button
+                      key={bank.id}
+                      type="button"
+                      onClick={() => setSelectedBankId(bank.id)}
+                      className={`flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border p-2.5 text-left transition ${
+                        isSel
+                          ? 'border-amber-400 bg-amber-400/12 shadow-md shadow-amber-500/10'
+                          : 'border-slate-800 bg-slate-950/75 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <BrandLogo
+                          brandKey={bank.id || bank.bankName}
+                          customColor={bank.brandColor}
+                          size={38}
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-bold text-white sm:text-sm">
+                            {bank.bankName}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Havuz: <span className="font-mono-num text-slate-200">{formatTL(bank.poolCapital, true)}</span> · Min Puan:{' '}
+                            <span className={scoreOk ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                              {bank.minCreditScore}
                             </span>
                           </div>
-                          <div className="mt-0.5 flex justify-between text-[10px] text-slate-500">
-                            <span>Havuz: {formatTL(bank.poolCapital, true)}</span>
-                            <span>Min Puan: {bank.minCreditScore}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-mono-num text-sm font-black text-emerald-400">
+                          %{(rate * 100).toFixed(1)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Etkin Faiz</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold">Kredi Tutarı (₺)</label>
-                      <input
-                        type="number"
-                        min={25000}
-                        max={Math.max(25000, tier.maxLoanAmount)}
-                        step={25000}
-                        value={loanAmount}
-                        onChange={(e) => setLoanAmount(Number(e.target.value))}
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-xs dark:border-slate-700 dark:bg-slate-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold">
-                        Teminat İşletme (Min {formatTL(reqCollateral, true)})
-                      </label>
-                      <select
-                        value={chosenBiz?.id ?? ''}
-                        onChange={(e) => setCollateralBizId(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
-                      >
-                        {freeBusinesses.length === 0 ? (
-                          <option value="">Teminat gösterecek işletme yok</option>
-                        ) : (
-                          freeBusinesses.map((b) => {
-                            const val = calculateBusinessValuation(b, state.activeEvent, now);
-                            return (
-                              <option key={b.id} value={b.id}>
-                                {b.customName} ({formatTL(val, true)})
-                              </option>
-                            );
-                          })
-                        )}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
-                    <span>
-                      Toplam Geri Ödeme (%{(effRate * 100).toFixed(1)} faiz):
-                    </span>
-                    <strong className="font-mono-num text-slate-900 dark:text-white">
-                      {formatTL(Math.round(loanAmount * (1 + effRate)))}
-                    </strong>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={!canBorrow}
-                    onClick={() =>
-                      selectedBank &&
-                      chosenBiz &&
-                      onTakeLoan(selectedBank.id, loanAmount, chosenBiz.id)
-                    }
-                    className="mt-2.5 w-full rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800"
+              {/* Loan Inputs */}
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Kredi Tutarı (₺)
+                  </label>
+                  <input
+                    type="number"
+                    min={25000}
+                    max={Math.max(25000, tier.maxLoanAmount)}
+                    step={25000}
+                    value={loanAmount}
+                    onChange={(e) => setLoanAmount(Number(e.target.value))}
+                    className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 font-mono-num text-sm font-bold text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Teminat İşletme (Min {formatTL(reqCollateral, true)})
+                  </label>
+                  <select
+                    value={chosenBiz?.id ?? ''}
+                    onChange={(e) => setCollateralBizId(e.target.value)}
+                    className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs font-semibold text-white"
                   >
-                    {tier.maxLoanAmount <= 0
-                      ? 'Kara Liste — Kredi Kapalı'
-                      : !chosenBiz
-                      ? 'Teminat İçin Önce İşletme Kurun'
-                      : chosenBizVal < reqCollateral
-                      ? `Teminat Yetersiz (Gerekli: ${formatTL(reqCollateral, true)})`
-                      : `Krediyi Onayla · ${formatTL(loanAmount)}`}
-                  </button>
+                    {freeBusinesses.length === 0 ? (
+                      <option value="">Teminat gösterecek işletme yok</option>
+                    ) : (
+                      freeBusinesses.map((b) => {
+                        const val = calculateBusinessValuation(b, state.activeEvent, now);
+                        return (
+                          <option key={b.id} value={b.id}>
+                            {b.customName} ({formatTL(val, true)})
+                          </option>
+                        );
+                      })
+                    )}
+                  </select>
                 </div>
               </div>
 
-              {/* Right: Active Loans & Seizure Countdown */}
-              <div className="space-y-2 md:col-span-5">
-                <h3 className="text-xs font-bold">Aktif Kredileriniz</h3>
-                {activeLoans.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500 dark:border-slate-700">
-                    Aktif kredi borcunuz bulunmuyor. Zamanında ödenen krediler kredi puanınızı
-                    yükseltir.
-                  </div>
-                ) : (
-                  activeLoans.map((loan) => {
+              {/* Repayment Summary + Confirm CTA directly beneath */}
+              <div className="rounded-xl border border-slate-700/80 bg-slate-950/90 p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-semibold text-slate-300">
+                    Toplam Geri Ödeme (%{(effRate * 100).toFixed(1)} faiz):
+                  </span>
+                  <strong className="font-mono-num text-base font-black text-amber-300">
+                    {formatTL(totalRepayment)}
+                  </strong>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="confirm-loan-btn"
+                  disabled={!canBorrow}
+                  onClick={() =>
+                    selectedBank &&
+                    chosenBiz &&
+                    onTakeLoan(selectedBank.id, loanAmount, chosenBiz.id)
+                  }
+                  className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none"
+                >
+                  <Coins className="h-4 w-4 shrink-0" />
+                  <span>
+                    {tier.maxLoanAmount <= 0
+                      ? 'Kara Liste — Kredi Kapalı'
+                      : selectedBank && creditScore < selectedBank.minCreditScore
+                      ? `Min. ${selectedBank.minCreditScore} Kredi Puanı Gerekir`
+                      : !chosenBiz
+                      ? 'Krediyi Onayla ve Çek (Önce İşletme Kurun)'
+                      : chosenBizVal < reqCollateral
+                      ? `Teminat Yetersiz (Gerekli: ${formatTL(reqCollateral, true)})`
+                      : `Krediyi Onayla ve Çek · ${formatTL(loanAmount)}`}
+                  </span>
+                </button>
+              </div>
+            </section>
+
+            {/* Active Loans List */}
+            <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-3">
+              <h3 className="text-sm font-bold text-white">
+                Aktif Kredileriniz ({activeLoans.length})
+              </h3>
+              {activeLoans.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
+                  Aktif kredi borcunuz bulunmuyor. Zamanında ödenen krediler kredi puanınızı
+                  +65 puan yükseltir ve faiz indirimini açar.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {activeLoans.map((loan) => {
                     const secLeft = Math.max(0, Math.ceil((loan.dueAt - now) / 1000));
                     const seizureSec = Math.max(0, Math.ceil((loan.seizureAt - now) / 1000));
                     const isGarnishing = loan.status === 'garnishing';
@@ -403,107 +401,116 @@ export function BankingModal({
                     return (
                       <div
                         key={loan.id}
-                        className={`rounded-xl border p-3 ${
+                        className={`rounded-xl border p-3 space-y-2 ${
                           isGarnishing
-                            ? 'border-red-400 bg-red-50/80 dark:border-red-800 dark:bg-red-950/40'
-                            : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/60'
+                            ? 'border-rose-500/70 bg-rose-950/35'
+                            : 'border-slate-800 bg-slate-950/80'
                         }`}
                       >
-                        <div className="flex items-center justify-between text-xs font-bold">
-                          <span>{loan.bankName}</span>
-                          <span className="font-mono-num text-red-600 dark:text-red-400">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <BrandLogo brandKey={loan.bankId || loan.bankName} size={30} />
+                            <span className="truncate text-xs font-bold text-white">
+                              {loan.bankName}
+                            </span>
+                          </div>
+                          <span className="shrink-0 font-mono-num text-xs font-black text-rose-400">
                             Kalan: {formatTL(loan.remainingAmount)}
                           </span>
                         </div>
-                        <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
-                          <Building2 className="h-3 w-3" />
+
+                        <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                          <Building2 className="h-3.5 w-3.5 text-amber-400" />
                           <span>Teminat: {loan.collateralBusinessName}</span>
                         </div>
-                        <div className="mt-1.5 text-[11px] font-semibold">
+
+                        <div className="text-xs font-semibold">
                           {isGarnishing ? (
-                            <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
-                              <ShieldAlert className="h-3.5 w-3.5" />
+                            <span className="flex items-center gap-1.5 text-rose-300">
+                              <ShieldAlert className="h-4 w-4" />
                               Gelire El Konuluyor! Otomatik Haciz: {seizureSec}sn
                             </span>
                           ) : (
-                            <span className="text-slate-600 dark:text-slate-300">
-                              Vade Kalan Süre: <strong className="font-mono-num">{secLeft}sn</strong>
+                            <span className="text-slate-300">
+                              Vade Kalan Süre: <strong className="font-mono-num text-white">{secLeft}sn</strong>
                             </span>
                           )}
                         </div>
+
                         <button
                           type="button"
                           disabled={state.cash < loan.remainingAmount}
                           onClick={() => onRepayLoan(loan.id)}
-                          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-40 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                          className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                         >
-                          <Coins className="h-3.5 w-3.5" />
+                          <Coins className="h-4 w-4" />
                           <span>Borcu Kapat (+65 Puan)</span>
                         </button>
                       </div>
                     );
-                  })
-                )}
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+        ) : state.ownBank ? (
+          /* Own Bank Management */
+          <section className="rounded-xl border border-amber-400/40 bg-slate-900/80 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <BrandLogo
+                  brandKey={state.ownBank.bankName}
+                  customColor={state.ownBank.brandColor}
+                  size={44}
+                />
+                <div>
+                  <h3 className="text-sm font-black text-white">{state.ownBank.bankName}</h3>
+                  <div className="text-xs text-slate-300">
+                    Genel Müdürlük: {state.ownBank.hqCityName} · Havuz:{' '}
+                    <strong className="font-mono-num text-emerald-400">
+                      {formatTL(state.ownBank.poolCapital)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
+                <CheckCircle2 className="h-4 w-4" /> Faaliyette
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 min-[900px]:grid-cols-2">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/75 p-3">
+                <div className="text-xs text-slate-400">Baz Faiz / Min Puan</div>
+                <div className="mt-1 font-mono-num text-sm font-black text-white">
+                  %{Math.round(state.ownBank.baseInterestRate * 100)} · Min{' '}
+                  {state.ownBank.minCreditScore} Puan
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/75 p-3">
+                <div className="text-xs text-slate-400">Haczedilen Mülk / Verilen Kredi</div>
+                <div className="mt-1 font-mono-num text-sm font-black text-amber-300">
+                  {state.ownBank.seizedAssetsCount} Mülk · {state.ownBank.totalLoansIssued} Kredi
+                </div>
               </div>
             </div>
-          ) : state.ownBank ? (
-            <div className="mx-auto max-w-2xl space-y-3 rounded-xl border border-amber-300/70 bg-amber-50/40 p-4 dark:border-amber-800/70 dark:bg-amber-950/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-xl text-xl text-white"
-                    style={{ backgroundColor: state.ownBank.brandColor }}
-                  >
-                    {state.ownBank.emblem}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold">{state.ownBank.bankName}</h3>
-                    <div className="text-[11px] text-slate-500">
-                      Genel Müdürlük: {state.ownBank.hqCityName} · Kredi Havuzu:{' '}
-                      <strong className="font-mono-num text-emerald-700 dark:text-emerald-400">
-                        {formatTL(state.ownBank.poolCapital)}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-                <span className="flex items-center gap-1 rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Faaliyette
-                </span>
-              </div>
 
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-                  <div className="text-[10px] text-slate-500">Baz Faiz</div>
-                  <div className="font-mono-num font-bold">
-                    %{Math.round(state.ownBank.baseInterestRate * 100)}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-                  <div className="text-[10px] text-slate-500">Min Kredi Puanı</div>
-                  <div className="font-mono-num font-bold">{state.ownBank.minCreditScore}</div>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-                  <div className="text-[10px] text-slate-500">Haczedilen Mülk</div>
-                  <div className="font-mono-num font-bold">{state.ownBank.seizedAssetsCount}</div>
-                </div>
+            <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300">
+                  Havuz Sermayesi Ekle (₺)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={500000}
+                  value={addCapital}
+                  onChange={(e) => setAddCapital(Number(e.target.value))}
+                  className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 font-mono-num text-sm text-white"
+                />
               </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-2">
                 <div>
-                  <label className="block text-[11px] font-semibold">
-                    Havuz Sermayesi Ekle (₺)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={500000}
-                    value={addCapital}
-                    onChange={(e) => setAddCapital(Number(e.target.value))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-xs dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold">
+                  <label className="block text-xs font-semibold text-slate-300">
                     Baz Faiz (%5–%30): %{baseRatePct}
                   </label>
                   <input
@@ -512,11 +519,11 @@ export function BankingModal({
                     max={30}
                     value={baseRatePct}
                     onChange={(e) => setBaseRatePct(Number(e.target.value))}
-                    className="mt-2.5 w-full accent-amber-600"
+                    className="mt-1 w-full accent-amber-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold">
+                  <label className="block text-xs font-semibold text-slate-300">
                     Min Kredi Puanı: {minScore}
                   </label>
                   <input
@@ -526,166 +533,144 @@ export function BankingModal({
                     step={50}
                     value={minScore}
                     onChange={(e) => setMinScore(Number(e.target.value))}
-                    className="mt-2.5 w-full accent-amber-600"
+                    className="mt-1 w-full accent-amber-400"
                   />
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  onUpdateBank({
-                    addCapital,
-                    baseInterestRate: baseRatePct / 100,
-                    minCreditScore: minScore,
-                  })
-                }
-                className="w-full rounded-xl bg-amber-600 py-2 text-xs font-bold text-white hover:bg-amber-700"
-              >
-                Banka Politikalarını & Sermayeyi Güncelle
-              </button>
             </div>
-          ) : (
-            <div className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/60">
-              <h3 className="text-sm font-bold">Kendi Bankanı Kur (BDDK Lisansı)</h3>
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                Şirket değeri <strong>₺25.000.000</strong> seviyesine ulaşan holdingler kendi
-                bankasını kurabilir, faiz ve puan filtresini belirleyip diğer oyunculara kredi
-                verebilir.
-              </p>
 
-              {netWorth < BANK_MIN_NET_WORTH ? (
-                <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>
-                    Mevcut Net Değeriniz: {formatTL(netWorth)} / Gerekli: ₺25.000.000
-                  </span>
+            <button
+              type="button"
+              onClick={() =>
+                onUpdateBank({
+                  addCapital,
+                  baseInterestRate: baseRatePct / 100,
+                  minCreditScore: minScore,
+                })
+              }
+              className="min-h-[44px] w-full rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 hover:bg-amber-300"
+            >
+              Banka Politikalarını & Sermayeyi Güncelle
+            </button>
+          </section>
+        ) : (
+          /* Create Own Bank Form (Only reachable when netWorth >= 25M) */
+          <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
+            <h3 className="text-sm font-black text-white">Kendi Bankanı Kur (BDDK Lisansı)</h3>
+            <p className="text-xs text-slate-300">
+              Holdinginizin net değeri ₺25.000.000 eşiğini geçti. Kendi bankanızı kurarak faiz ve
+              puan kurallarını belirleyip diğer oyunculara kredi kullandırabilirsiniz.
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300">Banka Adı</label>
+                <input
+                  type="text"
+                  maxLength={42}
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  placeholder="Örn: Boğaziçi Yatırım Bankası"
+                  className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300">
+                  Genel Müdürlük İli
+                </label>
+                <div className="mt-1 flex min-h-[42px] items-center rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs font-bold text-amber-300">
+                  {activeProvince.code} {activeProvince.name}
                 </div>
-              ) : (
-                <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold">Banka Adı</label>
-                      <input
-                        type="text"
-                        maxLength={42}
-                        value={bankName}
-                        onChange={(e) => setBankName(e.target.value)}
-                        placeholder="Örn: Boğaziçi Holding Bankası"
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold">
-                        Genel Müdürlük İli (Harita Konumu)
-                      </label>
-                      <div className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900">
-                        {activeProvince.code} {activeProvince.name} ({activeProvince.lat.toFixed(2)},{' '}
-                        {activeProvince.lng.toFixed(2)})
-                      </div>
-                    </div>
-                  </div>
+              </div>
+            </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-1">
-                      {BANK_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setBrandColor(c)}
-                          className={`h-6 w-6 rounded-full border-2 ${
-                            brandColor === c ? 'border-slate-900 scale-110 dark:border-white' : 'border-transparent'
-                          }`}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {BANK_EMBLEMS.map((e) => (
-                        <button
-                          key={e}
-                          type="button"
-                          onClick={() => setEmblem(e)}
-                          className={`h-7 w-7 rounded-lg text-sm ${
-                            emblem === e ? 'bg-amber-200 dark:bg-amber-800' : 'bg-slate-200/70 dark:bg-slate-800'
-                          }`}
-                        >
-                          {e}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold">
-                        İlk Kredi Havuzu (₺)
-                      </label>
-                      <input
-                        type="number"
-                        min={1000000}
-                        step={500000}
-                        value={poolCapital}
-                        onChange={(e) => setPoolCapital(Number(e.target.value))}
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-xs dark:border-slate-700 dark:bg-slate-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold">
-                        Baz Faiz (%{baseRatePct})
-                      </label>
-                      <input
-                        type="range"
-                        min={5}
-                        max={30}
-                        value={baseRatePct}
-                        onChange={(e) => setBaseRatePct(Number(e.target.value))}
-                        className="mt-2.5 w-full accent-amber-600"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold">
-                        Min Puan ({minScore})
-                      </label>
-                      <input
-                        type="range"
-                        min={700}
-                        max={1600}
-                        step={50}
-                        value={minScore}
-                        onChange={(e) => setMinScore(Number(e.target.value))}
-                        className="mt-2.5 w-full accent-amber-600"
-                      />
-                    </div>
-                  </div>
-
+            <div className="flex flex-wrap items-center gap-3">
+              <BrandLogo brandKey={bankName || 'Yeni Banka'} customColor={brandColor} size={42} />
+              <div className="flex items-center gap-2">
+                {BANK_COLORS.map((c) => (
                   <button
+                    key={c}
                     type="button"
-                    disabled={bankName.trim().length < 3 || state.cash < poolCapital + 2_000_000}
-                    onClick={() =>
-                      onCreateBank({
-                        bankName: bankName.trim(),
-                        brandColor,
-                        emblem,
-                        hqCityPlate: activeProvince.plate,
-                        hqCityName: activeProvince.name,
-                        hqLat: activeProvince.lat,
-                        hqLng: activeProvince.lng,
-                        initialPoolCapital: poolCapital,
-                        baseInterestRate: baseRatePct / 100,
-                        minCreditScore: minScore,
-                      })
-                    }
-                    className="w-full rounded-xl bg-amber-600 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
-                  >
-                    Bankayı Kur · Lisans (₺2 Mn) + Havuz ({formatTL(poolCapital, true)})
-                  </button>
-                </div>
-              )}
+                    aria-label={`Renk ${c}`}
+                    onClick={() => setBrandColor(c)}
+                    className={`h-8 w-8 rounded-full border-2 ${
+                      brandColor === c ? 'scale-110 border-white' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+
+            <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300">
+                  İlk Kredi Havuzu (₺)
+                </label>
+                <input
+                  type="number"
+                  min={1000000}
+                  step={500000}
+                  value={poolCapital}
+                  onChange={(e) => setPoolCapital(Number(e.target.value))}
+                  className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 font-mono-num text-sm text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Baz Faiz (%{baseRatePct})
+                  </label>
+                  <input
+                    type="range"
+                    min={5}
+                    max={30}
+                    value={baseRatePct}
+                    onChange={(e) => setBaseRatePct(Number(e.target.value))}
+                    className="mt-1 w-full accent-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Min Puan ({minScore})
+                  </label>
+                  <input
+                    type="range"
+                    min={700}
+                    max={1600}
+                    step={50}
+                    value={minScore}
+                    onChange={(e) => setMinScore(Number(e.target.value))}
+                    className="mt-1 w-full accent-amber-400"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={bankName.trim().length < 3 || state.cash < poolCapital + 2_000_000}
+              onClick={() =>
+                onCreateBank({
+                  bankName: bankName.trim(),
+                  brandColor,
+                  emblem: 'bank',
+                  hqCityPlate: activeProvince.plate,
+                  hqCityName: activeProvince.name,
+                  hqLat: activeProvince.lat,
+                  hqLng: activeProvince.lng,
+                  initialPoolCapital: poolCapital,
+                  baseInterestRate: baseRatePct / 100,
+                  minCreditScore: minScore,
+                })
+              }
+              className="min-h-[46px] w-full rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+            >
+              Bankayı Kur · Lisans (₺2 Mn) + Havuz ({formatTL(poolCapital, true)})
+            </button>
+          </section>
+        )}
+      </MobileGameModal>
     </div>
   );
 }
