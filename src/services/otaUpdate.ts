@@ -1,6 +1,6 @@
 import type { OtaCheckResult, OtaVersionManifest } from '../types/game';
 
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.3.2';
 export const APP_BUILD_DATE = '2026-11-25';
 
 export function compareSemver(current: string, remote: string): number {

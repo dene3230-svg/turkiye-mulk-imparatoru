@@ -51,10 +51,13 @@ import {
   applyRealtimeBusinessDelete,
   applyRealtimeBusinessPatch,
   applyRealtimeBusinessUpsert,
+  findUnsyncedLocalBusinesses,
   formatOwnerDisplayName,
+  formatSupabaseError,
   generateSeedCityRivals,
   isRealPlayerBusiness,
   mergeWorldAndSeedRivals,
+  normalizeRecord,
   ownedToRemoteRecord,
   parseOwnerAndHolding,
 } from '../services/cityRoom.ts';
@@ -500,9 +503,9 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.3.1');
-  assert.equal(compareSemver('1.3.0', '1.3.1'), 1);
-  assert.equal(compareSemver('1.3.1', '1.3.1'), 0);
+  assert.equal(APP_VERSION, '1.3.2');
+  assert.equal(compareSemver('1.3.1', '1.3.2'), 1);
+  assert.equal(compareSemver('1.3.2', '1.3.2'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
 
@@ -1362,6 +1365,86 @@ test('v1.3.1 Multiplayer Shared Map Sync: nationwide real-player merge, idempote
   const unchanged = applyRealtimeBusinessDelete(world, 'non-existent-id');
   assert.equal(unchanged.length, world.length);
 });
+
+test('v1.3.2 Supabase Local Backfill Sync, Dual Coordinate Normalization (lat/lng & latitude/longitude), and Error Formatting', () => {
+  // 1) Supports latitude/longitude + alternate column names from `select('*')`
+  const fromLatLon = normalizeRecord({
+    id: 'remote-alt-1',
+    owner_id: 'other-player-77',
+    owner_name: 'Mert Arslan',
+    holding_name: 'Arslan Holding',
+    name: 'Kordon Kafe',
+    sector: 'kafe',
+    city_plate: 35,
+    latitude: 38.4237,
+    longitude: 27.1428,
+    level: 2,
+    hourly_income: 12_000,
+    valuation: 180_000,
+  });
+  assert.ok(fromLatLon);
+  assert.equal(fromLatLon!.lat, 38.4237);
+  assert.equal(fromLatLon!.lng, 27.1428);
+  assert.equal(fromLatLon!.business_name, 'Kordon Kafe');
+  assert.equal(fromLatLon!.owner_name, 'Mert Arslan · Arslan Holding');
+  assert.equal(fromLatLon!.city_name, 'İzmir');
+  assert.equal(isRealPlayerBusiness(fromLatLon!), true);
+
+  // 2) Rejects missing or (0,0) coordinates safely
+  assert.equal(normalizeRecord({ id: 'bad-1', lat: 0, lng: 0 }), null);
+  assert.equal(normalizeRecord({ id: 'bad-2' }), null);
+
+  // 3) Detects pre-existing local businesses missing or outdated in Supabase
+  const localSynced: RemoteBusinessRecord = {
+    id: 'local-1',
+    owner_id: 'me-1',
+    owner_name: 'Ben · Holding',
+    city_plate: 34,
+    city_name: 'İstanbul',
+    district: 'Beşiktaş',
+    business_name: 'Eski Kafe',
+    business_type: 'kafe',
+    lat: 41.0422,
+    lng: 29.0067,
+    level: 2,
+    hourly_income: 9_000,
+    valuation: 120_000,
+    created_at: '2026-11-24T00:00:00.000Z',
+  };
+  const localMissing: RemoteBusinessRecord = {
+    ...localSynced,
+    id: 'local-2',
+    business_name: 'Güncelleme Öncesi Dükkan',
+    level: 1,
+  };
+  const localUpgraded: RemoteBusinessRecord = {
+    ...localSynced,
+    id: 'local-3',
+    level: 4,
+  };
+  const remoteBaseline: RemoteBusinessRecord[] = [
+    { ...localSynced },
+    { ...localUpgraded, level: 2 }, // stale level on server
+  ];
+
+  const unsynced = findUnsyncedLocalBusinesses(
+    [localSynced, localMissing, localUpgraded],
+    remoteBaseline
+  );
+  assert.deepEqual(
+    unsynced.map((r) => r.id),
+    ['local-2', 'local-3']
+  );
+
+  // 4) Non-silent Supabase error formatting
+  const formatted = formatSupabaseError({
+    code: '42501',
+    message: 'new row violates row-level security policy',
+  });
+  assert.ok(formatted.includes('42501'));
+  assert.ok(formatted.includes('row-level security'));
+});
+
 
 
 

@@ -184,9 +184,15 @@ export function mergeWorldAndSeedRivals(
 ): RemoteBusinessRecord[] {
   const byId = new Map<string, RemoteBusinessRecord>();
 
-  // 1) All real players across Turkey always take priority
+  // 1) All real players across Turkey (`owner_id !== currentUserId`) always take priority
+  const normalizedCurrentId = (currentUserId ?? '').trim();
   for (const rec of worldRecords) {
-    if (rec.owner_id === currentUserId || ownIds.has(rec.id) || acquiredRivalIds.has(rec.id)) {
+    const recOwnerId = String(rec.owner_id ?? '').trim();
+    if (
+      (normalizedCurrentId && recOwnerId === normalizedCurrentId) ||
+      ownIds.has(rec.id) ||
+      acquiredRivalIds.has(rec.id)
+    ) {
       continue;
     }
     byId.set(rec.id, rec);
@@ -201,6 +207,27 @@ export function mergeWorldAndSeedRivals(
   }
 
   return Array.from(byId.values());
+}
+
+/**
+ * Finds local player businesses that are missing from `public.businesses` or have outdated level/owner/name.
+ */
+export function findUnsyncedLocalBusinesses(
+  localRecords: RemoteBusinessRecord[],
+  remoteRecords: RemoteBusinessRecord[]
+): RemoteBusinessRecord[] {
+  const remoteById = new Map(remoteRecords.map((r) => [r.id, r]));
+  return localRecords.filter((local) => {
+    const remote = remoteById.get(local.id);
+    if (!remote) return true;
+    return (
+      remote.owner_id !== local.owner_id ||
+      remote.owner_name !== local.owner_name ||
+      remote.level !== local.level ||
+      remote.business_name !== local.business_name ||
+      Math.abs(remote.hourly_income - local.hourly_income) > 50
+    );
+  });
 }
 
 export function generateSeedCityRivals(cityPlate: number): RemoteBusinessRecord[] {
@@ -239,29 +266,64 @@ export function generateSeedCityRivals(cityPlate: number): RemoteBusinessRecord[
   });
 }
 
-export function normalizeRecord(row: Record<string, unknown>): RemoteBusinessRecord | null {
-  const id = String(row.id ?? '');
-  const lat = Number(row.lat);
-  const lng = Number(row.lng);
-  if (!id || Number.isNaN(lat) || Number.isNaN(lng)) return null;
+export function formatSupabaseError(err: unknown, fallback = 'Supabase bağlantı hatası'): string {
+  if (!err) return fallback;
+  if (typeof err === 'string') return err;
+  if (typeof err === 'object') {
+    const obj = err as { message?: string; code?: string; status?: number; details?: string };
+    const parts: string[] = [];
+    if (obj.code) parts.push(`[${obj.code}]`);
+    else if (obj.status) parts.push(`[HTTP ${obj.status}]`);
+    if (obj.message) parts.push(obj.message);
+    if (obj.details && !obj.message?.includes(obj.details)) parts.push(obj.details);
+    const joined = parts.join(' ').trim();
+    if (joined) return joined.slice(0, 180);
+  }
+  return fallback;
+}
 
-  const rawType = String(row.business_type ?? 'kafe');
+export function normalizeRecord(row: Record<string, unknown>): RemoteBusinessRecord | null {
+  const id = String(row.id ?? '').trim();
+  const rawLat = row.lat ?? row.latitude;
+  const rawLng = row.lng ?? row.longitude;
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+  if (!id || rawLat === undefined || rawLat === null || rawLng === undefined || rawLng === null) {
+    return null;
+  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+    return null;
+  }
+
+  const rawType = String(row.business_type ?? row.sector ?? row.type ?? 'kafe');
   const businessType = isValidBusinessType(rawType) ? rawType : 'kafe';
+
+  const rawPlate = Number(row.city_plate ?? row.plate ?? 34);
+  const safePlate = Number.isFinite(rawPlate) && rawPlate >= 1 && rawPlate <= 81 ? rawPlate : 34;
+  const prov = getProvinceByPlate(safePlate);
+
+  const rawOwnerName = String(
+    row.owner_name ?? row.player_name ?? row.company_name ?? row.holding_name ?? 'Rakip Yatırımcı'
+  ).trim();
+  const separateHolding = String(row.holding_name ?? row.owner_holding ?? '').trim();
+  const ownerName = separateHolding
+    ? formatOwnerDisplayName(rawOwnerName, separateHolding)
+    : rawOwnerName || 'Rakip Yatırımcı';
 
   return {
     id,
-    owner_id: String(row.owner_id ?? 'unknown'),
-    owner_name: String(row.owner_name ?? 'Rakip Yatırımcı'),
-    city_plate: Number(row.city_plate ?? 34),
-    city_name: String(row.city_name ?? 'İstanbul'),
+    owner_id: String(row.owner_id ?? row.user_id ?? row.player_id ?? 'unknown').trim(),
+    owner_name: ownerName,
+    city_plate: safePlate,
+    city_name: String(row.city_name ?? prov.name),
     district: String(row.district ?? ''),
-    business_name: String(row.business_name ?? 'İşletme'),
+    business_name: String(row.business_name ?? row.name ?? 'İşletme'),
     business_type: businessType,
     lat,
     lng,
-    level: Math.max(1, Number(row.level ?? 1)),
-    hourly_income: Number(row.hourly_income ?? 3600),
-    valuation: Number(row.valuation ?? 60000),
+    level: Math.max(1, Number(row.level ?? 1) || 1),
+    hourly_income: Number(row.hourly_income ?? row.revenue_per_hour ?? 3600) || 3600,
+    valuation: Number(row.valuation ?? row.market_value ?? 60000) || 60000,
     created_at: String(row.created_at ?? new Date().toISOString()),
   };
 }
@@ -270,12 +332,15 @@ export function ownedToRemoteRecord(
   biz: OwnedBusiness,
   hourlyIncome: number,
   valuation: number,
-  holdingName?: string | null
+  holdingName?: string | null,
+  overrideOwner?: { id: string; name: string }
 ): RemoteBusinessRecord {
+  const ownerId = overrideOwner?.id || biz.ownerId;
+  const ownerBaseName = overrideOwner?.name || biz.ownerName;
   return {
     id: biz.id,
-    owner_id: biz.ownerId,
-    owner_name: formatOwnerDisplayName(biz.ownerName, holdingName),
+    owner_id: ownerId,
+    owner_name: formatOwnerDisplayName(ownerBaseName, holdingName),
     city_plate: biz.cityPlate,
     city_name: biz.cityName,
     district: biz.districtName,
@@ -290,25 +355,54 @@ export function ownedToRemoteRecord(
   };
 }
 
-const BUSINESS_SELECT_COLUMNS =
-  'id, owner_id, owner_name, city_plate, city_name, district, business_name, business_type, lat, lng, level, hourly_income, valuation, created_at';
+function toLatLngAltPayload(rec: RemoteBusinessRecord): Record<string, unknown> {
+  const { lat, lng, ...rest } = rec;
+  return {
+    ...rest,
+    latitude: lat,
+    longitude: lng,
+  };
+}
+
+function isCoordColumnError(message: string): boolean {
+  const low = message.toLowerCase();
+  return (
+    (low.includes('column') || low.includes('schema cache')) &&
+    (low.includes('lat') || low.includes('lng'))
+  );
+}
 
 /**
- * Fetches active player businesses across ALL 81 Turkish provinces from `public.businesses`.
+ * Fetches ALL active player businesses across all 81 provinces via `select('*')`.
+ * Supports both `lat`/`lng` and `latitude`/`longitude` columns and surfaces any errors explicitly.
  */
 export async function fetchAllWorldBusinesses(): Promise<{
   records: RemoteBusinessRecord[];
   connected: boolean;
+  error?: string;
 }> {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('businesses')
-      .select(BUSINESS_SELECT_COLUMNS)
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(1000);
 
-    if (error || !Array.isArray(data)) {
-      return { records: [], connected: false };
+    // Fallback if table has no `created_at` column
+    if (error && error.message?.toLowerCase().includes('created_at')) {
+      const retry = await supabase.from('businesses').select('*').limit(1000);
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      const msg = formatSupabaseError(error, 'Supabase işletmeler okunamadı');
+      console.error('[Supabase businesses SELECT hatası]', error);
+      return { records: [], connected: false, error: msg };
+    }
+
+    if (!Array.isArray(data)) {
+      return { records: [], connected: true };
     }
 
     const records = data
@@ -316,24 +410,32 @@ export async function fetchAllWorldBusinesses(): Promise<{
       .filter((item): item is RemoteBusinessRecord => item !== null);
 
     return { records, connected: true };
-  } catch {
-    return { records: [], connected: false };
+  } catch (err) {
+    const msg = formatSupabaseError(err, 'Supabase işletmeler okunamadı');
+    console.error('[Supabase businesses SELECT istisnası]', err);
+    return { records: [], connected: false, error: msg };
   }
 }
 
 export async function fetchCityBusinesses(
   cityPlate: number
-): Promise<{ records: RemoteBusinessRecord[]; connected: boolean }> {
+): Promise<{ records: RemoteBusinessRecord[]; connected: boolean; error?: string }> {
   try {
     const { data, error } = await supabase
       .from('businesses')
-      .select(BUSINESS_SELECT_COLUMNS)
+      .select('*')
       .eq('city_plate', cityPlate)
       .order('created_at', { ascending: false })
       .limit(250);
 
-    if (error || !Array.isArray(data)) {
-      return { records: [], connected: false };
+    if (error) {
+      const msg = formatSupabaseError(error, 'Şehir işletmeleri okunamadı');
+      console.error('[Supabase businesses city SELECT hatası]', error);
+      return { records: [], connected: false, error: msg };
+    }
+
+    if (!Array.isArray(data)) {
+      return { records: [], connected: true };
     }
 
     const records = data
@@ -341,8 +443,10 @@ export async function fetchCityBusinesses(
       .filter((item): item is RemoteBusinessRecord => item !== null);
 
     return { records, connected: true };
-  } catch {
-    return { records: [], connected: false };
+  } catch (err) {
+    const msg = formatSupabaseError(err, 'Şehir işletmeleri okunamadı');
+    console.error('[Supabase businesses city SELECT istisnası]', err);
+    return { records: [], connected: false, error: msg };
   }
 }
 
@@ -358,6 +462,7 @@ export function subscribeToGlobalBusinesses(callbacks: {
   onDelete: (id: string) => void;
   onStatus?: (status: RoomSyncStatus) => void;
   onReconnect?: () => void;
+  onError?: (errorMessage: string) => void;
 }): () => void {
   callbacks.onStatus?.('connecting');
 
@@ -408,7 +513,7 @@ export function subscribeToGlobalBusinesses(callbacks: {
           if (oldId) callbacks.onDelete(String(oldId));
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           callbacks.onStatus?.('live');
           if (hasSubscribedOnce) {
@@ -417,10 +522,18 @@ export function subscribeToGlobalBusinesses(callbacks: {
           hasSubscribedOnce = true;
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           callbacks.onStatus?.('offline');
+          if (err) {
+            const msg = formatSupabaseError(err, `Realtime kanal hatası (${status})`);
+            console.error('[Supabase Realtime businesses hatası]', status, err);
+            callbacks.onError?.(msg);
+          }
         }
       });
-  } catch {
+  } catch (err) {
     callbacks.onStatus?.('offline');
+    const msg = formatSupabaseError(err, 'Realtime bağlantısı kurulamadı');
+    console.error('[Supabase Realtime başlatma hatası]', err);
+    callbacks.onError?.(msg);
   }
 
   if (typeof BroadcastChannel !== 'undefined') {
@@ -515,19 +628,29 @@ export async function publishBusinessToRoom(
 ): Promise<{ ok: boolean; error?: string }> {
   postLocalBusinessBroadcast({ type: 'upsert', record });
   try {
-    const { error } = await supabase.from('businesses').upsert(record, { onConflict: 'id' });
-    if (error) return { ok: false, error: error.message };
+    let { error } = await supabase.from('businesses').upsert(record, { onConflict: 'id' });
+    if (error && isCoordColumnError(error.message ?? '')) {
+      const retry = await supabase
+        .from('businesses')
+        .upsert(toLatLngAltPayload(record), { onConflict: 'id' });
+      error = retry.error;
+    }
+    if (error) {
+      const msg = formatSupabaseError(error, 'İşletme Supabase veritabanına kaydedilemedi');
+      console.error('[Supabase businesses UPSERT hatası]', error);
+      return { ok: false, error: msg };
+    }
     return { ok: true };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : 'Sunucu senkronizasyon hatası',
-    };
+    const msg = formatSupabaseError(err, 'İşletme Supabase veritabanına kaydedilemedi');
+    console.error('[Supabase businesses UPSERT istisnası]', err);
+    return { ok: false, error: msg };
   }
 }
 
 /**
- * Batch-syncs a player's active portfolio to `public.businesses` on startup or reconnect.
+ * Batch-syncs a player's active local portfolio to `public.businesses` on startup or reconnect.
+ * Supports both `lat`/`lng` and `latitude`/`longitude` table schemas.
  */
 export async function syncPlayerBusinessesToWorld(
   records: RemoteBusinessRecord[]
@@ -537,15 +660,23 @@ export async function syncPlayerBusinessesToWorld(
     postLocalBusinessBroadcast({ type: 'upsert', record: rec });
   }
   try {
-    const { error } = await supabase.from('businesses').upsert(records, { onConflict: 'id' });
-    if (error) return { ok: false, syncedCount: 0, error: error.message };
+    let { error } = await supabase.from('businesses').upsert(records, { onConflict: 'id' });
+    if (error && isCoordColumnError(error.message ?? '')) {
+      const retry = await supabase
+        .from('businesses')
+        .upsert(records.map(toLatLngAltPayload), { onConflict: 'id' });
+      error = retry.error;
+    }
+    if (error) {
+      const msg = formatSupabaseError(error, 'Mevcut işletmeler Supabase veritabanına aktarılamadı');
+      console.error('[Supabase businesses BATCH UPSERT hatası]', error);
+      return { ok: false, syncedCount: 0, error: msg };
+    }
     return { ok: true, syncedCount: records.length };
   } catch (err) {
-    return {
-      ok: false,
-      syncedCount: 0,
-      error: err instanceof Error ? err.message : 'Portföy senkronizasyon hatası',
-    };
+    const msg = formatSupabaseError(err, 'Mevcut işletmeler Supabase veritabanına aktarılamadı');
+    console.error('[Supabase businesses BATCH UPSERT istisnası]', err);
+    return { ok: false, syncedCount: 0, error: msg };
   }
 }
 
@@ -561,19 +692,34 @@ export async function updateBusinessInRoom(
   postLocalBusinessBroadcast({ type: 'patch', id, patch });
   try {
     const { error } = await supabase.from('businesses').update(patch).eq('id', id);
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      const msg = formatSupabaseError(error, 'İşletme Supabase üzerinde güncellenemedi');
+      console.error('[Supabase businesses UPDATE hatası]', error);
+      return { ok: false, error: msg };
+    }
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Güncelleme hatası' };
+    const msg = formatSupabaseError(err, 'İşletme Supabase üzerinde güncellenemedi');
+    console.error('[Supabase businesses UPDATE istisnası]', err);
+    return { ok: false, error: msg };
   }
 }
 
-export async function removeBusinessFromRoom(id: string): Promise<{ ok: boolean }> {
+export async function removeBusinessFromRoom(
+  id: string
+): Promise<{ ok: boolean; error?: string }> {
   postLocalBusinessBroadcast({ type: 'delete', id });
   try {
     const { error } = await supabase.from('businesses').delete().eq('id', id);
-    return { ok: !error };
-  } catch {
-    return { ok: false };
+    if (error) {
+      const msg = formatSupabaseError(error, 'İşletme Supabase üzerinden silinemedi');
+      console.error('[Supabase businesses DELETE hatası]', error);
+      return { ok: false, error: msg };
+    }
+    return { ok: true };
+  } catch (err) {
+    const msg = formatSupabaseError(err, 'İşletme Supabase üzerinden silinemedi');
+    console.error('[Supabase businesses DELETE istisnası]', err);
+    return { ok: false, error: msg };
   }
 }

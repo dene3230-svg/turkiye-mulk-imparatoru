@@ -141,6 +141,7 @@ import {
   applyRealtimeBusinessPatch,
   applyRealtimeBusinessUpsert,
   fetchAllWorldBusinesses,
+  findUnsyncedLocalBusinesses,
   formatOwnerDisplayName,
   generateSeedCityRivals,
   isRealPlayerBusiness,
@@ -439,9 +440,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v131',
-      title: 'Türkiye Mülk İmparatoru v1.3.1',
-      body: 'Çok oyunculu ortak harita senkronizasyonu aktif! Diğer oyuncuların kurduğu işletmeler kırmızı/turkuaz pin ve holding logolarıyla haritada canlı görünür.',
+      id: 'welcome-v132',
+      title: 'Türkiye Mülk İmparatoru v1.3.2',
+      body: 'Mevcut yerel işletmelerin Supabase ortak haritasına otomatik aktarımı, çift koordinat desteği ve canlı rakip pin senkronizasyonu aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -663,40 +664,93 @@ export default function App() {
 
   // Subscribe nationwide to Supabase Realtime (`public.businesses`) across all 81 provinces
   const lastLiveAlertAtRef = useRef<number>(0);
+  const lastSyncErrorRef = useRef<{ key: string; at: number }>({ key: '', at: 0 });
+  const lastPortfolioSyncSigRef = useRef<string>('');
+  const serverWorldRecordsRef = useRef<RemoteBusinessRecord[]>([]);
+
+  const reportSupabaseSyncError = useCallback(
+    (context: string, errorMsg?: string) => {
+      const msg = (errorMsg ?? 'Bilinmeyen bağlantı hatası').trim();
+      console.error(`[Supabase Sync] ${context}:`, msg);
+      const key = `${context}:${msg}`;
+      const nowTs = Date.now();
+      if (lastSyncErrorRef.current.key === key && nowTs - lastSyncErrorRef.current.at < 15_000) {
+        return;
+      }
+      lastSyncErrorRef.current = { key, at: nowTs };
+      pushNotification('Supabase Senkronizasyon Hatası', `${context}: ${msg}`, 'system', true);
+    },
+    [pushNotification]
+  );
+
+  const buildLocalRemoteRecords = useCallback((): RemoteBusinessRecord[] => {
+    const currentEmpire = empireRef.current;
+    const currentUser = userRef.current;
+    if (!currentUser || currentEmpire.businesses.length === 0) return [];
+    const holdingName =
+      currentEmpire.playerIpo?.holdingName ||
+      currentEmpire.supermarketChain?.name ||
+      getCompanyTier(calculateNetWorth(currentEmpire, Date.now(), stockQuotesRef.current)).title;
+
+    return currentEmpire.businesses.map((biz) => {
+      const hourly = calculateBusinessHourlyIncome(
+        biz,
+        currentEmpire.activeEvent,
+        Date.now(),
+        currentEmpire.businesses,
+        currentEmpire
+      );
+      const valuation = calculateBusinessValuation(biz, currentEmpire.activeEvent, Date.now());
+      return ownedToRemoteRecord(biz, hourly, valuation, holdingName, {
+        id: currentUser.id,
+        name: currentUser.name,
+      });
+    });
+  }, []);
+
+  const syncMissingLocalBusinesses = useCallback(
+    async (remoteBaseline?: RemoteBusinessRecord[]) => {
+      const localRecords = buildLocalRemoteRecords();
+      if (localRecords.length === 0) return;
+      const baseline = remoteBaseline ?? serverWorldRecordsRef.current;
+      const missingOrOutdated = findUnsyncedLocalBusinesses(localRecords, baseline);
+      if (missingOrOutdated.length === 0) return;
+
+      const res = await syncPlayerBusinessesToWorld(missingOrOutdated);
+      if (!res.ok) {
+        reportSupabaseSyncError(
+          `${missingOrOutdated.length} yerel işletme Supabase'e aktarılamadı`,
+          res.error
+        );
+        return;
+      }
+      serverWorldRecordsRef.current = missingOrOutdated.reduce(
+        (acc, rec) => applyRealtimeBusinessUpsert(acc, rec),
+        baseline
+      );
+      setRoomRecords((prev) =>
+        missingOrOutdated.reduce((acc, rec) => applyRealtimeBusinessUpsert(acc, rec), prev)
+      );
+    },
+    [buildLocalRemoteRecords, reportSupabaseSyncError]
+  );
 
   useEffect(() => {
     if (screen !== 'playing') return;
     let active = true;
     setRoomStatus('connecting');
 
-    const syncOwnPortfolio = () => {
-      const currentEmpire = empireRef.current;
-      const currentUser = userRef.current;
-      if (!currentUser || currentEmpire.businesses.length === 0) return;
-      const holdingName =
-        currentEmpire.playerIpo?.holdingName ||
-        currentEmpire.supermarketChain?.name ||
-        getCompanyTier(calculateNetWorth(currentEmpire, Date.now(), stockQuotesRef.current)).title;
+    const loadAllWorldAndSync = async () => {
+      const { records, connected, error } = await fetchAllWorldBusinesses();
+      if (!active) return;
 
-      const records = currentEmpire.businesses.map((biz) => {
-        const hourly = calculateBusinessHourlyIncome(
-          biz,
-          currentEmpire.activeEvent,
-          Date.now(),
-          currentEmpire.businesses,
-          currentEmpire
-        );
-        const valuation = calculateBusinessValuation(biz, currentEmpire.activeEvent, Date.now());
-        return ownedToRemoteRecord(biz, hourly, valuation, holdingName);
-      });
-      syncPlayerBusinessesToWorld(records).catch(() => {});
-    };
-
-    const loadAllWorld = () => {
-      fetchAllWorldBusinesses().then(({ records, connected }) => {
-        if (!active) return;
+      if (error) {
+        setRoomStatus('offline');
+        reportSupabaseSyncError('Ortak harita verileri okunamadı', error);
+      } else {
+        serverWorldRecordsRef.current = records;
         setRoomRecords((prev) => {
-          // Merge fetched server truth with any pending local real records idempotently
+          // Merge fetched server truth (`select('*')`) with any pending local real records idempotently
           let next = [...records];
           for (const existing of prev) {
             if (!next.some((r) => r.id === existing.id) && isRealPlayerBusiness(existing)) {
@@ -708,19 +762,30 @@ export default function App() {
         if (!connected) {
           setRoomStatus('offline');
         }
-      });
+      }
+
+      // Always verify & upsert any local businesses missing from `public.businesses`
+      await syncMissingLocalBusinesses(records);
     };
 
-    loadAllWorld();
-    syncOwnPortfolio();
+    loadAllWorldAndSync();
 
     const unsubscribe = subscribeToGlobalBusinesses({
       onUpsert: (rec) => {
         if (!active) return;
+        serverWorldRecordsRef.current = applyRealtimeBusinessUpsert(
+          serverWorldRecordsRef.current,
+          rec
+        );
         setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, rec));
       },
       onPatch: (id, patch) => {
         if (!active) return;
+        serverWorldRecordsRef.current = applyRealtimeBusinessPatch(
+          serverWorldRecordsRef.current,
+          id,
+          patch
+        );
         setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, id, patch));
       },
       onInsert: (rec) => {
@@ -765,6 +830,10 @@ export default function App() {
       },
       onDelete: (id) => {
         if (!active) return;
+        serverWorldRecordsRef.current = applyRealtimeBusinessDelete(
+          serverWorldRecordsRef.current,
+          id
+        );
         setRoomRecords((prev) => applyRealtimeBusinessDelete(prev, id));
         setSelectedCompetitorId((cur) => (cur === id ? null : cur));
       },
@@ -772,17 +841,19 @@ export default function App() {
         if (!active) return;
         setRoomStatus(status);
       },
+      onError: (errMsg) => {
+        if (!active) return;
+        reportSupabaseSyncError('Canlı harita bağlantısı', errMsg);
+      },
       onReconnect: () => {
         if (!active) return;
-        loadAllWorld();
-        syncOwnPortfolio();
+        loadAllWorldAndSync();
       },
     });
 
     const handleOnline = () => {
       if (!active) return;
-      loadAllWorld();
-      syncOwnPortfolio();
+      loadAllWorldAndSync();
     };
     window.addEventListener('online', handleOnline);
 
@@ -791,7 +862,16 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       unsubscribe();
     };
-  }, [screen, pushNotification]);
+  }, [screen, pushNotification, reportSupabaseSyncError, syncMissingLocalBusinesses]);
+
+  // Also ensure pre-existing local businesses sync automatically once `user` or `empire` finishes hydrating
+  useEffect(() => {
+    if (screen !== 'playing' || !user || empire.businesses.length === 0) return;
+    const sig = `${user.id}:${empire.businesses.map((b) => `${b.id}@${b.level}`).join(',')}`;
+    if (lastPortfolioSyncSigRef.current === sig) return;
+    lastPortfolioSyncSigRef.current = sig;
+    syncMissingLocalBusinesses();
+  }, [screen, user, empire.businesses, syncMissingLocalBusinesses]);
 
   // Persist empire state automatically
   useEffect(() => {
@@ -997,7 +1077,11 @@ export default function App() {
               const valuation = calculateBusinessValuation(biz, result.state.activeEvent, tickNow);
               publishBusinessToRoom(
                 ownedToRemoteRecord(biz, hourly, valuation, holdingLabel)
-              ).catch(() => {});
+              ).then((syncRes) => {
+                if (!syncRes.ok) {
+                  reportSupabaseSyncError('CEO yeni şubesi kaydedilemedi', syncRes.error);
+                }
+              });
             } else if (oldBiz.level !== biz.level) {
               const hourly = calculateBusinessHourlyIncome(
                 biz,
@@ -1011,7 +1095,11 @@ export default function App() {
                 level: biz.level,
                 hourly_income: Math.round(hourly),
                 valuation: Math.round(valuation),
-              }).catch(() => {});
+              }).then((syncRes) => {
+                if (!syncRes.ok) {
+                  reportSupabaseSyncError('CEO şube güncellemesi kaydedilemedi', syncRes.error);
+                }
+              });
             }
           }
         }
@@ -1050,7 +1138,11 @@ export default function App() {
             updateBusinessInRoom(seized.business.id, {
               owner_id: seized.loan.lenderOwnerId,
               owner_name: seized.loan.bankName,
-            }).catch(() => {});
+            }).then((syncRes) => {
+              if (!syncRes.ok) {
+                reportSupabaseSyncError('Haciz mülkiyet devri kaydedilemedi', syncRes.error);
+              }
+            });
             setRoomRecords((prevRecs) =>
               applyRealtimeBusinessPatch(prevRecs, seized.business.id, {
                 owner_id: seized.loan.lenderOwnerId,
@@ -1437,9 +1529,21 @@ export default function App() {
       res.state.playerIpo?.holdingName ||
       res.state.supermarketChain?.name ||
       companyTier.title;
-    const remoteRec = ownedToRemoteRecord(created, hourly, valuation, holdingLabel);
+    const remoteRec = ownedToRemoteRecord(created, hourly, valuation, holdingLabel, {
+      id: user.id,
+      name: user.name,
+    });
     setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, remoteRec));
-    publishBusinessToRoom(remoteRec).catch(() => {});
+    publishBusinessToRoom(remoteRec).then((syncRes) => {
+      if (!syncRes.ok) {
+        reportSupabaseSyncError('Yeni işletme Supabase veritabanına yazılamadı', syncRes.error);
+      } else {
+        serverWorldRecordsRef.current = applyRealtimeBusinessUpsert(
+          serverWorldRecordsRef.current,
+          remoteRec
+        );
+      }
+    });
 
     if (franchiseBrand) {
       const nextCount = franchiseBrand.branchCount + 1;
@@ -1543,7 +1647,11 @@ export default function App() {
         level: acquired.level,
         hourly_income: Math.round(acquiredHourly),
         valuation: Math.round(acquiredVal),
-      }).catch(() => {});
+      }).then((syncRes) => {
+        if (!syncRes.ok) {
+          reportSupabaseSyncError('Devralma kaydı Supabase üzerinde güncellenemedi', syncRes.error);
+        }
+      });
       setRoomRecords((prev) =>
         applyRealtimeBusinessPatch(prev, record.id, {
           owner_id: user.id,
@@ -1559,10 +1667,15 @@ export default function App() {
         acquired,
         acquiredHourly,
         acquiredVal,
-        holdingLabel
+        holdingLabel,
+        { id: user.id, name: user.name }
       );
       setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, publishedAcquired));
-      publishBusinessToRoom(publishedAcquired).catch(() => {});
+      publishBusinessToRoom(publishedAcquired).then((syncRes) => {
+        if (!syncRes.ok) {
+          reportSupabaseSyncError('Devralınan işletme Supabase veritabanına yazılamadı', syncRes.error);
+        }
+      });
     }
 
     pushNotification(
@@ -1644,7 +1757,11 @@ export default function App() {
       ...(ownerDisplay ? { owner_name: ownerDisplay } : {}),
     };
     setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, res.business!.id, patch));
-    updateBusinessInRoom(res.business.id, patch).catch(() => {});
+    updateBusinessInRoom(res.business.id, patch).then((syncRes) => {
+      if (!syncRes.ok) {
+        reportSupabaseSyncError('Şube yükseltmesi Supabase üzerinde güncellenemedi', syncRes.error);
+      }
+    });
 
     pushNotification(
       'İşletme Yükseltildi',
@@ -2198,7 +2315,15 @@ export default function App() {
     if (interiorBusinessId === businessId) setInteriorBusinessId(null);
     spawnCashPopup(res.collectedAmount);
     setRoomRecords((prev) => applyRealtimeBusinessDelete(prev, businessId));
-    removeBusinessFromRoom(businessId).catch(() => {});
+    serverWorldRecordsRef.current = applyRealtimeBusinessDelete(
+      serverWorldRecordsRef.current,
+      businessId
+    );
+    removeBusinessFromRoom(businessId).then((syncRes) => {
+      if (!syncRes.ok) {
+        reportSupabaseSyncError('Satılan şube Supabase üzerinden silinemedi', syncRes.error);
+      }
+    });
   };
 
   const handleClaimMission = (mission: MissionDef) => {

@@ -18,19 +18,20 @@ import { generateSeedCityRivals } from '../services/cityRoom';
 // 1. CHAIN BRANDING & BRANCH CLONING (ZİNCİRLEŞME)
 // ============================================================================
 
-export function extractBaseBrandName(customName: string, existingChainBrand?: string): string {
+export function extractBaseBrandName(customName?: string, existingChainBrand?: string): string {
   if (existingChainBrand && existingChainBrand.trim().length > 0) {
     return existingChainBrand.trim();
   }
-  const cleaned = customName
+  const safeName = typeof customName === 'string' ? customName : '';
+  const cleaned = safeName
     .replace(/\s*[-–·]\s*\d+\.\s*Şube$/i, '')
     .replace(/\s*#\d+$/i, '')
     .trim();
-  return cleaned.length > 0 ? cleaned : customName.trim();
+  return cleaned.length > 0 ? cleaned : safeName.trim();
 }
 
-export function normalizeBrandKey(name: string): string {
-  return name.trim().toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ');
+export function normalizeBrandKey(name?: string): string {
+  return (typeof name === 'string' ? name : '').trim().toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ');
 }
 
 export interface ChainBrandGroup {
