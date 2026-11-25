@@ -1,10 +1,10 @@
 {
-  "version": "1.2.8",
-  "buildDate": "2026-11-24",
+  "version": "1.3.1",
+  "buildDate": "2026-11-25",
   "mandatory": false,
   "notes": [
-    "İşletme çoğaltma ile haritada hızlı zincirleşme eklendi",
-    "Yönetim paneline Franchise Ver ve Rakip İşletmeler strateji merkezi eklendi",
-    "Genel Müdür için otomatik reklam yönetimi aktif edildi"
+    "Çok oyunculu ortak harita senkronizasyonu eklendi; artık oyuncular birbirinin kurduğu işletmeleri haritada canlı görebiliyor",
+    "Diğer gerçek oyuncuların işletmeleri kırmızı/turkuaz pin ve holding logosuyla ayrıştırıldı; pin üzerinden doğrudan satın alma teklifi ve rekabet hamlesi eklendi",
+    "İşletme kurulumu, yükseltme, devralma ve satış işlemleri Supabase public.businesses tablosuyla anlık senkronize edildi"
   ]
 }

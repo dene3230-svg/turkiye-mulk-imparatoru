@@ -299,7 +299,7 @@ export function BusinessInspector({
             type="button"
             data-testid="open-hr-btn"
             onClick={() => onOpenHrModal(business.id)}
-            className="flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border border-sky-300 bg-sky-50/75 px-3 py-2 text-left transition-colors hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/35 dark:hover:bg-sky-900/40"
+            className="flex min-h-[46px] w-full items-center justify-between gap-2 rounded-lg border border-sky-400/75 bg-sky-50/85 px-3 py-2 text-left transition-all duration-200 ease-out hover:bg-sky-100 active:scale-[0.98] dark:border-sky-500/70 dark:bg-sky-950/45 dark:hover:bg-sky-900/50"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white">
@@ -307,7 +307,7 @@ export function BusinessInspector({
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-bold text-slate-900 dark:text-white">
-                  Personel & İK Havuzu
+                  Personel ({slots.workers + slots.assistantManagers + slots.branchManagers}/6)
                 </div>
                 <div className="text-[11px] text-slate-600 dark:text-slate-300">
                   {slots.workers}/{slots.maxWorkers} Çalışan · {slots.assistantManagers}/
@@ -316,8 +316,8 @@ export function BusinessInspector({
                 </div>
               </div>
             </div>
-            <span className="shrink-0 rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white">
-              Aç
+            <span className="shrink-0 rounded-lg border border-sky-300/60 bg-sky-600 px-2.5 py-1 text-xs font-bold text-white">
+              İK Aç
             </span>
           </button>
 

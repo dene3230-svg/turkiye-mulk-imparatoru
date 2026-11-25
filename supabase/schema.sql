@@ -1,4 +1,4 @@
--- Türkiye Mülk İmparatoru v1.2.0 — Tam Supabase Çok Oyunculu Şema
+-- Türkiye Mülk İmparatoru v1.3.1 — Tam Supabase Çok Oyunculu Şema
 -- Tablolar: public.businesses, public.franchises, public.banks, public.loans, public.ipo_listings, public.patron_chat
 
 -- 1. 81 İl Canlı Harita İşletmeleri
@@ -21,6 +21,10 @@ create table if not exists public.businesses (
 
 create index if not exists idx_businesses_city_plate on public.businesses (city_plate);
 create index if not exists idx_businesses_owner_id on public.businesses (owner_id);
+create index if not exists idx_businesses_created_at on public.businesses (created_at desc);
+
+-- Realtime DELETE olaylarının `old.id` bilgisini eksiksiz yayınlaması için
+alter table public.businesses replica identity full;
 
 -- 2. Çok Oyunculu Franchise (Bayilik) Markaları
 create table if not exists public.franchises (

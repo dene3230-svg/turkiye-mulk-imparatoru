@@ -13,10 +13,12 @@ import {
 } from './catalog';
 import {
   calculateBusinessHourlyIncome,
+  calculateNetWorth,
   hasFactorySupplySynergy,
 } from './economy';
 import { resolveBusinessAutomation } from './hrEngine';
 import { getChainStatusForBusiness } from './strategyEngine';
+import { calculateHourlyTaxBreakdown } from './corporateEngine';
 
 /**
  * Pure P&L Accounting & Balance Sheet calculator.
@@ -150,7 +152,9 @@ export function calculateAccountingReport(
   }
 
   const cityManagerTotalPayroll = cityManagers.reduce((s, m) => s + m.hourlySalary, 0);
-  const hourlyStaffPayroll = hourlyBranchPayroll + cityManagerTotalPayroll;
+  const corporatePayroll =
+    (state.accountant?.hourlySalary ?? 0) + (state.ceo?.hourlySalary ?? 0);
+  const hourlyStaffPayroll = hourlyBranchPayroll + cityManagerTotalPayroll + corporatePayroll;
   const hourlySupplyNet = Math.max(0, hourlySupplyGross - hourlySupplyDiscountSaved);
 
   // Franchise royalty income from player-owned franchise brands
@@ -166,7 +170,7 @@ export function calculateAccountingReport(
       )
     : 0;
 
-  // Stock dividend income (per game hour = 6 real seconds at 1x -> scaled to hourly display)
+  // Stock dividend income
   const quoteByTicker = new Map(stockQuotes.map((q) => [q.ticker, q]));
   const hourlyStockDividendIncome = Math.round(
     (state.stockPortfolio ?? []).reduce((sum, holding) => {
@@ -176,11 +180,14 @@ export function calculateAccountingReport(
     }, 0)
   );
 
-  // Active loan installment burden (hourly amortized installment)
+  // Active loan monthly installment amortized to hourly view
   const hourlyLoanInstallments = Math.round(
     (state.activeLoans ?? [])
       .filter((l) => l.status === 'active' || l.status === 'garnishing')
-      .reduce((sum, l) => sum + l.remainingAmount * 0.08, 0)
+      .reduce((sum, l) => {
+        const monthly = l.monthlyInstallment ?? Math.round(l.remainingAmount / 6);
+        return sum + Math.round(monthly / 720);
+      }, 0)
   );
 
   const hourlyTotalRevenue =
@@ -189,12 +196,25 @@ export function calculateAccountingReport(
     hourlyBankInterestIncome +
     hourlyStockDividendIncome;
 
-  const hourlyTotalExpenses =
+  const operatingExpensesBeforeTax =
     hourlyStaffPayroll +
     hourlySupplyNet +
     hourlyFranchiseRoyaltyPaid +
     hourlyLoanInstallments +
     hourlyMaintenanceCost;
+
+  // v1.3.0 Realistic Progressive Taxes (KDV, SGK & Stopaj, Kurumlar/Gelir, Belediye)
+  const estimatedNetWorth = calculateNetWorth(state, now, stockQuotes);
+  const { rates: taxRates, breakdown: taxBreakdown } = calculateHourlyTaxBreakdown({
+    hourlyGrossRevenue: hourlyTotalRevenue,
+    hourlyPayroll: hourlyStaffPayroll,
+    hourlyOperatingExpensesBeforeTax: operatingExpensesBeforeTax,
+    branchCount: state.businesses.length,
+    netWorth: estimatedNetWorth,
+    accountant: state.accountant,
+  });
+
+  const hourlyTotalExpenses = operatingExpensesBeforeTax + taxBreakdown.totalTax;
 
   const hourlyNetProfit = hourlyTotalRevenue - hourlyTotalExpenses;
   const profitMarginPct =
@@ -223,6 +243,12 @@ export function calculateAccountingReport(
     hourlyFranchiseRoyaltyPaid,
     hourlyLoanInstallments,
     hourlyMaintenanceCost,
+    taxRates,
+    hourlyKdvTax: taxBreakdown.kdv,
+    hourlySgkTax: taxBreakdown.sgkStopaj,
+    hourlyCorporateTax: taxBreakdown.corporateTax,
+    hourlyMunicipalTax: taxBreakdown.municipalTax,
+    hourlyTotalTaxes: taxBreakdown.totalTax,
     hourlyTotalExpenses,
     hourlyNetProfit,
     profitMarginPct,

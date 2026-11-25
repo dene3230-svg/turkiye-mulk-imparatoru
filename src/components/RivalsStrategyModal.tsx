@@ -25,6 +25,7 @@ import {
 } from '../game/strategyEngine';
 import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
 import { BrandLogo } from './BrandLogo';
+import { parseOwnerAndHolding } from '../services/cityRoom';
 
 export type ManagementTabId = 'portfolio' | 'hr' | 'franchise' | 'rivals';
 
@@ -44,7 +45,7 @@ interface RivalsStrategyModalProps {
   onClose: () => void;
 }
 
-type RivalFilter = 'all' | 'city' | 'distressed' | 'franchise';
+type RivalFilter = 'all' | 'players' | 'city' | 'distressed' | 'franchise';
 
 export function RivalsStrategyModal({
   open,
@@ -77,7 +78,10 @@ export function RivalsStrategyModal({
 
   if (!open) return null;
 
+  const realPlayersCount = directory.filter((item) => !item.isAiHolding).length;
+
   const filtered = directory.filter((item) => {
+    if (filter === 'players') return !item.isAiHolding;
     if (filter === 'city') return item.record.city_plate === activeCityPlate;
     if (filter === 'distressed') return item.isDistressed;
     if (filter === 'franchise') return Boolean(item.linkedFranchise);
@@ -119,6 +123,7 @@ export function RivalsStrategyModal({
 
   const filters: Array<{ id: RivalFilter; label: string }> = [
     { id: 'all', label: `Tümü (${directory.length})` },
+    { id: 'players', label: `Canlı Oyuncular (${realPlayersCount})` },
     { id: 'city', label: `${activeCityName}` },
     { id: 'distressed', label: 'Devralma Fırsatları' },
     { id: 'franchise', label: 'Franchise Verenler' },
@@ -212,24 +217,29 @@ export function RivalsStrategyModal({
                     {/* Header: Vector Logo + Holding & Branch Info */}
                     <div className="flex items-start justify-between gap-2.5">
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <BrandLogo brandKey={record.owner_name} size={42} />
+                        <BrandLogo brandKey={parseOwnerAndHolding(record.owner_name).holdingName} size={42} />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="truncate text-sm font-bold text-white">
                               {record.business_name}
                             </span>
                             <span
-                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                              className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${
                                 item.isAiHolding
-                                  ? 'bg-violet-500/20 text-violet-300'
-                                  : 'bg-sky-500/20 text-sky-300'
+                                  ? 'border-violet-400/40 bg-violet-500/20 text-violet-200'
+                                  : 'border-cyan-400/60 bg-cyan-500/20 text-cyan-200'
                               }`}
                             >
                               {item.isAiHolding ? 'AI Holding' : 'Canlı Oyuncu'}
                             </span>
                           </div>
                           <div className="truncate text-xs font-semibold text-amber-300">
-                            {record.owner_name}
+                            {(() => {
+                              const parsed = parseOwnerAndHolding(record.owner_name);
+                              return item.isAiHolding
+                                ? record.owner_name
+                                : `${parsed.playerName} · ${parsed.holdingName}`;
+                            })()}
                           </div>
                           <div className="truncate text-xs text-slate-400">
                             {String(record.city_plate).padStart(2, '0')} {record.city_name} ·{' '}

@@ -64,10 +64,31 @@ import {
   processAutoFranchiseApplications,
   runGeneralManagerAutoAds,
 } from './strategyEngine';
+import {
+  calculateHourlyTaxBreakdown,
+  createMonthlyTaxObligation,
+  generateAccountantPool,
+  generateCeoPool,
+  processAccountantAutoPayments,
+  runAutonomousCeoTick,
+  type AccountantAutoPayResult,
+} from './corporateEngine';
+import type { GameSpeed } from '../types/game';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
-export const GAME_MINUTES_PER_REAL_SEC = 10; // 1x -> 6 real sec = 1 game hour
+// v1.3.0 Accelerated Time Flow:
+// 1x: 36 game min / real sec -> ~1.67s = 1 game hour, 40s = 1 full game day
+// 2x: ~75 game min / real sec -> ~0.80s = 1 game hour
+// 4x: ~171.4 game min / real sec -> ~0.35s = 1 game hour
+export const GAME_MINUTES_PER_REAL_SEC = 36;
+
+export function getEffectiveSimSeconds(realDtSec: number, speed: GameSpeed): number {
+  if (speed === 0 || realDtSec <= 0) return 0;
+  if (speed === 1) return realDtSec;
+  if (speed === 2) return realDtSec * 2.0833;
+  return realDtSec * 4.7619;
+}
 
 export function formatGameClock(gameMinutes: number): {
   totalDays: number;
@@ -188,6 +209,13 @@ export function createInitialEmpireState(
     creditScore: STARTING_CREDIT_SCORE,
     ownBank: null,
     activeLoans: [],
+    accountant: null,
+    accountantPool: generateAccountantPool(now),
+    ceo: null,
+    ceoPool: generateCeoPool(now),
+    pendingTaxes: [],
+    totalTaxesPaid: 0,
+    lastCeoActionGameDay: 0,
     activeMissions: createInitialDynamicMissions(),
     claimedMissionIds: [],
     completedMissionsCount: 0,
@@ -802,6 +830,9 @@ export interface TickResult {
   autoAdsSpent: number;
   autoAdBranchNames: string[];
   newFranchiseOpenings: FranchiseApplication[];
+  accountantAutoPay: Omit<AccountantAutoPayResult, 'state'>;
+  ceoActionsLog: string[];
+  newTaxBillAmount: number;
 }
 
 export function tickEconomy(
@@ -809,7 +840,11 @@ export function tickEconomy(
   elapsedSec: number,
   now = Date.now(),
   randomIndex?: number,
-  stockQuotes?: StockQuote[]
+  stockQuotes?: StockQuote[],
+  ceoContext?: {
+    owner: { id: string; name: string };
+    rivalRecords?: RemoteBusinessRecord[];
+  }
 ): TickResult {
   const safeDt = Math.max(0, Math.min(elapsedSec, 3600));
   if (safeDt === 0) {
@@ -825,12 +860,22 @@ export function tickEconomy(
       loanEnforcement: {
         state,
         garnishedTotal: 0,
+        defaultInterestAdded: 0,
+        legalWarnings: [],
         seizedLoans: [],
       },
       autoRenewedAdsCount: 0,
       autoAdsSpent: 0,
       autoAdBranchNames: [],
       newFranchiseOpenings: [],
+      accountantAutoPay: {
+        autoPaidLoanAmount: 0,
+        autoPaidLoanCount: 0,
+        autoPaidTaxAmount: 0,
+        autoPaidTaxCount: 0,
+      },
+      ceoActionsLog: [],
+      newTaxBillAmount: 0,
     };
   }
 
@@ -946,7 +991,12 @@ export function tickEconomy(
       0
     );
     const dailyGrossRevenue = Math.round(totalHourlyGross * 24);
-    const dailySalariesPaid = Math.round(calculateTotalHourlyPayroll(state) * 24);
+    const dailySalariesPaid = Math.round(
+      (calculateTotalHourlyPayroll(state) +
+        (state.accountant?.hourlySalary ?? 0) +
+        (state.ceo?.hourlySalary ?? 0)) *
+        24
+    );
     const dailyNetCashFlow = dailyGrossRevenue - dailySalariesPaid;
 
     // Healthy daily standing gently grows credit score (+5/day), while garnishing reduces it (-10/day)
@@ -1004,6 +1054,50 @@ export function tickEconomy(
     (bl) => bl.endsAtGameMin > nextMinutes
   );
 
+  // Monthly Tax Accrual & Overdue Tax tracking
+  let nextPendingTaxes = [...(state.pendingTaxes ?? [])];
+  let newTaxBillAmount = 0;
+
+  if (daysPassed > 0) {
+    const completedDay = nextTotalDay - 1;
+    // Update overdue days on existing unpaid tax bills
+    nextPendingTaxes = nextPendingTaxes.map((bill) => {
+      if (bill.status === 'paid') return bill;
+      const overdue = Math.max(0, nextTotalDay - bill.dueGameDay);
+      return overdue > 0
+        ? { ...bill, overdueDays: overdue, status: 'overdue' as const }
+        : bill;
+    });
+
+    // Every 30th day (monthly closing): generate realistic monthly tax obligation if player has branches
+    if (completedDay % 30 === 0 && updatedBusinesses.length > 0) {
+      const totalHourlyGross = updatedBusinesses.reduce(
+        (sum, b) =>
+          sum + calculateBusinessHourlyIncome(b, activeEvent, now, updatedBusinesses, state),
+        0
+      );
+      const hourlyPayroll =
+        calculateTotalHourlyPayroll(state) +
+        (state.accountant?.hourlySalary ?? 0) +
+        (state.ceo?.hourlySalary ?? 0);
+      const estNetWorth = calculateNetWorth({ ...state, businesses: updatedBusinesses }, now, stockQuotes);
+      const { breakdown } = calculateHourlyTaxBreakdown({
+        hourlyGrossRevenue: totalHourlyGross,
+        hourlyPayroll,
+        hourlyOperatingExpensesBeforeTax: hourlyPayroll + Math.round(totalHourlyGross * 0.22),
+        branchCount: updatedBusinesses.length,
+        netWorth: estNetWorth,
+        accountant: state.accountant,
+      });
+      const monthNum = Math.max(1, Math.floor(completedDay / 30));
+      const newBill = createMonthlyTaxObligation(monthNum, completedDay, breakdown, now);
+      if (newBill) {
+        nextPendingTaxes = [newBill, ...nextPendingTaxes].slice(0, 12);
+        newTaxBillAmount = newBill.amount;
+      }
+    }
+  }
+
   let preLoanState: EmpireState = {
     ...state,
     gameMinutes: nextMinutes,
@@ -1014,11 +1108,12 @@ export function tickEconomy(
     franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
     businesses: cleanedBusinesses,
     competitiveBlitzes: activeBlitzes,
+    pendingTaxes: nextPendingTaxes,
     activeEvent,
     lastSavedAt: now,
   };
 
-  // Genel Müdür automatic ad campaign renewal (runs hourly or immediately when GM has autoAdsEnabled)
+  // Genel Müdür automatic ad campaign renewal
   let autoRenewedAdsCount = 0;
   let autoAdsSpent = 0;
   let autoAdBranchNames: string[] = [];
@@ -1049,15 +1144,39 @@ export function tickEconomy(
   preLoanState = franchiseAppRes.state;
   const newFranchiseOpenings = franchiseAppRes.autoApprovedApps;
 
-  // Enforce overdue loans (garnishment -> automatic collateral seizure!)
+  // v1.3.0 Muhasebeci / Mali Müşavir Automatic Tax & Monthly Loan Installment Payment
+  // Runs BEFORE overdue enforcement so employed Muhasebeci prevents overdue & foreclosure!
+  const accPayRes = processAccountantAutoPayments(preLoanState, now);
+  preLoanState = accPayRes.state;
+
+  // Enforce overdue monthly loans (daily default interest -> 15d legal warning -> 30d foreclosure)
   const loanEnforcement = enforceOverdueLoans(
     preLoanState,
     autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
-    now
+    now,
+    daysPassed
   );
+  let finalState = loanEnforcement.state;
+
+  // v1.3.0 Holding Autonomous CEO growth execution
+  let ceoActionsLog: string[] = [];
+  if (daysPassed > 0 && finalState.ceo?.autonomousGrowthEnabled && ceoContext) {
+    const nw = calculateNetWorth(finalState, now, stockQuotes);
+    const tier = getCompanyTier(nw);
+    const ceoRes = runAutonomousCeoTick(
+      finalState,
+      tier.maxBranches,
+      tier.level,
+      ceoContext.owner,
+      ceoContext.rivalRecords ?? [],
+      now
+    );
+    finalState = ceoRes.state;
+    ceoActionsLog = ceoRes.actionsLog;
+  }
 
   return {
-    state: loanEnforcement.state,
+    state: finalState,
     highVaultBusinessIds,
     newMarketEvent,
     dividendPaid,
@@ -1070,6 +1189,14 @@ export function tickEconomy(
     autoAdsSpent,
     autoAdBranchNames,
     newFranchiseOpenings,
+    accountantAutoPay: {
+      autoPaidLoanAmount: accPayRes.autoPaidLoanAmount,
+      autoPaidLoanCount: accPayRes.autoPaidLoanCount,
+      autoPaidTaxAmount: accPayRes.autoPaidTaxAmount,
+      autoPaidTaxCount: accPayRes.autoPaidTaxCount,
+    },
+    ceoActionsLog,
+    newTaxBillAmount,
   };
 }
 

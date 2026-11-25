@@ -10,6 +10,10 @@ import {
   Sparkles,
   CalendarDays,
   Wallet,
+  Receipt,
+  ShieldCheck,
+  Calculator,
+  Coins,
 } from 'lucide-react';
 import type { EmpireState, StockQuote } from '../types/game';
 import { calculateAccountingReport } from '../game/accountingEngine';
@@ -21,6 +25,8 @@ interface AccountingModalProps {
   state: EmpireState;
   quotes: StockQuote[];
   now: number;
+  onPayTaxBill?: (taxId: string) => void;
+  onOpenHrAccounting?: () => void;
   onSwitchToBanking?: () => void;
   onSwitchToBorsa?: () => void;
   onSwitchToInvestments?: () => void;
@@ -32,6 +38,8 @@ export function AccountingModal({
   state,
   quotes,
   now,
+  onPayTaxBill,
+  onOpenHrAccounting,
   onSwitchToBanking,
   onSwitchToBorsa,
   onSwitchToInvestments,
@@ -50,6 +58,7 @@ export function AccountingModal({
   const mult = period === 'daily' ? 24 : 1;
   const unit = period === 'daily' ? '/gün' : '/sa';
   const holdingCount = (state.stockPortfolio ?? []).filter((h) => h.shares > 0).length;
+  const pendingBills = (state.pendingTaxes ?? []).filter((b) => b.status !== 'paid');
 
   const totalRevenue = report.hourlyTotalRevenue * mult;
   const totalExpenses = report.hourlyTotalExpenses * mult;
@@ -104,7 +113,7 @@ export function AccountingModal({
 
   const expenseRows = [
     {
-      label: 'Personel & Yönetici Maaşları',
+      label: 'Personel, Yönetici & Genel Müdürlük Maaşları',
       value: report.hourlyStaffPayroll * mult,
       note: null as string | null,
       color: 'bg-rose-500',
@@ -119,21 +128,43 @@ export function AccountingModal({
       color: 'bg-orange-400',
     },
     {
-      label: 'Ödenen Franchise Payları',
-      value: report.hourlyFranchiseRoyaltyPaid * mult,
-      note: null,
-      color: 'bg-amber-500',
+      label: `KDV (%${Math.round(report.taxRates.kdvRate * 100)})`,
+      value: report.hourlyKdvTax * mult,
+      note: null as string | null,
+      color: 'bg-amber-400',
     },
     {
-      label: 'Banka Kredi Taksitleri',
+      label: `Personel SGK & Stopaj Primi (%${Math.round(report.taxRates.sgkRate * 100)})`,
+      value: report.hourlySgkTax * mult,
+      note: null as string | null,
+      color: 'bg-pink-400',
+    },
+    {
+      label: `Kurumlar / Gelir Vergisi (%${Math.round(report.taxRates.corporateRate * 100)})`,
+      value: report.hourlyCorporateTax * mult,
+      note: state.accountant
+        ? `${state.accountant.title} yasal optimizasyonu: -%${Math.round(
+            state.accountant.taxOptimizationRate * 100
+          )}`
+        : null,
+      color: 'bg-fuchsia-400',
+    },
+    {
+      label: `Belediye İlan ve Çevre Vergisi (%${(report.taxRates.municipalRate * 100).toFixed(1)})`,
+      value: report.hourlyMunicipalTax * mult,
+      note: null as string | null,
+      color: 'bg-violet-400',
+    },
+    {
+      label: 'Banka Kredi Taksitleri (Aylık Amortisman)',
       value: report.hourlyLoanInstallments * mult,
-      note: null,
+      note: null as string | null,
       color: 'bg-red-500',
     },
     {
-      label: 'İşletme Bakım & Enerji Giderleri',
-      value: report.hourlyMaintenanceCost * mult,
-      note: null,
+      label: 'Ödenen Franchise Payları & İşletme Bakım',
+      value: (report.hourlyFranchiseRoyaltyPaid + report.hourlyMaintenanceCost) * mult,
+      note: null as string | null,
       color: 'bg-slate-400',
     },
   ];
@@ -142,7 +173,7 @@ export function AccountingModal({
     <div data-testid="accounting-modal">
       <MobileGameModal
         title="Finans Merkezi"
-        subtitle="Muhasebe & Gelir-Gider Bilançosu"
+        subtitle="Muhasebe, Gelir-Gider & Kademeli Vergi Bilançosu"
         icon={<FileSpreadsheet className="h-4 w-4" />}
         tabs={topTabs}
         activeTabId="muhasebe"
@@ -158,10 +189,10 @@ export function AccountingModal({
                 type="button"
                 data-testid="accounting-period-hourly"
                 onClick={() => setPeriod('hourly')}
-                className={`min-h-[40px] rounded-xl px-3.5 text-xs font-bold transition ${
+                className={`min-h-[40px] rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
                   period === 'hourly'
-                    ? 'bg-amber-400 text-slate-950 font-bold'
-                    : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                    ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
+                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
                 }`}
               >
                 Saatlik Bilanço
@@ -170,16 +201,16 @@ export function AccountingModal({
                 type="button"
                 data-testid="accounting-period-daily"
                 onClick={() => setPeriod('daily')}
-                className={`min-h-[40px] rounded-xl px-3.5 text-xs font-bold transition ${
+                className={`min-h-[40px] rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
                   period === 'daily'
-                    ? 'bg-amber-400 text-slate-950 font-bold'
-                    : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                    ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
+                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
                 }`}
               >
                 Günlük (24 Saat)
               </button>
             </div>
-            <div className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-xs font-bold text-amber-300">
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600/70 bg-slate-950/90 px-3 py-1.5 text-xs font-bold text-amber-300">
               <CalendarDays className="h-3.5 w-3.5" />
               <span>{clock.label}</span>
               <span className="text-slate-400">· {clock.totalDaysLabel}</span>
@@ -192,14 +223,14 @@ export function AccountingModal({
         {/* Top KPI Summary */}
         <section className="grid grid-cols-1 gap-2.5 min-[900px]:grid-cols-2">
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+            <div className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
               <div className="text-xs text-slate-400">Brüt Gelir ({unit})</div>
               <div className="mt-1 font-mono-num text-base font-black text-emerald-400">
                 +{formatTL(totalRevenue, true)}
               </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
-              <div className="text-xs text-slate-400">Toplam Gider ({unit})</div>
+            <div className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
+              <div className="text-xs text-slate-400">Gider + Vergi ({unit})</div>
               <div className="mt-1 font-mono-num text-base font-black text-rose-400">
                 -{formatTL(totalExpenses, true)}
               </div>
@@ -207,8 +238,8 @@ export function AccountingModal({
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
-              <div className="text-xs text-slate-400">Net Kâr ({unit})</div>
+            <div className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
+              <div className="text-xs text-slate-400">Vergi Sonrası Net Kâr ({unit})</div>
               <div
                 data-testid="accounting-net-profit"
                 className={`mt-1 font-mono-num text-base font-black ${
@@ -219,7 +250,7 @@ export function AccountingModal({
                 {formatTL(netProfit, true)}
               </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+            <div className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
               <div className="text-xs text-slate-400">Net Kâr Marjı</div>
               <div
                 className={`mt-1 flex items-center gap-1 font-mono-num text-base font-black ${
@@ -237,12 +268,130 @@ export function AccountingModal({
           </div>
         </section>
 
+        {/* Progressive Tax Regime & Accountant Automation Status */}
+        <section
+          data-testid="tax-regime-panel"
+          className="rounded-xl border border-amber-400/50 bg-slate-900/85 p-3 space-y-2.5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-amber-400" />
+              <span className="text-sm font-black text-white">
+                Vergi Kademesi: {report.taxRates.stageLabel}
+              </span>
+            </div>
+            <span className="font-mono-num text-xs font-bold text-rose-300">
+              Toplam Vergi ({unit}): -{formatTL(report.hourlyTotalTaxes * mult, true)}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-300">{report.taxRates.incentiveNote}</p>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 font-mono-num text-xs">
+            <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
+              <div className="text-[11px] text-slate-400">KDV</div>
+              <div className="font-black text-amber-300">
+                %{Math.round(report.taxRates.kdvRate * 100)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
+              <div className="text-[11px] text-slate-400">SGK & Stopaj</div>
+              <div className="font-black text-pink-300">
+                %{Math.round(report.taxRates.sgkRate * 100)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
+              <div className="text-[11px] text-slate-400">Kurumlar/Gelir</div>
+              <div className="font-black text-fuchsia-300">
+                %{Math.round(report.taxRates.corporateRate * 100)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
+              <div className="text-[11px] text-slate-400">Belediye</div>
+              <div className="font-black text-violet-300">
+                %{(report.taxRates.municipalRate * 100).toFixed(1)}
+              </div>
+            </div>
+          </div>
+
+          {/* Muhasebeci Auto-Payment & Pending Tax Bills */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-2.5 text-xs">
+            {state.accountant ? (
+              <div className="flex items-center gap-2 text-emerald-300">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span>
+                  <strong>{state.accountant.name}</strong> ({'★'.repeat(state.accountant.stars)}) ·
+                  Aylık vergiler & kredi taksitleri otomatik ödeniyor!
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+                <span className="text-amber-200">
+                  Muhasebeci atanmadı: Aylık vergi ve kredi taksitlerini manuel ödemelisiniz.
+                </span>
+                {onOpenHrAccounting && (
+                  <button
+                    type="button"
+                    data-testid="goto-hire-accountant-btn"
+                    onClick={onOpenHrAccounting}
+                    className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-amber-300/80 bg-amber-400 px-3 text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98] whitespace-nowrap"
+                  >
+                    <Calculator className="h-3.5 w-3.5" />
+                    <span>Muhasebeci İşe Al (Sv.1+)</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {pendingBills.length > 0 && (
+            <div className="space-y-2 border-t border-slate-800 pt-2.5">
+              <div className="text-xs font-bold text-rose-300">
+                Bekleyen Vergi Tahakkukları ({pendingBills.length})
+              </div>
+              {pendingBills.map((bill) => (
+                <div
+                  key={bill.id}
+                  data-testid={`pending-tax-${bill.id}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-400/50 bg-rose-950/30 px-3 py-2 text-xs"
+                >
+                  <div>
+                    <div className="font-bold text-white">
+                      {bill.monthNumber}. Ay Vergi Tahakkuku
+                    </div>
+                    <div className="text-[11px] text-slate-300">
+                      Son Ödeme: Gün {bill.dueGameDay} · KDV {formatTL(bill.breakdown.kdv, true)} ·
+                      SGK {formatTL(bill.breakdown.sgkStopaj, true)} · Kurumlar{' '}
+                      {formatTL(bill.breakdown.corporateTax, true)}
+                    </div>
+                  </div>
+                  {onPayTaxBill && (
+                    <button
+                      type="button"
+                      data-testid={`pay-tax-${bill.id}`}
+                      disabled={state.cash < bill.amount}
+                      onClick={() => onPayTaxBill(bill.id)}
+                      className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-emerald-300/80 bg-emerald-500 px-3 font-mono-num text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+                    >
+                      <Coins className="h-3.5 w-3.5" />
+                      <span>Öde ({formatTL(bill.amount)})</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Ratio Bar */}
-        <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+        <section className="rounded-xl border border-slate-600/60 bg-slate-900/75 p-3">
           <div className="flex items-center justify-between text-xs font-bold">
             <span className="text-emerald-400">Gelir %{revBarPct}</span>
             <span className="text-slate-400">
-              Haftalık Temettü: Her 7. Gün · Aylık Kapanış: Her 30. Gün
+              Ödenen Toplam Vergi:{' '}
+              <strong className="font-mono-num text-slate-200">
+                {formatTL(state.totalTaxesPaid ?? 0, true)}
+              </strong>
             </span>
             <span className="text-rose-400">Gider %{expBarPct}</span>
           </div>
@@ -254,7 +403,7 @@ export function AccountingModal({
 
         {/* Revenue & Expense Ledgers */}
         <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
-          <section className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 space-y-2.5">
+          <section className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-3 space-y-2.5">
             <h3 className="text-sm font-bold text-emerald-300">
               Gelir Kalemleri ({period === 'daily' ? 'Günlük' : 'Saatlik'})
             </h3>
@@ -282,7 +431,7 @@ export function AccountingModal({
                   {report.hourlySectorBreakdown.map((sec) => (
                     <span
                       key={sec.sectorId}
-                      className="rounded-lg border border-emerald-500/30 bg-slate-950/80 px-2.5 py-1 text-xs font-semibold text-slate-200"
+                      className="rounded-lg border border-emerald-500/35 bg-slate-950/80 px-2.5 py-1 text-xs font-semibold text-slate-200"
                     >
                       {sec.sectorName} ({sec.branchCount}):{' '}
                       <strong className="font-mono-num text-emerald-400">
@@ -295,9 +444,9 @@ export function AccountingModal({
             )}
           </section>
 
-          <section className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 space-y-2.5">
+          <section className="rounded-xl border border-rose-500/40 bg-rose-950/20 p-3 space-y-2.5">
             <h3 className="text-sm font-bold text-rose-300">
-              Gider Kalemleri ({period === 'daily' ? 'Günlük' : 'Saatlik'})
+              Gider & Vergi Kalemleri ({period === 'daily' ? 'Günlük' : 'Saatlik'})
             </h3>
             {expenseRows.map((row) => {
               const pct = totalExpenses > 0 ? Math.round((row.value / totalExpenses) * 100) : 0;
@@ -325,7 +474,7 @@ export function AccountingModal({
         </div>
 
         {/* Per-Branch Profitability */}
-        <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-2.5">
+        <section className="rounded-xl border border-slate-600/60 bg-slate-900/80 p-3 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-white">
               Şube Bazlı Kârlılık ({report.branches.length} Şube)
@@ -334,7 +483,7 @@ export function AccountingModal({
           </div>
 
           {report.branches.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
+            <div className="rounded-xl border border-dashed border-slate-600 p-6 text-center text-xs text-slate-400">
               Henüz aktif şubeniz yok. Haritada pin bırakarak ilk işletmenizi kurduğunuzda
               şube bilançosu burada canlı güncellenir.
             </div>
@@ -349,7 +498,7 @@ export function AccountingModal({
                 return (
                   <div
                     key={b.businessId}
-                    className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 space-y-1.5"
+                    className="rounded-xl border border-slate-600/60 bg-slate-950/80 p-3 space-y-1.5"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">

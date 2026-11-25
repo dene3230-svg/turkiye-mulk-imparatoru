@@ -601,7 +601,10 @@ export function buildNationalRivalDirectory(
       };
     })
     .sort((a, b) => {
-      // Prioritize current city first, then distressed buyout opportunities, then valuation
+      // Prioritize real live players first, then current city, then distressed buyouts, then valuation
+      const aReal = a.isAiHolding ? 0 : 1;
+      const bReal = b.isAiHolding ? 0 : 1;
+      if (aReal !== bReal) return bReal - aReal;
       const aLocal = a.record.city_plate === activeCityPlate ? 1 : 0;
       const bLocal = b.record.city_plate === activeCityPlate ? 1 : 0;
       if (aLocal !== bLocal) return bLocal - aLocal;

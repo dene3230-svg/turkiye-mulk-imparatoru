@@ -403,9 +403,72 @@ export interface LoanRecord {
   collateralBusinessName: string;
   collateralValuation: number;
   createdAt: number;
-  dueAt: number; // Term end timestamp
-  seizureAt: number; // Grace period end timestamp -> triggers auto-seizure
+  dueAt: number; // Legacy timestamp fallback
+  seizureAt: number; // Legacy grace window fallback
+  termMonths?: number; // Monthly installment count (default 6 months)
+  paidMonths?: number; // Number of paid monthly installments
+  monthlyInstallment?: number; // TL per 30-day in-game month
+  nextDueGameDay?: number; // Next due total in-game day (e.g. Day 31, 61...)
+  overdueDays?: number; // Days overdue past nextDueGameDay (15d = warning, 30d = foreclosure)
+  defaultInterestAccrued?: number; // Total penalty interest accrued while overdue
+  legalWarningSent?: boolean; // Set true once overdueDays >= 15
   status: LoanStatus;
+}
+
+// --- v1.3.0 Genel Müdürlük: Muhasebe Departmanı (Level 1+) & Holding CEO ---
+export interface AccountantStaff {
+  id: string;
+  name: string;
+  stars: 1 | 2 | 3 | 4 | 5;
+  title: string;
+  taxOptimizationRate: number; // 0.02 .. 0.14 (higher star reduces effective tax legally)
+  hireCost: number;
+  hourlySalary: number;
+  hiredAt?: number;
+}
+
+export interface CeoStaff {
+  id: string;
+  name: string;
+  stars: 3 | 4 | 5;
+  title: string;
+  leadership: number; // 75 .. 99
+  strategy: number; // 75 .. 99
+  hireCost: number;
+  hourlySalary: number;
+  autonomousGrowthEnabled: boolean;
+  autoBranchesOpened: number;
+  autoTakeoversCount: number;
+  hiredAt?: number;
+}
+
+export interface TaxRatesBreakdown {
+  stageIndex: number; // 0..3
+  stageLabel: string;
+  kdvRate: number; // VAT on gross turnover
+  sgkRate: number; // Payroll SGK & Stopaj
+  corporateRate: number; // Kurumlar / Gelir Vergisi on operating profit
+  municipalRate: number; // Belediye İlan & Çevre Vergisi
+  incentiveNote: string;
+}
+
+export interface TaxBreakdownValues {
+  kdv: number;
+  sgkStopaj: number;
+  corporateTax: number;
+  municipalTax: number;
+  totalTax: number;
+}
+
+export interface PendingTaxObligation {
+  id: string;
+  monthNumber: number;
+  dueGameDay: number;
+  amount: number;
+  breakdown: TaxBreakdownValues;
+  overdueDays: number;
+  status: 'pending' | 'paid' | 'overdue';
+  createdAt: number;
 }
 
 // --- Patron Chat ---
@@ -501,6 +564,13 @@ export interface AccountingReport {
   hourlyFranchiseRoyaltyPaid: number;
   hourlyLoanInstallments: number;
   hourlyMaintenanceCost: number;
+  // v1.3.0 Realistic Progressive Tax Ledger (hourly)
+  taxRates: TaxRatesBreakdown;
+  hourlyKdvTax: number;
+  hourlySgkTax: number;
+  hourlyCorporateTax: number;
+  hourlyMunicipalTax: number;
+  hourlyTotalTaxes: number;
   hourlyTotalExpenses: number;
   // Summary
   hourlyNetProfit: number;
@@ -555,6 +625,14 @@ export interface EmpireState {
   creditScore: number; // 0..1900, default 1100
   ownBank: BankRecord | null;
   activeLoans: LoanRecord[]; // Loans borrowed by this player
+  // v1.3.0 Genel Müdürlük (Level 1+ Muhasebe & Holding Board/CEO) + Tax Ledger
+  accountant?: AccountantStaff | null;
+  accountantPool?: AccountantStaff[];
+  ceo?: CeoStaff | null;
+  ceoPool?: CeoStaff[];
+  pendingTaxes?: PendingTaxObligation[];
+  totalTaxesPaid?: number;
+  lastCeoActionGameDay?: number;
   activeMissions: MissionDef[]; // Self-renewing dynamic mission pool (always 4 active)
   claimedMissionIds: string[];
   completedMissionsCount: number;

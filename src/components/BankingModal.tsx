@@ -9,6 +9,8 @@ import {
   BarChart3,
   FileSpreadsheet,
   Wallet,
+  CalendarClock,
+  ShieldCheck,
 } from 'lucide-react';
 import type { BankRecord, EmpireState, ProvinceInfo } from '../types/game';
 import { BANK_MIN_NET_WORTH } from '../game/catalog';
@@ -18,6 +20,7 @@ import {
   calculateRequiredCollateral,
   getCreditTier,
 } from '../game/bankingEngine';
+import { getCurrentGameDay } from '../game/corporateEngine';
 import { calculateBusinessValuation, formatTL } from '../game/economy';
 import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
 import { BrandLogo } from './BrandLogo';
@@ -29,7 +32,13 @@ interface BankingModalProps {
   activeProvince: ProvinceInfo;
   netWorth: number;
   now: number;
-  onTakeLoan: (bankId: string, amount: number, collateralBusinessId: string) => void;
+  onTakeLoan: (
+    bankId: string,
+    amount: number,
+    collateralBusinessId: string,
+    termMonths: number
+  ) => void;
+  onPayInstallment?: (loanId: string) => void;
   onRepayLoan: (loanId: string) => void;
   onCreateBank: (params: {
     bankName: string;
@@ -56,6 +65,7 @@ interface BankingModalProps {
 
 const BANK_COLORS = ['#0F766E', '#1D4ED8', '#B45309', '#7C3AED', '#BE123C', '#0891B2'];
 const MIN_LOAN_AMOUNT = 25_000;
+const TERM_OPTIONS = [3, 6, 12];
 
 export function BankingModal({
   open,
@@ -65,6 +75,7 @@ export function BankingModal({
   netWorth,
   now,
   onTakeLoan,
+  onPayInstallment,
   onRepayLoan,
   onCreateBank,
   onUpdateBank,
@@ -76,6 +87,7 @@ export function BankingModal({
   const [subTab, setSubTab] = useState<'loans' | 'own-bank'>('loans');
   const [selectedBankId, setSelectedBankId] = useState<string>(allBanks[0]?.id ?? '');
   const [loanAmount, setLoanAmount] = useState<number>(100_000);
+  const [termMonths, setTermMonths] = useState<number>(6);
   const [collateralBizId, setCollateralBizId] = useState<string>(
     state.businesses.find((b) => !b.pledgedLoanId)?.id ?? ''
   );
@@ -90,6 +102,7 @@ export function BankingModal({
 
   if (!open) return null;
 
+  const currentGameDay = getCurrentGameDay(state.gameMinutes);
   const creditScore = state.creditScore ?? 1100;
   const tier = getCreditTier(creditScore);
   const scorePct = Math.min(100, Math.max(0, (creditScore / 1900) * 100));
@@ -118,6 +131,7 @@ export function BankingModal({
     : 0.12;
   const totalInterest = Math.round(clampedLoanAmount * effRate);
   const totalRepayment = clampedLoanAmount + totalInterest;
+  const estimatedMonthlyInstallment = Math.ceil(totalRepayment / termMonths);
   const reqCollateral = calculateRequiredCollateral(clampedLoanAmount, creditScore);
   const activeLoans = (state.activeLoans ?? []).filter(
     (l) => l.status === 'active' || l.status === 'garnishing'
@@ -160,7 +174,7 @@ export function BankingModal({
     <div data-testid="banking-modal">
       <MobileGameModal
         title="Finans Merkezi"
-        subtitle="Banka & Kredi Piyasası"
+        subtitle="Banka & 30 Günlük Aylık Kredi Sistemi"
         icon={<Landmark className="h-4 w-4" />}
         tabs={topTabs}
         activeTabId="banka"
@@ -170,51 +184,57 @@ export function BankingModal({
           if (id === 'yatirimlarim') onSwitchToInvestments?.();
         }}
         subHeader={
-          <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
-            <button
-              type="button"
-              data-testid="bank-tab-loans"
-              onClick={() => setSubTab('loans')}
-              className={`min-h-[40px] shrink-0 rounded-xl px-3.5 text-xs font-bold transition ${
-                effectiveSubTab === 'loans'
-                  ? 'bg-emerald-500 text-slate-950 font-bold'
-                  : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
-              }`}
-            >
-              Kredi Çek & Borçlar ({activeLoans.length})
-            </button>
-            <button
-              type="button"
-              data-testid="bank-tab-own"
-              disabled={!canOpenOwnBank}
-              title={
-                !canOpenOwnBank
-                  ? `Kendi bankanızı kurmak için ₺25.000.000 net değer gerekir (Mevcut: ${formatTL(netWorth, true)})`
-                  : undefined
-              }
-              onClick={() => canOpenOwnBank && setSubTab('own-bank')}
-              className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition ${
-                !canOpenOwnBank
-                  ? 'cursor-not-allowed border border-slate-800 bg-slate-900/70 text-slate-500 opacity-70'
-                  : effectiveSubTab === 'own-bank'
-                  ? 'bg-amber-400 text-slate-950 font-bold'
-                  : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
-              }`}
-            >
-              {!canOpenOwnBank && <Lock className="h-3.5 w-3.5" />}
-              <span>
-                {state.ownBank
-                  ? `Bankam: ${state.ownBank.bankName}`
-                  : 'Kendi Bankanı Kur (₺25 Mln)'}
-              </span>
-            </button>
+          <div className="flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="bank-tab-loans"
+                onClick={() => setSubTab('loans')}
+                className={`min-h-[40px] shrink-0 rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
+                  effectiveSubTab === 'loans'
+                    ? 'border-emerald-300/80 bg-emerald-500 text-slate-950 font-black'
+                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                Kredi Çek & Taksitler ({activeLoans.length})
+              </button>
+              <button
+                type="button"
+                data-testid="bank-tab-own"
+                disabled={!canOpenOwnBank}
+                title={
+                  !canOpenOwnBank
+                    ? `Kendi bankanızı kurmak için ₺25.000.000 net değer gerekir (Mevcut: ${formatTL(netWorth, true)})`
+                    : undefined
+                }
+                onClick={() => canOpenOwnBank && setSubTab('own-bank')}
+                className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
+                  !canOpenOwnBank
+                    ? 'cursor-not-allowed border-slate-700/80 bg-slate-900/70 text-slate-500 opacity-70'
+                    : effectiveSubTab === 'own-bank'
+                    ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
+                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                {!canOpenOwnBank && <Lock className="h-3.5 w-3.5" />}
+                <span>
+                  {state.ownBank
+                    ? `Bankam: ${state.ownBank.bankName}`
+                    : 'Kendi Bankanı Kur (₺25 Mln)'}
+                </span>
+              </button>
+            </div>
+
+            <span className="shrink-0 rounded-lg border border-slate-600/70 bg-slate-950 px-2.5 py-1 font-mono-num text-xs font-bold text-amber-300">
+              Gün {currentGameDay}
+            </span>
           </div>
         }
         onClose={onClose}
         zIndexClass="z-[1260]"
       >
         {/* Credit Score Card */}
-        <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+        <section className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-slate-300">Kredi Puanı:</span>
@@ -233,7 +253,8 @@ export function BankingModal({
               </span>
             </div>
             <div className="font-mono-num text-xs text-slate-300">
-              Limit: <strong className="text-white">{formatTL(tier.maxLoanAmount, true)}</strong> ·
+              Dinamik Limit:{' '}
+              <strong className="text-white">{formatTL(tier.maxLoanAmount, true)}</strong> ·
               Teminat: <strong className="text-amber-300">{tier.collateralMultiplier}×</strong>
             </div>
           </div>
@@ -255,10 +276,8 @@ export function BankingModal({
               </strong>
             </span>
             <span>
-              Net Değeriniz: <strong className="font-mono-num text-emerald-400">{formatTL(netWorth, true)}</strong>
-              {!canOpenOwnBank && (
-                <span className="ml-1.5 text-slate-400">(Banka Lisansı: ₺25 Mln)</span>
-              )}
+              Zamanında Aylık Taksit: <strong className="text-emerald-400">+40 Puan</strong> ·
+              Gecikme: <strong className="text-rose-400">-110 Puan & %1.5/gün</strong>
             </span>
           </div>
           <div className="mt-2 hidden grid-cols-5 gap-1 text-[11px] text-slate-400 min-[900px]:grid">
@@ -273,14 +292,25 @@ export function BankingModal({
           </div>
         </section>
 
+        {/* Muhasebeci Auto-Pay Banner */}
+        {state.accountant && (
+          <div className="flex items-center gap-2.5 rounded-xl border border-emerald-400/50 bg-emerald-950/35 px-3 py-2 text-xs text-emerald-200">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
+            <span>
+              <strong>{state.accountant.name}</strong> ({state.accountant.title}) görevde: Aylık
+              kredi taksitleriniz vade günü otomatik ödenerek gecikme ve haciz riskini önler.
+            </span>
+          </div>
+        )}
+
         {effectiveSubTab === 'loans' ? (
           <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
             {/* Borrow Card */}
-            <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-3">
+            <section className="rounded-xl border border-slate-600/60 bg-slate-900/80 p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white">Banka Seç & Kredi Kullan</h3>
                 <span className="text-xs font-semibold text-slate-400">
-                  {allBanks.length} Banka
+                  {allBanks.length} Banka · 30 Günlük Aylık Vade
                 </span>
               </div>
 
@@ -295,10 +325,10 @@ export function BankingModal({
                       key={bank.id}
                       type="button"
                       onClick={() => setSelectedBankId(bank.id)}
-                      className={`flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border p-2.5 text-left transition ${
+                      className={`flex min-h-[56px] w-full items-center justify-between gap-3 rounded-lg border p-2.5 text-left transition-all duration-200 ease-out active:scale-[0.98] ${
                         isSel
-                          ? 'border-amber-400 bg-amber-400/12 shadow-md shadow-amber-500/10'
-                          : 'border-slate-800 bg-slate-950/75 hover:border-slate-600'
+                          ? 'border-amber-400/85 bg-amber-400/15 shadow-md shadow-amber-500/10'
+                          : 'border-slate-500/60 bg-slate-950/75 hover:border-slate-400'
                       }`}
                     >
                       <div className="flex min-w-0 items-center gap-2.5">
@@ -312,8 +342,16 @@ export function BankingModal({
                             {bank.bankName}
                           </div>
                           <div className="text-xs text-slate-400">
-                            Havuz: <span className="font-mono-num text-slate-200">{formatTL(bank.poolCapital, true)}</span> · Min Puan:{' '}
-                            <span className={scoreOk ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                            Havuz:{' '}
+                            <span className="font-mono-num text-slate-200">
+                              {formatTL(bank.poolCapital, true)}
+                            </span>{' '}
+                            · Min Puan:{' '}
+                            <span
+                              className={
+                                scoreOk ? 'font-bold text-emerald-400' : 'font-bold text-rose-400'
+                              }
+                            >
                               {bank.minCreditScore}
                             </span>
                           </div>
@@ -330,15 +368,15 @@ export function BankingModal({
                 })}
               </div>
 
-              {/* Loan Amount Fluid Range Slider & Collateral Selector */}
-              <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/75 p-3">
+              {/* Loan Amount Fluid Range Slider, Term Months & Collateral Selector */}
+              <div className="space-y-3 rounded-xl border border-slate-600/60 bg-slate-950/75 p-3">
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <label
                       htmlFor="loan-amount-range"
                       className="text-xs font-semibold text-slate-300"
                     >
-                      Kredi Tutarı (Kaydırma Çubuğu)
+                      Kredi Tutarı
                     </label>
                     <span
                       data-testid="loan-slider-amount"
@@ -358,7 +396,7 @@ export function BankingModal({
                     disabled={tier.maxLoanAmount <= 0}
                     value={clampedLoanAmount}
                     onChange={(e) => setLoanAmount(Number(e.target.value))}
-                    className="mt-2 h-2.5 w-full cursor-pointer accent-amber-400 disabled:opacity-40"
+                    className="mt-2 h-2.5 w-full cursor-pointer rounded-lg border border-slate-600/70 bg-slate-800 accent-amber-400 disabled:opacity-40"
                   />
 
                   <div className="mt-1 flex items-center justify-between font-mono-num text-[11px] text-slate-400">
@@ -373,7 +411,8 @@ export function BankingModal({
                       { label: '%75', ratio: 0.75 },
                       { label: 'Maks', ratio: 1 },
                     ].map((preset) => {
-                      const raw = Math.round((maxLoanForPlayer * preset.ratio) / sliderStep) * sliderStep;
+                      const raw =
+                        Math.round((maxLoanForPlayer * preset.ratio) / sliderStep) * sliderStep;
                       const val = Math.min(maxLoanForPlayer, Math.max(MIN_LOAN_AMOUNT, raw));
                       return (
                         <button
@@ -381,16 +420,40 @@ export function BankingModal({
                           type="button"
                           disabled={tier.maxLoanAmount <= 0}
                           onClick={() => setLoanAmount(val)}
-                          className={`min-h-[34px] rounded-lg border text-xs font-bold transition ${
+                          className={`min-h-[36px] rounded-lg border text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
                             clampedLoanAmount === val
-                              ? 'border-amber-400 bg-amber-400 text-slate-950'
-                              : 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800'
+                              ? 'border-amber-300/85 bg-amber-400 text-slate-950 font-black'
+                              : 'border-slate-500/60 bg-slate-900 text-slate-200 hover:border-slate-400 hover:bg-slate-800'
                           }`}
                         >
                           {preset.label}
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* Monthly Installment Term Selector */}
+                <div>
+                  <span className="block text-xs font-semibold text-slate-300">
+                    Vade Seçimi (Her 30 Oyun Günü = 1 Taksit)
+                  </span>
+                  <div className="mt-1.5 grid grid-cols-3 gap-2">
+                    {TERM_OPTIONS.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        data-testid={`loan-term-${m}`}
+                        onClick={() => setTermMonths(m)}
+                        className={`min-h-[38px] rounded-lg border text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
+                          termMonths === m
+                            ? 'border-amber-300/85 bg-amber-400 text-slate-950 font-black'
+                            : 'border-slate-500/60 bg-slate-900 text-slate-200 hover:border-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        {m} Ay ({m * 30} Gün)
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -401,7 +464,7 @@ export function BankingModal({
                   <select
                     value={chosenBiz?.id ?? ''}
                     onChange={(e) => setCollateralBizId(e.target.value)}
-                    className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs font-semibold text-white"
+                    className="mt-1 min-h-[42px] w-full rounded-lg border border-slate-500/70 bg-slate-950 px-3 text-xs font-semibold text-white"
                   >
                     {freeBusinesses.length === 0 ? (
                       <option value="">Teminat gösterecek işletme yok</option>
@@ -419,13 +482,19 @@ export function BankingModal({
                 </div>
               </div>
 
-              {/* Repayment Summary + Confirm CTA directly beneath */}
-              <div className="rounded-xl border border-slate-700/80 bg-slate-950/90 p-3 space-y-2.5">
-                <div className="grid grid-cols-2 gap-2 border-b border-slate-800 pb-2 text-xs">
+              {/* Repayment Summary + Confirm CTA */}
+              <div className="rounded-xl border border-slate-600/70 bg-slate-950/90 p-3 space-y-2.5">
+                <div className="grid grid-cols-3 gap-2 border-b border-slate-800 pb-2 text-xs">
                   <div>
-                    <div className="text-[11px] text-slate-400">Anapara · Etkin Faiz</div>
+                    <div className="text-[11px] text-slate-400">Etkin Faiz</div>
                     <div className="font-mono-num font-bold text-white">
-                      {formatTL(clampedLoanAmount, true)} · %{(effRate * 100).toFixed(1)}
+                      %{(effRate * 100).toFixed(1)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">Aylık Taksit</div>
+                    <div className="font-mono-num font-black text-emerald-400">
+                      {formatTL(estimatedMonthlyInstallment, true)}/ay
                     </div>
                   </div>
                   <div className="text-right">
@@ -438,7 +507,7 @@ export function BankingModal({
 
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="font-semibold text-slate-300">
-                    Toplam Geri Ödeme:
+                    Toplam Geri Ödeme ({termMonths} Taksit):
                   </span>
                   <strong className="font-mono-num text-base font-black text-amber-300">
                     {formatTL(totalRepayment)}
@@ -452,9 +521,9 @@ export function BankingModal({
                   onClick={() =>
                     selectedBank &&
                     chosenBiz &&
-                    onTakeLoan(selectedBank.id, clampedLoanAmount, chosenBiz.id)
+                    onTakeLoan(selectedBank.id, clampedLoanAmount, chosenBiz.id, termMonths)
                   }
-                  className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none"
+                  className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-amber-300/80 bg-amber-400 px-4 text-sm font-black text-slate-950 shadow-lg shadow-amber-500/20 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none"
                 >
                   <Coins className="h-4 w-4 shrink-0" />
                   <span>
@@ -466,77 +535,134 @@ export function BankingModal({
                       ? 'Krediyi Onayla ve Çek (Önce İşletme Kurun)'
                       : chosenBizVal < reqCollateral
                       ? `Teminat Yetersiz (Gerekli: ${formatTL(reqCollateral, true)})`
-                      : `Krediyi Onayla ve Çek · ${formatTL(clampedLoanAmount)}`}
+                      : `Krediyi Onayla · ${formatTL(clampedLoanAmount)}`}
                   </span>
                 </button>
               </div>
             </section>
 
             {/* Active Loans List */}
-            <section className="rounded-xl border border-slate-800 bg-slate-900/75 p-3 space-y-3">
-              <h3 className="text-sm font-bold text-white">
-                Aktif Kredileriniz ({activeLoans.length})
-              </h3>
+            <section className="rounded-xl border border-slate-600/60 bg-slate-900/80 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">
+                  Aktif Krediler & Aylık Taksitler ({activeLoans.length})
+                </h3>
+                <span className="text-[11px] text-slate-400">15g Uyarı · 30g Haciz</span>
+              </div>
               {activeLoans.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
-                  Aktif kredi borcunuz bulunmuyor. Zamanında ödenen krediler kredi puanınızı
-                  +65 puan yükseltir ve faiz indirimini açar.
+                <div className="rounded-xl border border-dashed border-slate-600 p-6 text-center text-xs text-slate-300 leading-relaxed">
+                  Aktif kredi borcunuz bulunmuyor. 30 günlük taksitleri zamanında ödedikçe kredi
+                  puanınız <strong className="text-emerald-400">+40/+60 puan</strong> artar, dinamik
+                  limitiniz büyür ve faiz oranlarınız düşer.
                 </div>
               ) : (
                 <div className="space-y-2.5">
                   {activeLoans.map((loan) => {
-                    const secLeft = Math.max(0, Math.ceil((loan.dueAt - now) / 1000));
-                    const seizureSec = Math.max(0, Math.ceil((loan.seizureAt - now) / 1000));
-                    const isGarnishing = loan.status === 'garnishing';
+                    const dueDay = loan.nextDueGameDay ?? currentGameDay + 30;
+                    const daysUntilDue = dueDay - currentGameDay;
+                    const overdueDays = loan.overdueDays ?? 0;
+                    const isOverdue = overdueDays > 0 || loan.status === 'garnishing';
+                    const isLegalWarning = overdueDays >= 15;
+                    const installmentAmt = Math.min(
+                      loan.remainingAmount,
+                      loan.monthlyInstallment ?? loan.remainingAmount
+                    );
+                    const totalMonths = loan.termMonths ?? 6;
+                    const paidMonths = loan.paidMonths ?? 0;
 
                     return (
                       <div
                         key={loan.id}
-                        className={`rounded-xl border p-3 space-y-2 ${
-                          isGarnishing
-                            ? 'border-rose-500/70 bg-rose-950/35'
-                            : 'border-slate-800 bg-slate-950/80'
+                        data-testid={`active-loan-${loan.id}`}
+                        className={`rounded-xl border p-3 space-y-2.5 ${
+                          isLegalWarning
+                            ? 'border-rose-400/80 bg-rose-950/45'
+                            : isOverdue
+                            ? 'border-amber-400/75 bg-amber-950/30'
+                            : 'border-slate-600/60 bg-slate-950/80'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             <BrandLogo brandKey={loan.bankId || loan.bankName} size={30} />
-                            <span className="truncate text-xs font-bold text-white">
-                              {loan.bankName}
-                            </span>
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-bold text-white">
+                                {loan.bankName}
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                Taksit {paidMonths}/{totalMonths} · Teminat:{' '}
+                                {loan.collateralBusinessName}
+                              </div>
+                            </div>
                           </div>
-                          <span className="shrink-0 font-mono-num text-xs font-black text-rose-400">
-                            Kalan: {formatTL(loan.remainingAmount)}
-                          </span>
+                          <div className="shrink-0 text-right">
+                            <div className="font-mono-num text-xs font-black text-rose-400">
+                              Kalan: {formatTL(loan.remainingAmount)}
+                            </div>
+                            <div className="font-mono-num text-[11px] font-bold text-amber-300">
+                              Aylık: {formatTL(installmentAmt)}
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                          <Building2 className="h-3.5 w-3.5 text-amber-400" />
-                          <span>Teminat: {loan.collateralBusinessName}</span>
-                        </div>
-
-                        <div className="text-xs font-semibold">
-                          {isGarnishing ? (
-                            <span className="flex items-center gap-1.5 text-rose-300">
-                              <ShieldAlert className="h-4 w-4" />
-                              Gelire El Konuluyor! Otomatik Haciz: {seizureSec}sn
-                            </span>
+                        <div className="rounded-lg border border-slate-700/80 bg-slate-900/80 px-2.5 py-2 text-xs font-semibold">
+                          {isLegalWarning ? (
+                            <div className="flex items-center gap-1.5 text-rose-300">
+                              <ShieldAlert className="h-4 w-4 shrink-0" />
+                              <span>
+                                YASAL TAKİP UYARISI ({overdueDays}/30 gün gecikme)! 30. günde nakit
+                                & {loan.collateralBusinessName} haczedilir.
+                              </span>
+                            </div>
+                          ) : isOverdue ? (
+                            <div className="flex items-center justify-between gap-2 text-amber-300">
+                              <span className="flex items-center gap-1.5">
+                                <ShieldAlert className="h-4 w-4 shrink-0" />
+                                {overdueDays} gün gecikmede (Temerrüt: +
+                                {formatTL(loan.defaultInterestAccrued ?? 0, true)})
+                              </span>
+                              <span className="font-mono-num text-[11px] text-rose-300">
+                                Hacze {Math.max(0, 30 - overdueDays)} gün
+                              </span>
+                            </div>
                           ) : (
-                            <span className="text-slate-300">
-                              Vade Kalan Süre: <strong className="font-mono-num text-white">{secLeft}sn</strong>
-                            </span>
+                            <div className="flex items-center justify-between gap-2 text-slate-200">
+                              <span className="flex items-center gap-1.5">
+                                <CalendarClock className="h-3.5 w-3.5 text-emerald-400" />
+                                Son Ödeme: <strong className="text-white">Gün {dueDay}</strong>
+                              </span>
+                              <span className="font-mono-num text-[11px] text-emerald-400">
+                                {Math.max(0, daysUntilDue)} gün kaldı
+                              </span>
+                            </div>
                           )}
                         </div>
 
-                        <button
-                          type="button"
-                          disabled={state.cash < loan.remainingAmount}
-                          onClick={() => onRepayLoan(loan.id)}
-                          className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-                        >
-                          <Coins className="h-4 w-4" />
-                          <span>Borcu Kapat (+65 Puan)</span>
-                        </button>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          {onPayInstallment && (
+                            <button
+                              type="button"
+                              data-testid={`pay-installment-${loan.id}`}
+                              disabled={state.cash < installmentAmt}
+                              onClick={() => onPayInstallment(loan.id)}
+                              className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-300/80 bg-emerald-500 px-3 text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+                            >
+                              <Coins className="h-3.5 w-3.5 shrink-0" />
+                              <span>
+                                Taksit Öde ({formatTL(installmentAmt, true)})
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={state.cash < loan.remainingAmount}
+                            onClick={() => onRepayLoan(loan.id)}
+                            className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-300/75 bg-amber-400/20 px-3 text-xs font-black text-amber-200 transition-all duration-200 ease-out hover:bg-amber-400/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+                          >
+                            <Building2 className="h-3.5 w-3.5 shrink-0" />
+                            <span>Tümünü Kapat (+65)</span>
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -546,7 +672,7 @@ export function BankingModal({
           </div>
         ) : state.ownBank ? (
           /* Own Bank Management */
-          <section className="rounded-xl border border-amber-400/40 bg-slate-900/80 p-4 space-y-3">
+          <section className="rounded-xl border border-amber-400/50 bg-slate-900/85 p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <BrandLogo
@@ -564,20 +690,20 @@ export function BankingModal({
                   </div>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
+              <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/50 bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
                 <CheckCircle2 className="h-4 w-4" /> Faaliyette
               </span>
             </div>
 
             <div className="grid grid-cols-1 gap-2 min-[900px]:grid-cols-2">
-              <div className="rounded-xl border border-slate-800 bg-slate-950/75 p-3">
+              <div className="rounded-lg border border-slate-700 bg-slate-950/75 p-3">
                 <div className="text-xs text-slate-400">Baz Faiz / Min Puan</div>
                 <div className="mt-1 font-mono-num text-sm font-black text-white">
                   %{Math.round(state.ownBank.baseInterestRate * 100)} · Min{' '}
                   {state.ownBank.minCreditScore} Puan
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/75 p-3">
+              <div className="rounded-lg border border-slate-700 bg-slate-950/75 p-3">
                 <div className="text-xs text-slate-400">Haczedilen Mülk / Verilen Kredi</div>
                 <div className="mt-1 font-mono-num text-sm font-black text-amber-300">
                   {state.ownBank.seizedAssetsCount} Mülk · {state.ownBank.totalLoansIssued} Kredi
@@ -596,7 +722,7 @@ export function BankingModal({
                   step={500000}
                   value={addCapital}
                   onChange={(e) => setAddCapital(Number(e.target.value))}
-                  className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 font-mono-num text-sm text-white"
+                  className="mt-1 min-h-[42px] w-full rounded-lg border border-slate-500/70 bg-slate-950 px-3 font-mono-num text-sm text-white"
                 />
               </div>
               <div className="space-y-2">
@@ -639,14 +765,14 @@ export function BankingModal({
                   minCreditScore: minScore,
                 })
               }
-              className="min-h-[44px] w-full rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 hover:bg-amber-300"
+              className="min-h-[44px] w-full rounded-lg border border-amber-300/80 bg-amber-400 px-4 text-sm font-black text-slate-950 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98]"
             >
               Banka Politikalarını & Sermayeyi Güncelle
             </button>
           </section>
         ) : (
           /* Create Own Bank Form (Only reachable when netWorth >= 25M) */
-          <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
+          <section className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-4 space-y-3">
             <h3 className="text-sm font-black text-white">Kendi Bankanı Kur (BDDK Lisansı)</h3>
             <p className="text-xs text-slate-300">
               Holdinginizin net değeri ₺25.000.000 eşiğini geçti. Kendi bankanızı kurarak faiz ve
@@ -662,14 +788,14 @@ export function BankingModal({
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
                   placeholder="Örn: Boğaziçi Yatırım Bankası"
-                  className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                  className="mt-1 min-h-[42px] w-full rounded-lg border border-slate-500/70 bg-slate-950 px-3 text-sm text-white"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-300">
                   Genel Müdürlük İli
                 </label>
-                <div className="mt-1 flex min-h-[42px] items-center rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs font-bold text-amber-300">
+                <div className="mt-1 flex min-h-[42px] items-center rounded-lg border border-slate-600 bg-slate-950 px-3 text-xs font-bold text-amber-300">
                   {activeProvince.code} {activeProvince.name}
                 </div>
               </div>
@@ -684,8 +810,8 @@ export function BankingModal({
                     type="button"
                     aria-label={`Renk ${c}`}
                     onClick={() => setBrandColor(c)}
-                    className={`h-8 w-8 rounded-full border-2 ${
-                      brandColor === c ? 'scale-110 border-white' : 'border-transparent'
+                    className={`h-8 w-8 rounded-full border-2 transition-all duration-200 active:scale-95 ${
+                      brandColor === c ? 'scale-110 border-white' : 'border-slate-600'
                     }`}
                     style={{ backgroundColor: c }}
                   />
@@ -704,7 +830,7 @@ export function BankingModal({
                   step={500000}
                   value={poolCapital}
                   onChange={(e) => setPoolCapital(Number(e.target.value))}
-                  className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 font-mono-num text-sm text-white"
+                  className="mt-1 min-h-[42px] w-full rounded-lg border border-slate-500/70 bg-slate-950 px-3 font-mono-num text-sm text-white"
                 />
               </div>
               <div className="space-y-2">
@@ -755,7 +881,7 @@ export function BankingModal({
                   minCreditScore: minScore,
                 })
               }
-              className="min-h-[46px] w-full rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              className="min-h-[46px] w-full rounded-lg border border-amber-300/80 bg-amber-400 px-4 text-sm font-black text-slate-950 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
             >
               Bankayı Kur · Lisans (₺2 Mn) + Havuz ({formatTL(poolCapital, true)})
             </button>

@@ -12,6 +12,22 @@ import { MIN_BUSINESS_DISTANCE_METERS } from '../game/catalog';
 import { calculateVaultCapacity } from '../game/economy';
 import { DEFAULT_PROVINCE_PLATE, TURKEY_BOUNDS, TURKEY_CENTER, getProvinceByPlate } from '../game/provinces81';
 import { getBrandLogoSvgString } from './BrandLogo';
+import { isRealPlayerBusiness, parseOwnerAndHolding } from '../services/cityRoom';
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function truncateLabel(text: string, maxLen = 18): string {
+  const clean = text.trim();
+  if (clean.length <= maxLen) return clean;
+  return `${clean.slice(0, maxLen - 1)}…`;
+}
 
 interface TurkeyMapProps {
   theme: ThemeMode;
@@ -60,6 +76,7 @@ interface MapPinItem {
   level: number;
   type: BusinessTypeId;
   isOwn: boolean;
+  isRealPlayer: boolean;
   readyRing: boolean;
   own?: OwnedBusiness;
   competitor?: RemoteBusinessRecord;
@@ -239,14 +256,9 @@ export function TurkeyMap({
     circleLayer.clearLayers();
     markerLayer.clearLayers();
 
-    // Combine businesses in the active city room (plus own businesses across Turkey when zoomed out)
-    const visibleOwn =
-      zoomLevel <= 9
-        ? ownBusinesses
-        : ownBusinesses.filter((b) => b.cityPlate === activePlate);
-
+    // Combine ALL own businesses and ALL live competitor businesses across Turkey
     const items: MapPinItem[] = [
-      ...visibleOwn.map((biz) => {
+      ...ownBusinesses.map((biz) => {
         const cap = calculateVaultCapacity(biz);
         const ratio = cap > 0 ? biz.pendingCash / cap : 0;
         return {
@@ -256,6 +268,7 @@ export function TurkeyMap({
           level: biz.level,
           type: biz.blueprintId,
           isOwn: true,
+          isRealPlayer: false,
           readyRing: ratio >= 0.35,
           own: biz,
         };
@@ -267,6 +280,7 @@ export function TurkeyMap({
         level: rec.level,
         type: rec.business_type,
         isOwn: false,
+        isRealPlayer: isRealPlayerBusiness(rec),
         readyRing: false,
         competitor: rec,
       })),
@@ -275,13 +289,23 @@ export function TurkeyMap({
     // Draw subtle 75m protection circles when zoomed in enough to read them
     if (zoomLevel >= 13) {
       for (const item of items) {
+        const strokeCol = item.isOwn
+          ? '#059669'
+          : item.isRealPlayer
+          ? '#06B6D4'
+          : '#DC2626';
+        const fillCol = item.isOwn
+          ? '#10B981'
+          : item.isRealPlayer
+          ? '#22D3EE'
+          : '#EF4444';
         L.circle([item.lat, item.lng], {
           radius: MIN_BUSINESS_DISTANCE_METERS,
-          color: item.isOwn ? '#059669' : '#DC2626',
-          weight: 1,
-          opacity: 0.45,
-          fillColor: item.isOwn ? '#10B981' : '#EF4444',
-          fillOpacity: 0.1,
+          color: strokeCol,
+          weight: item.isRealPlayer ? 1.5 : 1,
+          opacity: 0.5,
+          fillColor: fillCol,
+          fillOpacity: 0.11,
           interactive: false,
         }).addTo(circleLayer);
       }
@@ -305,8 +329,17 @@ export function TurkeyMap({
           const avgLat = group.reduce((s, i) => s + i.lat, 0) / group.length;
           const avgLng = group.reduce((s, i) => s + i.lng, 0) / group.length;
           const ownCount = group.filter((g) => g.isOwn).length;
-          const borderCol = ownCount > 0 ? '#10B981' : '#EF4444';
-          const bgCol = ownCount === group.length ? '#065F46' : ownCount > 0 ? '#0F172A' : '#991B1B';
+          const realCount = group.filter((g) => g.isRealPlayer).length;
+          const borderCol =
+            realCount > 0 ? '#22D3EE' : ownCount > 0 ? '#10B981' : '#EF4444';
+          const bgCol =
+            ownCount === group.length
+              ? '#065F46'
+              : realCount > 0
+              ? 'linear-gradient(135deg,#BE123C,#0E7490)'
+              : ownCount > 0
+              ? '#0F172A'
+              : '#991B1B';
 
           const clusterIcon = L.divIcon({
             className: 'business-cluster-badge',
@@ -354,29 +387,78 @@ export function TurkeyMap({
         ? '3px solid #FEF08A'
         : item.isOwn
         ? '2.5px solid #ECFDF5'
+        : item.isRealPlayer
+        ? '2.5px solid #22D3EE'
         : '2.5px solid #FCA5A5';
+
+      const parsedOwner =
+        !item.isOwn && item.competitor
+          ? parseOwnerAndHolding(item.competitor.owner_name)
+          : null;
 
       const innerContent =
         !item.isOwn && item.competitor
-          ? getBrandLogoSvgString(item.competitor.owner_name, markerSize - 6)
+          ? getBrandLogoSvgString(parsedOwner?.holdingName || item.competitor.owner_name, markerSize - 8)
           : `<span>${glyph}</span>`;
 
-      // Own = Gold / Emerald, Rival = Corporate Vector Emblem on Crimson-Slate Frame
+      // Own = Gold / Emerald | Real Player = Crimson / Turquoise | AI Holding = Deep Crimson / Slate
       const bgStyle = item.isOwn
         ? 'linear-gradient(135deg,#D97706,#059669)'
+        : item.isRealPlayer
+        ? 'linear-gradient(135deg,#E11D48,#06B6D4)'
         : 'linear-gradient(135deg,#7F1D1D,#0F172A)';
 
+      const badgeBg = item.isOwn ? '#064E3B' : item.isRealPlayer ? '#0E7490' : '#991B1B';
+      const glowShadow = item.isRealPlayer
+        ? '0 0 0 3px rgba(34,211,238,0.28), 0 6px 18px rgba(15,23,42,0.55)'
+        : `0 6px 18px rgba(15,23,42,${isSelected ? '0.52' : '0.4'})`;
+
+      const ownerTagHtml =
+        !item.isOwn && parsedOwner
+          ? `<div style="
+              margin-top:4px;
+              max-width:124px;
+              padding:1.5px 6px;
+              border-radius:9999px;
+              background:${item.isRealPlayer ? 'rgba(8,47,73,0.94)' : 'rgba(15,23,42,0.9)'};
+              border:1px solid ${item.isRealPlayer ? 'rgba(34,211,238,0.85)' : 'rgba(248,113,113,0.6)'};
+              color:${item.isRealPlayer ? '#ECFEFF' : '#FEE2E2'};
+              font-size:9px;
+              font-weight:800;
+              line-height:1.2;
+              white-space:nowrap;
+              overflow:hidden;
+              text-overflow:ellipsis;
+              box-shadow:0 2px 6px rgba(0,0,0,0.45);
+              pointer-events:none;
+            ">${item.isRealPlayer ? '● ' : ''}${escapeHtml(
+              truncateLabel(parsedOwner.holdingName || parsedOwner.playerName, 16)
+            )}</div>`
+          : '';
+
+      const pinTitle = item.isOwn
+        ? `${item.own?.customName ?? 'Şubem'} (S${item.level})`
+        : `${item.competitor?.business_name ?? 'Rakip'} · ${parsedOwner?.playerName ?? ''} (${parsedOwner?.holdingName ?? ''})`;
+
       const icon = L.divIcon({
-        className: item.isOwn ? 'own-business-marker' : 'rival-business-marker',
+        className: item.isOwn
+          ? 'own-business-marker'
+          : item.isRealPlayer
+          ? 'real-player-business-marker'
+          : 'rival-business-marker',
         html: `
-          <div style="position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;">
+          <div
+            data-player-type="${item.isOwn ? 'own' : item.isRealPlayer ? 'real' : 'ai'}"
+            data-business-id="${escapeHtml(item.id)}"
+            style="position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;"
+          >
             <div style="
               width:${markerSize}px;
               height:${markerSize}px;
               border-radius:12px;
               background:${bgStyle};
               border:${borderStyle};
-              box-shadow:0 6px 18px rgba(15,23,42,${isSelected ? '0.52' : '0.4'});
+              box-shadow:${glowShadow};
               display:flex;align-items:center;justify-content:center;
               font-size:${isSelected ? '18px' : '16px'};
               position:relative;
@@ -385,18 +467,21 @@ export function TurkeyMap({
               ${innerContent}
               <span style="
                 position:absolute;bottom:-6px;right:-6px;
-                background:${item.isOwn ? '#064E3B' : '#991B1B'};color:#FEF08A;
+                background:${badgeBg};color:#FEF08A;
                 font-size:9px;font-weight:800;
                 padding:1px 4px;border-radius:5px;
-                border:1px solid rgba(255,255,255,0.8);
+                border:1px solid rgba(255,255,255,0.85);
                 line-height:1.1;
               ">S${item.level}</span>
               ${
                 item.readyRing
                   ? `<span style="position:absolute;top:-5px;left:-5px;width:11px;height:11px;border-radius:9999px;background:#10B981;border:2px solid #FFFFFF;"></span>`
+                  : item.isRealPlayer
+                  ? `<span style="position:absolute;top:-5px;left:-5px;width:11px;height:11px;border-radius:9999px;background:#22D3EE;border:2px solid #082F49;box-shadow:0 0 8px #22D3EE;"></span>`
                   : ''
               }
             </div>
+            ${ownerTagHtml}
           </div>
         `,
         iconSize: [44, 44],
@@ -405,7 +490,9 @@ export function TurkeyMap({
 
       const marker = L.marker([item.lat, item.lng], {
         icon,
-        zIndexOffset: isSelected ? 800 : item.isOwn ? 560 : 480,
+        title: pinTitle,
+        alt: pinTitle,
+        zIndexOffset: isSelected ? 820 : item.isRealPlayer ? 620 : item.isOwn ? 560 : 480,
       });
 
       marker.on('click', (e) => {

@@ -7,6 +7,7 @@ import {
   STARTING_CREDIT_SCORE,
 } from './catalog.ts';
 import {
+  GAME_MINUTES_PER_REAL_SEC,
   STARTING_GAME_MINUTES,
   calculateBusinessCapacity,
   calculateBusinessIncomePerSec,
@@ -18,6 +19,7 @@ import {
   createInitialEmpireState,
   formatGameClock,
   getCompanyTier,
+  getEffectiveSimSeconds,
   hasAvmSynergyForBusiness,
   hasFactorySupplySynergy,
   hasParkingSynergyForBusiness,
@@ -45,7 +47,17 @@ import {
   hireCandidateFromPool,
   resolveBusinessAutomation,
 } from './hrEngine.ts';
-import { generateSeedCityRivals } from '../services/cityRoom.ts';
+import {
+  applyRealtimeBusinessDelete,
+  applyRealtimeBusinessPatch,
+  applyRealtimeBusinessUpsert,
+  formatOwnerDisplayName,
+  generateSeedCityRivals,
+  isRealPlayerBusiness,
+  mergeWorldAndSeedRivals,
+  ownedToRemoteRecord,
+  parseOwnerAndHolding,
+} from '../services/cityRoom.ts';
 import {
   SEED_FRANCHISE_BRANDS,
   createFranchiseBrand,
@@ -66,9 +78,20 @@ import {
   createPlayerBank,
   enforceOverdueLoans,
   getCreditTier,
+  payMonthlyLoanInstallment,
   repayLoan,
   takeLoanFromBank,
 } from './bankingEngine.ts';
+import {
+  HOLDING_MIN_LEVEL,
+  HOLDING_MIN_NET_WORTH,
+  createMonthlyTaxObligation,
+  getProgressiveTaxRates,
+  hireAccountant,
+  hireCeo,
+  payPendingTaxBill,
+  toggleCeoAutonomousGrowth,
+} from './corporateEngine.ts';
 import {
   approveFranchiseApplication,
   buildNationalRivalDirectory,
@@ -477,16 +500,17 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.2.8');
-  assert.equal(compareSemver('1.2.7', '1.2.8'), 1);
-  assert.equal(compareSemver('1.2.8', '1.2.8'), 0);
+  assert.equal(APP_VERSION, '1.3.1');
+  assert.equal(compareSemver('1.3.0', '1.3.1'), 1);
+  assert.equal(compareSemver('1.3.1', '1.3.1'), 0);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
 
-test('v1.2.6 Time & Calendar controls: pause freezes clock/income, 1x/4x scale accurately, formatGameClock shows Gün/Ay/HH:MM', () => {
+test('v1.3.0 Accelerated Time & Calendar controls: pause freezes clock/income, 1x/2x/4x scale accurately, formatGameClock shows Gün/Ay/HH:MM', () => {
   const now = 300_000;
   let state = createInitialEmpireState(now);
   assert.equal(state.gameMinutes, STARTING_GAME_MINUTES);
+  assert.equal(GAME_MINUTES_PER_REAL_SEC, 36);
   const startClock = formatGameClock(STARTING_GAME_MINUTES);
   assert.equal(startClock.label, 'Gün 1 • 1. Ay • 09:00');
   assert.equal(startClock.totalDaysLabel, 'Toplam 1. Gün');
@@ -504,17 +528,25 @@ test('v1.2.6 Time & Calendar controls: pause freezes clock/income, 1x/4x scale a
   assert.equal(pausedTick.daysPassed, 0);
   assert.equal(pausedTick.dayEndSummary, null);
 
-  // 1x tick (1 sec = +10 game minutes) vs 4x tick (4 sec = +40 game minutes)
-  const tick1x = tickEconomy(state, 1, now + 1000);
-  assert.equal(tick1x.state.gameMinutes, STARTING_GAME_MINUTES + 10);
-  const tick4x = tickEconomy(state, 4, now + 4000);
-  assert.equal(tick4x.state.gameMinutes, STARTING_GAME_MINUTES + 40);
-  assert.ok(tick4x.state.businesses[0].pendingCash > tick1x.state.businesses[0].pendingCash * 3.5);
+  // 1x = 36 min/real-sec (~1.67s/hr, 40s/day), 2x = ~0.80s/hr, 4x = ~0.35s/hr
+  const dt1x = getEffectiveSimSeconds(1, 1);
+  const dt2x = getEffectiveSimSeconds(1, 2);
+  const dt4x = getEffectiveSimSeconds(1, 4);
+  assert.equal(dt1x, 1);
+  assert.ok(dt2x > 2.0 && dt2x < 2.2, '2x should advance ~1 in-game hour every 0.80s');
+  assert.ok(dt4x > 4.6 && dt4x < 4.9, '4x should advance ~1 in-game hour every 0.35s');
 
-  // 6 seconds at 1x = 60 game minutes -> 1 full in-game hour (Gün 1 • 1. Ay • 10:00)
-  const tickHour = tickEconomy(state, 6, now + 6000);
-  assert.equal(tickHour.hoursPassed, 1);
-  assert.equal(formatGameClock(tickHour.state.gameMinutes).label, 'Gün 1 • 1. Ay • 10:00');
+  const tick1x = tickEconomy(state, dt1x, now + 1000);
+  assert.equal(tick1x.state.gameMinutes, STARTING_GAME_MINUTES + 36);
+  const tick4x = tickEconomy(state, dt4x, now + 1000);
+  assert.ok(tick4x.state.gameMinutes >= STARTING_GAME_MINUTES + 170);
+  assert.ok(tick4x.state.businesses[0].pendingCash > tick1x.state.businesses[0].pendingCash * 4.2);
+
+  // 40 seconds at 1x = 1440 game minutes = 1 full 24-hour in-game day!
+  const tickFullDay = tickEconomy(state, 40, now + 40_000);
+  assert.equal(tickFullDay.daysPassed, 1);
+  assert.equal(tickFullDay.hoursPassed, 24);
+  assert.equal(formatGameClock(tickFullDay.state.gameMinutes).label, 'Gün 2 • 1. Ay • 09:00');
 });
 
 test('v1.2.6 Auto-Collect Revenue: Şube Müdürü, Bölge Sorumlusu & Genel Müdür all auto-collect hourly, Müdür Yrd. does NOT', () => {
@@ -562,10 +594,10 @@ test('v1.2.6 Auto-Collect Revenue: Şube Müdürü, Bölge Sorumlusu & Genel Mü
   const hiredRm = hireCandidateFromPool(hiredAm.state, rm.id, null, 34, now + 40);
   assert.equal(hiredRm.ok, true);
 
-  // Tick 6 seconds (= 1 full in-game hour): Istanbul (Bölge Sorumlusu) AND Ankara (Şube Müdürü)
+  // Tick 2 seconds (= 72 game min -> 1 full in-game hour): Istanbul (Bölge Sorumlusu) AND Ankara (Şube Müdürü)
   // both auto-transfer cash into state.cash, while İzmir (Müdür Yrd. only) stays in pendingCash!
   const cashBefore = hiredRm.state.cash;
-  const hourTick = tickEconomy(hiredRm.state, 6, now + 6040);
+  const hourTick = tickEconomy(hiredRm.state, 2, now + 2040);
   assert.equal(hourTick.hoursPassed, 1);
   assert.ok(hourTick.autoCollectedHourlyAmount > 0);
   assert.ok(hourTick.state.cash > cashBefore);
@@ -865,13 +897,13 @@ test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supp
 
   // Clone into a 2nd branch in Ankara (cross-province chain!)
   const draft = prepareChainCloneDraft(first.business!, state.businesses);
-  assert.equal(draft.chainBrandName, 'Boğaz Kahve');
+  assert.equal(draft.brandName, 'Boğaz Kahve');
   assert.equal(draft.nextBranchNumber, 2);
   assert.equal(draft.suggestedName, 'Boğaz Kahve - 2. Şube');
 
   const cloned = purchaseBusiness(
     state,
-    draft.blueprintId,
+    draft.businessType,
     landPin(39.9208, 32.8541, 6),
     draft.suggestedName,
     owner,
@@ -879,7 +911,7 @@ test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supp
     now + 50,
     null,
     {
-      chainBrandName: draft.chainBrandName,
+      chainBrandName: draft.brandName,
       chainBranchNumber: draft.nextBranchNumber,
       sourceBusinessId: draft.sourceBusinessId,
     }
@@ -896,8 +928,9 @@ test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supp
   assert.equal(chainStatus1.supplyDiscount, 0.12);
   assert.equal(chainStatus1.revenueBonus, 0.1);
 
+  const originalAfterChain = state.businesses.find((b) => b.id === first.business!.id)!;
   const chainIncome = calculateBusinessIncomePerSec(
-    state.businesses[0],
+    originalAfterChain,
     null,
     now + 50,
     state.businesses,
@@ -950,13 +983,13 @@ test('v1.2.8 3-Tier Ad Campaigns boost income/capacity & Genel Müdür Auto-Ads 
   assert.equal(toggled.ok, true);
   assert.equal(toggled.state.cityManagers[0].autoAdsEnabled, true);
 
-  // Tick 1 in-game hour (6s at 1x) -> GM analyzes branch 2 (which has no active ad) and launches campaign automatically!
-  const tickRes = tickEconomy(toggled.state, 6, now + 6040);
+  // Tick 2s (>1 in-game hour) -> GM analyzes branch 1 (which has no active ad) and launches campaign automatically!
+  const tickRes = tickEconomy(toggled.state, 2, now + 2040);
   assert.ok(tickRes.autoRenewedAdsCount >= 1, 'Genel Müdür should automatically launch ad campaign for unadvertised city branch');
   assert.ok(tickRes.autoAdsSpent > 0);
-  const branch2After = tickRes.state.businesses.find((b) => b.id === b2.business!.id)!;
-  assert.ok(branch2After.activeAdCampaign, 'Branch 2 should now have an active GM-managed ad campaign');
-  assert.equal(branch2After.activeAdCampaign?.autoManaged, true);
+  const unadvertisedAfter = tickRes.state.businesses.find((b) => b.id === b1.business!.id)!;
+  assert.ok(unadvertisedAfter.activeAdCampaign, 'Unadvertised branch should now have an active GM-managed ad campaign');
+  assert.equal(unadvertisedAfter.activeAdCampaign?.autoRenewedByGm, true);
 });
 
 test('v1.2.8 Bidirectional Franchise Marketplace (Owned Branch -> Franchise -> AI Entrepreneur Applications & Royalties)', () => {
@@ -999,7 +1032,7 @@ test('v1.2.8 Bidirectional Franchise Marketplace (Owned Branch -> Franchise -> A
     4,
     now + 40
   );
-  assert.ok(autoProc.newOpenings.length >= 1);
+  assert.ok(autoProc.autoApprovedApps.length >= 1);
   assert.ok(autoProc.state.ownFranchises[0].branchCount >= 2);
 });
 
@@ -1014,7 +1047,13 @@ test('v1.2.8 Rivals Strategy Center: National Directory, Dynamic 120%-150% Takeo
   state = ownBiz.state;
 
   const cityRivals = generateSeedCityRivals(34);
-  const directory = buildNationalRivalDirectory(state, 34, cityRivals, SEED_FRANCHISE_BRANDS, owner.id);
+  const directory = buildNationalRivalDirectory(
+    34,
+    cityRivals,
+    state.acquiredRivalIds ?? [],
+    SEED_FRANCHISE_BRANDS,
+    owner.id
+  );
   assert.ok(directory.length >= 3, 'Directory must include city & national AI rival holdings');
 
   const targetEntry = directory.find((d) => d.record.city_plate === 34)!;
@@ -1054,12 +1093,275 @@ test('v1.2.8 Rivals Strategy Center: National Directory, Dynamic 120%-150% Takeo
   assert.equal(takeover.ok, true);
   assert.ok(takeover.state.acquiredRivalIds?.includes(targetEntry.record.id));
   const dirAfter = buildNationalRivalDirectory(
-    takeover.state,
     34,
     cityRivals,
+    takeover.state.acquiredRivalIds ?? [],
     SEED_FRANCHISE_BRANDS,
     owner.id
   );
   assert.ok(!dirAfter.some((d) => d.record.id === targetEntry.record.id));
 });
+
+test('v1.3.0 Monthly 30-Day Credit Installments, Timely +40 Score Boost, Default Interest, 15d Legal Warning & 30d Foreclosure', () => {
+  const now = 1_300_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 1_500_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  const biz = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Teminat Restoran', owner, [], now);
+  assert.equal(biz.ok, true);
+  state = biz.state;
+
+  const bank = DEFAULT_SYSTEM_BANKS[0];
+  const loanRes = takeLoanFromBank(state, bank, 100_000, biz.business!, 400_000, owner, 180, now, 6);
+  assert.equal(loanRes.ok, true);
+  assert.ok(loanRes.loan);
+  assert.equal(loanRes.loan.termMonths, 6);
+  assert.equal(loanRes.loan.nextDueGameDay, 31); // Day 1 + 30
+  assert.ok((loanRes.loan.monthlyInstallment ?? 0) > 15_000);
+
+  // Timely installment payment boosts credit score by +40 and advances nextDueGameDay by +30
+  const scoreBefore = loanRes.state.creditScore;
+  const paid1 = payMonthlyLoanInstallment(loanRes.state, loanRes.loan.id, now + 100);
+  assert.equal(paid1.ok, true);
+  assert.equal(paid1.creditScoreDelta, 40);
+  assert.equal(paid1.state.creditScore, scoreBefore + 40);
+  assert.equal(paid1.loan?.nextDueGameDay, 61);
+
+  // Simulate missing the next installment (advance to Day 62 -> 1 day overdue): sharp -110 score drop + default interest!
+  const overdueState1 = {
+    ...paid1.state,
+    cash: 0, // player broke so foreclosure will seize business later
+    gameMinutes: 61 * 1440 + 60, // Day 62
+  };
+  const enf1 = enforceOverdueLoans(overdueState1, 0, now + 1000, 1);
+  assert.ok(enf1.state.creditScore < paid1.state.creditScore - 90, 'Missed installment must sharply drop credit score');
+  assert.ok(enf1.defaultInterestAdded > 0, 'Overdue loan must accrue daily default interest');
+  assert.equal(enf1.legalWarnings.length, 0);
+
+  // Advance to 15 days overdue -> Legal Tracking Warning triggered!
+  const overdueState15 = {
+    ...enf1.state,
+    gameMinutes: (61 + 15) * 1440 + 60, // Day 77
+  };
+  const enf15 = enforceOverdueLoans(overdueState15, 0, now + 2000, 14);
+  assert.equal(enf15.legalWarnings.length, 1, '15+ overdue days must emit Yasal Takip Uyarısı');
+  assert.equal(enf15.seizedLoans.length, 0);
+
+  // Advance to 30 days overdue with 0 cash -> Collateral business foreclosed!
+  const overdueState30 = {
+    ...enf15.state,
+    gameMinutes: (61 + 30) * 1440 + 60, // Day 92
+  };
+  const enf30 = enforceOverdueLoans(overdueState30, 0, now + 3000, 15);
+  assert.equal(enf30.seizedLoans.length, 1, '30+ overdue days without cash must foreclose collateral business');
+  assert.equal(enf30.state.businesses.length, 0);
+});
+
+test('v1.3.0 Level-1 Muhasebe Departmanı auto-pays due monthly loan installments & tax bills before overdue', () => {
+  const now = 1_400_000;
+  let state = createInitialEmpireState(now, 34); // Level 1 starter with 250k cash!
+  const owner = { id: 'p1', name: 'Patron' };
+
+  // Hire 1-star Muhasebeci right at Level 1 (no Holding lock!)
+  assert.ok((state.accountantPool?.length ?? 0) >= 5);
+  const starterAcc = state.accountantPool!.find((a) => a.stars === 1)!;
+  assert.ok(starterAcc.hireCost <= 15_000, 'Level-1 starter accountant must be affordable');
+  const hiredAcc = hireAccountant(state, starterAcc.id, now);
+  assert.equal(hiredAcc.ok, true);
+  assert.equal(hiredAcc.state.accountant?.id, starterAcc.id);
+
+  // Add a business, a loan due on Day 31, and a pending tax bill due on Day 32
+  state = { ...hiredAcc.state, cash: 1_000_000 };
+  const biz = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Muhasebeli Kafe', owner, [], now);
+  const loanRes = takeLoanFromBank(biz.state, DEFAULT_SYSTEM_BANKS[0], 50_000, biz.business!, 150_000, owner, 180, now, 3);
+  assert.equal(loanRes.ok, true);
+
+  const rawBill = createMonthlyTaxObligation(
+    1,
+    30,
+    { kdv: 200, sgkStopaj: 100, corporateTax: 150, municipalTax: 50, totalTax: 500 },
+    now
+  )!;
+  assert.ok(rawBill);
+  const taxBill = { ...rawBill, dueGameDay: 31 };
+
+  // Set clock right before Day 31 -> tick crosses into Day 31 -> Muhasebeci auto-pays BOTH loan installment & tax bill!
+  const preDueState = {
+    ...loanRes.state,
+    pendingTaxes: [taxBill],
+    gameMinutes: 30 * 1440 - 10, // Day 30 23:50
+  };
+  const tickRes = tickEconomy(preDueState, 1, now + 1000);
+  assert.equal(tickRes.accountantAutoPay.autoPaidLoanCount, 1, 'Muhasebeci must auto-pay due monthly loan installment');
+  assert.equal(tickRes.accountantAutoPay.autoPaidTaxCount, 1, 'Muhasebeci must auto-pay pending tax bill');
+  assert.equal(tickRes.loanEnforcement.seizedLoans.length, 0);
+  assert.equal(tickRes.state.activeLoans[0].overdueDays, 0);
+  assert.equal(tickRes.state.pendingTaxes?.find((t) => t.id === taxBill.id)?.status, 'paid');
+});
+
+test('v1.3.0 Holding Board & Autonomous CEO: locked below Holding stage, unlocked at Sv.5/₺5.5M & protects 40% cash floor', () => {
+  const now = 1_500_000;
+  let state = createInitialEmpireState(now, 34);
+  const ceoCand = state.ceoPool![0];
+
+  // Blocked at Level 1
+  const blocked = hireCeo(state, ceoCand.id, 1, 250_000, now);
+  assert.equal(blocked.ok, false);
+
+  // Unlocked at Holding stage (Sv.5 / >= ₺5.5M)
+  state = { ...state, cash: 8_000_000 };
+  const owner = { id: 'p1', name: 'Kurucu Başkan' };
+  const b1 = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Holding Restoran', owner, [], now);
+  state = b1.state;
+
+  const hired = hireCeo(state, ceoCand.id, HOLDING_MIN_LEVEL, HOLDING_MIN_NET_WORTH, now + 10);
+  assert.equal(hired.ok, true);
+  assert.equal(hired.state.ceo?.id, ceoCand.id);
+
+  const toggled = toggleCeoAutonomousGrowth(hired.state, true, now + 20);
+  assert.equal(toggled.ok, true);
+  assert.equal(toggled.state.ceo?.autonomousGrowthEnabled, true);
+
+  // Advance across Day 4 boundary (3-day CEO cadence) -> CEO executes autonomous growth while keeping >= 40% cash floor!
+  const cashBefore = toggled.state.cash;
+  const preDayState = { ...toggled.state, gameMinutes: 3 * 1440 - 10 };
+  const tickRes = tickEconomy(preDayState, 1, now + 1000, undefined, [], {
+    owner,
+    rivalRecords: generateSeedCityRivals(34),
+  });
+  assert.ok(tickRes.ceoActionsLog.length >= 1, 'Autonomous CEO should log growth/management actions');
+  assert.ok(
+    tickRes.state.cash >= cashBefore * 0.4 - 50_000,
+    'Autonomous CEO must strictly preserve the 40% cash reserve floor'
+  );
+});
+
+test('v1.3.0 Realistic Progressive Tax Curve (KDV, SGK, Kurumlar, Belediye) scales fairly from Genç Girişimci to Holding', () => {
+  const now = 1_600_000;
+  const starterRates = getProgressiveTaxRates(1, 250_000);
+  const holdingRates = getProgressiveTaxRates(12, 15_000_000);
+  assert.equal(starterRates.stageIndex, 0);
+  assert.equal(holdingRates.stageIndex, 3);
+  assert.ok(starterRates.kdvRate < holdingRates.kdvRate);
+  assert.ok(starterRates.corporateRate < holdingRates.corporateRate);
+  assert.ok(starterRates.sgkRate < holdingRates.sgkRate);
+
+  let state = createInitialEmpireState(now, 34);
+  const owner = { id: 'p1', name: 'Patron' };
+  const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Vergi Kafe', owner, [], now);
+  state = b1.state;
+
+  const report = calculateAccountingReport(state, [], now);
+  assert.equal(report.taxRates.stageIndex, 0);
+  assert.ok(report.hourlyKdvTax > 0);
+  assert.ok(report.hourlyMunicipalTax > 0);
+  assert.equal(
+    report.hourlyTotalTaxes,
+    report.hourlyKdvTax + report.hourlySgkTax + report.hourlyCorporateTax + report.hourlyMunicipalTax
+  );
+
+  // Manual tax payment works and grants +10 credit score when paid on time
+  const bill = createMonthlyTaxObligation(
+    1,
+    30,
+    { kdv: 100, sgkStopaj: 50, corporateTax: 100, municipalTax: 50, totalTax: 300 },
+    now
+  )!;
+  const withBill = { ...state, pendingTaxes: [bill] };
+  const paid = payPendingTaxBill(withBill, bill.id, now + 50);
+  assert.equal(paid.ok, true);
+  assert.equal(paid.state.cash, state.cash - bill.amount);
+  assert.equal(paid.state.creditScore, state.creditScore + 10);
+});
+
+test('v1.3.1 Multiplayer Shared Map Sync: nationwide real-player merge, idempotent Realtime INSERT/UPDATE/DELETE, and owner+holding formatting', () => {
+  const now = 1_700_000;
+  let state = createInitialEmpireState(now, 34);
+  const playerA = { id: 'player-a-uuid', name: 'Ahmet Yılmaz' };
+  const built = purchaseBusiness(
+    state,
+    'kafe',
+    landPin(41.0422, 29.0067, 34),
+    'Boğaz Kahve',
+    playerA,
+    [],
+    now
+  );
+  assert.equal(built.ok, true);
+  assert.ok(built.business);
+
+  const remoteA = ownedToRemoteRecord(built.business!, 6_500, 125_000, 'Yılmaz Holding A.Ş.');
+  assert.equal(remoteA.owner_id, 'player-a-uuid');
+  assert.equal(remoteA.owner_name, 'Ahmet Yılmaz · Yılmaz Holding A.Ş.');
+  assert.equal(remoteA.business_name, 'Boğaz Kahve');
+  assert.equal(remoteA.business_type, 'kafe');
+  assert.equal(remoteA.hourly_income, 6_500);
+  assert.equal(isRealPlayerBusiness(remoteA), true);
+
+  const parsed = parseOwnerAndHolding(remoteA.owner_name);
+  assert.equal(parsed.playerName, 'Ahmet Yılmaz');
+  assert.equal(parsed.holdingName, 'Yılmaz Holding A.Ş.');
+  assert.equal(formatOwnerDisplayName('Selin Kaya', 'Kaya Yatırım'), 'Selin Kaya · Kaya Yatırım');
+
+  // Seed AI rivals must be distinguished from real players
+  const seedIst = generateSeedCityRivals(34);
+  assert.equal(isRealPlayerBusiness(seedIst[0]), false);
+
+  // Realtime INSERT / duplicate INSERT (idempotency) / UPDATE / PATCH / DELETE
+  const remoteB: RemoteBusinessRecord = {
+    id: 'biz-player-b-06',
+    owner_id: 'player-b-uuid',
+    owner_name: 'Deniz Demir · Başkent Holding',
+    city_plate: 6,
+    city_name: 'Ankara',
+    district: 'Çankaya',
+    business_name: 'Çankaya Teknoloji Plaza',
+    business_type: 'avm',
+    lat: 39.9208,
+    lng: 32.8541,
+    level: 2,
+    hourly_income: 88_000,
+    valuation: 2_400_000,
+    created_at: new Date(now).toISOString(),
+  };
+
+  let world: RemoteBusinessRecord[] = [];
+  world = applyRealtimeBusinessUpsert(world, remoteA);
+  world = applyRealtimeBusinessUpsert(world, remoteA); // duplicate INSERT must not duplicate!
+  assert.equal(world.length, 1);
+
+  world = applyRealtimeBusinessUpsert(world, remoteB);
+  assert.equal(world.length, 2);
+
+  // UPDATE level & valuation
+  world = applyRealtimeBusinessPatch(world, remoteB.id, { level: 3, valuation: 3_100_000 });
+  assert.equal(world.find((r) => r.id === remoteB.id)?.level, 3);
+  assert.equal(world.find((r) => r.id === remoteB.id)?.valuation, 3_100_000);
+
+  // Player A sees Player B (even in another city!) + Istanbul seed rivals, but NOT own business
+  const visibleToPlayerA = mergeWorldAndSeedRivals(
+    world,
+    seedIst,
+    playerA.id,
+    new Set([built.business!.id]),
+    new Set()
+  );
+  assert.equal(visibleToPlayerA.some((r) => r.id === remoteA.id), false);
+  assert.equal(visibleToPlayerA.some((r) => r.id === remoteB.id), true);
+  assert.ok(visibleToPlayerA.some((r) => !isRealPlayerBusiness(r)));
+
+  // Rivals Strategy Center places real live players at the top
+  const directory = buildNationalRivalDirectory(34, visibleToPlayerA, [], [], playerA.id);
+  assert.equal(directory[0].record.id, remoteB.id);
+  assert.equal(directory[0].isAiHolding, false);
+
+  // DELETE removes cleanly and deleting an unknown id is a safe no-op
+  world = applyRealtimeBusinessDelete(world, remoteB.id);
+  assert.equal(world.some((r) => r.id === remoteB.id), false);
+  const unchanged = applyRealtimeBusinessDelete(world, 'non-existent-id');
+  assert.equal(unchanged.length, world.length);
+});
+
+
 

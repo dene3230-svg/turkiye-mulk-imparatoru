@@ -87,7 +87,7 @@ export const MobileGameModal: React.FC<MobileGameModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Pencereyi kapat"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700/90 bg-slate-800/90 text-slate-100 transition hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-rose-200 active:scale-95"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-500/60 bg-slate-800/90 text-slate-100 transition-all duration-200 ease-out hover:border-rose-400/75 hover:bg-rose-500/20 hover:text-rose-200 active:scale-[0.98]"
             >
               <X className="h-5 w-5" />
             </button>
@@ -110,12 +110,12 @@ export const MobileGameModal: React.FC<MobileGameModalProps> = ({
                     disabled={tab.disabled}
                     title={tab.disabled ? tab.disabledHint : undefined}
                     onClick={() => !tab.disabled && onSelectTab?.(tab.id)}
-                    className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition whitespace-nowrap ${
+                    className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] whitespace-nowrap ${
                       tab.disabled
-                        ? 'cursor-not-allowed border border-slate-800 bg-slate-900/60 text-slate-500 opacity-65'
+                        ? 'cursor-not-allowed border-slate-700/80 bg-slate-900/60 text-slate-500 opacity-65'
                         : isActive
-                        ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/20'
-                        : 'border border-slate-700/70 bg-slate-800/80 text-slate-200 hover:bg-slate-700/80 hover:text-white'
+                        ? 'border-amber-300/85 bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                        : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700/85 hover:text-white'
                     }`}
                   >
                     {tab.icon}

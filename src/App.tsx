@@ -63,6 +63,7 @@ import {
   formatGameClock,
   formatTL,
   getCompanyTier,
+  getEffectiveSimSeconds,
   getMissionProgress,
   hireStaff,
   purchaseBusiness,
@@ -81,6 +82,16 @@ import {
   resolveBusinessAutomation,
   restockAndMaintainBusiness,
 } from './game/hrEngine';
+import {
+  dismissAccountant,
+  dismissCeo,
+  generateAccountantPool,
+  generateCeoPool,
+  hireAccountant,
+  hireCeo,
+  payPendingTaxBill,
+  toggleCeoAutonomousGrowth,
+} from './game/corporateEngine';
 import {
   SEED_FRANCHISE_BRANDS,
   createFranchiseBrand,
@@ -105,6 +116,7 @@ import {
 import {
   DEFAULT_SYSTEM_BANKS,
   createPlayerBank,
+  payMonthlyLoanInstallment,
   repayLoan,
   takeLoanFromBank,
   updateOwnBankSettings,
@@ -125,12 +137,19 @@ import {
   supabase,
 } from './lib/supabase';
 import {
-  fetchCityBusinesses,
+  applyRealtimeBusinessDelete,
+  applyRealtimeBusinessPatch,
+  applyRealtimeBusinessUpsert,
+  fetchAllWorldBusinesses,
+  formatOwnerDisplayName,
   generateSeedCityRivals,
+  isRealPlayerBusiness,
+  mergeWorldAndSeedRivals,
   ownedToRemoteRecord,
   publishBusinessToRoom,
   removeBusinessFromRoom,
-  subscribeToCityRoom,
+  subscribeToGlobalBusinesses,
+  syncPlayerBusinessesToWorld,
   updateBusinessInRoom,
   type RoomSyncStatus,
 } from './services/cityRoom';
@@ -290,6 +309,20 @@ function migrateSavedEmpire(
     creditScore: typeof saved.creditScore === 'number' ? saved.creditScore : STARTING_CREDIT_SCORE,
     ownBank: saved.ownBank ?? null,
     activeLoans: Array.isArray(saved.activeLoans) ? saved.activeLoans : [],
+    accountant: saved.accountant ?? null,
+    accountantPool:
+      Array.isArray(saved.accountantPool) && saved.accountantPool.length > 0
+        ? saved.accountantPool
+        : generateAccountantPool(Date.now()),
+    ceo: saved.ceo ?? null,
+    ceoPool:
+      Array.isArray(saved.ceoPool) && saved.ceoPool.length > 0
+        ? saved.ceoPool
+        : generateCeoPool(Date.now()),
+    pendingTaxes: Array.isArray(saved.pendingTaxes) ? saved.pendingTaxes : [],
+    totalTaxesPaid: typeof saved.totalTaxesPaid === 'number' ? saved.totalTaxesPaid : 0,
+    lastCeoActionGameDay:
+      typeof saved.lastCeoActionGameDay === 'number' ? saved.lastCeoActionGameDay : 0,
     companyXp: typeof saved.companyXp === 'number' ? saved.companyXp : 0,
     gameMinutes:
       typeof saved.gameMinutes === 'number' ? saved.gameMinutes : STARTING_GAME_MINUTES,
@@ -381,6 +414,7 @@ export default function App() {
   const [interiorBusinessId, setInteriorBusinessId] = useState<string | null>(null);
   const [hrModalOpen, setHrModalOpen] = useState(false);
   const [hrTargetBusinessId, setHrTargetBusinessId] = useState<string | null>(null);
+  const [hrInitialSubView, setHrInitialSubView] = useState<'branches' | 'hq'>('branches');
   const [holdingModalOpen, setHoldingModalOpen] = useState(false);
   const [rivalsModalOpen, setRivalsModalOpen] = useState(false);
   const [chainCloneDraft, setChainCloneDraft] = useState<ChainCloneDraft | null>(null);
@@ -405,9 +439,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v128',
-      title: 'Türkiye Mülk İmparatoru v1.2.8',
-      body: 'Şube çoğaltma ile hızlı zincirleşme, Yönetim panelinde Franchise Ver & Rakip İşletmeler strateji merkezi ve Genel Müdür otomatik reklam yönetimi aktif!',
+      id: 'welcome-v131',
+      title: 'Türkiye Mülk İmparatoru v1.3.1',
+      body: 'Çok oyunculu ortak harita senkronizasyonu aktif! Diğer oyuncuların kurduğu işletmeler kırmızı/turkuaz pin ve holding logolarıyla haritada canlı görünür.',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -627,48 +661,137 @@ export default function App() {
     };
   }, [screen, activePlate]);
 
-  // Subscribe to Supabase Realtime city room (`public.businesses`) for the currently selected province
+  // Subscribe nationwide to Supabase Realtime (`public.businesses`) across all 81 provinces
+  const lastLiveAlertAtRef = useRef<number>(0);
+
   useEffect(() => {
     if (screen !== 'playing') return;
     let active = true;
-
-    setRoomRecords([]);
     setRoomStatus('connecting');
 
-    fetchCityBusinesses(activePlate).then(({ records, connected }) => {
-      if (!active) return;
-      setRoomRecords(records);
-      if (!connected) {
-        setRoomStatus('offline');
-      }
-    });
+    const syncOwnPortfolio = () => {
+      const currentEmpire = empireRef.current;
+      const currentUser = userRef.current;
+      if (!currentUser || currentEmpire.businesses.length === 0) return;
+      const holdingName =
+        currentEmpire.playerIpo?.holdingName ||
+        currentEmpire.supermarketChain?.name ||
+        getCompanyTier(calculateNetWorth(currentEmpire, Date.now(), stockQuotesRef.current)).title;
 
-    const unsubscribe = subscribeToCityRoom(activePlate, {
-      onUpsert: (rec) => {
+      const records = currentEmpire.businesses.map((biz) => {
+        const hourly = calculateBusinessHourlyIncome(
+          biz,
+          currentEmpire.activeEvent,
+          Date.now(),
+          currentEmpire.businesses,
+          currentEmpire
+        );
+        const valuation = calculateBusinessValuation(biz, currentEmpire.activeEvent, Date.now());
+        return ownedToRemoteRecord(biz, hourly, valuation, holdingName);
+      });
+      syncPlayerBusinessesToWorld(records).catch(() => {});
+    };
+
+    const loadAllWorld = () => {
+      fetchAllWorldBusinesses().then(({ records, connected }) => {
         if (!active) return;
         setRoomRecords((prev) => {
-          const exists = prev.some((r) => r.id === rec.id);
-          if (exists) {
-            return prev.map((r) => (r.id === rec.id ? rec : r));
+          // Merge fetched server truth with any pending local real records idempotently
+          let next = [...records];
+          for (const existing of prev) {
+            if (!next.some((r) => r.id === existing.id) && isRealPlayerBusiness(existing)) {
+              next = applyRealtimeBusinessUpsert(next, existing);
+            }
           }
-          return [rec, ...prev];
+          return next;
         });
+        if (!connected) {
+          setRoomStatus('offline');
+        }
+      });
+    };
+
+    loadAllWorld();
+    syncOwnPortfolio();
+
+    const unsubscribe = subscribeToGlobalBusinesses({
+      onUpsert: (rec) => {
+        if (!active) return;
+        setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, rec));
+      },
+      onPatch: (id, patch) => {
+        if (!active) return;
+        setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, id, patch));
+      },
+      onInsert: (rec) => {
+        if (!active) return;
+        const currentUserId = userRef.current?.id;
+        if (rec.owner_id !== currentUserId && isRealPlayerBusiness(rec)) {
+          const nowTs = Date.now();
+          if (nowTs - lastLiveAlertAtRef.current > 4000) {
+            lastLiveAlertAtRef.current = nowTs;
+            pushNotification(
+              'Canlı Harita · Yeni Rakip Şube!',
+              `${rec.owner_name}, ${String(rec.city_plate).padStart(2, '0')} ${rec.city_name} ilinde "${rec.business_name}" açtı.`,
+              'event',
+              false
+            );
+          }
+        }
+      },
+      onUpdate: (rec) => {
+        if (!active) return;
+        const currentUserId = userRef.current?.id;
+        if (!currentUserId || rec.owner_id === currentUserId) return;
+        // If another player acquired one of our own branches via buyout, reconcile portfolio & credit proceeds
+        const ownBranch = empireRef.current.businesses.find((b) => b.id === rec.id);
+        if (ownBranch) {
+          const buyoutProceeds = Math.round(rec.valuation * 1.35);
+          setEmpire((prev) => ({
+            ...prev,
+            cash: prev.cash + buyoutProceeds,
+            businesses: prev.businesses.filter((b) => b.id !== rec.id),
+            lastSavedAt: Date.now(),
+          }));
+          pushNotification(
+            'Şubeniz Devralındı!',
+            `${rec.owner_name}, "${ownBranch.customName}" şubenizi satın aldı (+${formatTL(
+              buyoutProceeds
+            )}).`,
+            'finance',
+            true
+          );
+        }
       },
       onDelete: (id) => {
         if (!active) return;
-        setRoomRecords((prev) => prev.filter((r) => r.id !== id));
+        setRoomRecords((prev) => applyRealtimeBusinessDelete(prev, id));
+        setSelectedCompetitorId((cur) => (cur === id ? null : cur));
       },
       onStatus: (status) => {
         if (!active) return;
         setRoomStatus(status);
       },
+      onReconnect: () => {
+        if (!active) return;
+        loadAllWorld();
+        syncOwnPortfolio();
+      },
     });
+
+    const handleOnline = () => {
+      if (!active) return;
+      loadAllWorld();
+      syncOwnPortfolio();
+    };
+    window.addEventListener('online', handleOnline);
 
     return () => {
       active = false;
+      window.removeEventListener('online', handleOnline);
       unsubscribe();
     };
-  }, [screen, activePlate]);
+  }, [screen, pushNotification]);
 
   // Persist empire state automatically
   useEffect(() => {
@@ -677,16 +800,39 @@ export default function App() {
   }, [user, empire]);
 
   // Live Economy Loop (respects Pause / 1x / 2x / 4x gameSpeed & Hourly Auto-Collection)
+  const competitorBusinessesRef = useRef<RemoteBusinessRecord[]>([]);
+  const userRef = useRef<UserProfile | null>(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   useEffect(() => {
     if (screen !== 'playing' || gameSpeed === 0) return;
 
+    const REAL_TICK_MS = 250;
+    const REAL_TICK_SEC = REAL_TICK_MS / 1000;
+
     const timer = setInterval(() => {
-      simNowRef.current += 1000 * gameSpeed;
+      const effectiveDt = getEffectiveSimSeconds(REAL_TICK_SEC, gameSpeed);
+      simNowRef.current += Math.round(effectiveDt * 1000);
       const tickNow = simNowRef.current;
       setNow(tickNow);
 
       setEmpire((prev) => {
-        const result = tickEconomy(prev, gameSpeed, tickNow, undefined, stockQuotesRef.current);
+        const ownerCtx = userRef.current
+          ? {
+              owner: { id: userRef.current.id, name: userRef.current.name },
+              rivalRecords: competitorBusinessesRef.current,
+            }
+          : undefined;
+        const result = tickEconomy(
+          prev,
+          effectiveDt,
+          tickNow,
+          undefined,
+          stockQuotesRef.current,
+          ownerCtx
+        );
 
         if (result.autoCollectedHourlyAmount > 0) {
           spawnCashPopup(result.autoCollectedHourlyAmount);
@@ -761,6 +907,57 @@ export default function App() {
           }
         }
 
+        if (result.newTaxBillAmount > 0 && !result.state.accountant) {
+          pushNotification(
+            'Aylık Vergi Tahakkuku Oluştu',
+            `${formatTL(result.newTaxBillAmount)} tutarında aylık KDV/SGK/Kurumlar vergisi Finans > Muhasebe ekranında ödeme bekliyor.`,
+            'finance',
+            true
+          );
+        }
+
+        if (
+          result.accountantAutoPay.autoPaidLoanCount > 0 ||
+          result.accountantAutoPay.autoPaidTaxCount > 0
+        ) {
+          const parts: string[] = [];
+          if (result.accountantAutoPay.autoPaidLoanCount > 0) {
+            parts.push(
+              `${result.accountantAutoPay.autoPaidLoanCount} kredi taksiti (${formatTL(
+                result.accountantAutoPay.autoPaidLoanAmount,
+                true
+              )})`
+            );
+          }
+          if (result.accountantAutoPay.autoPaidTaxCount > 0) {
+            parts.push(
+              `${result.accountantAutoPay.autoPaidTaxCount} vergi faturası (${formatTL(
+                result.accountantAutoPay.autoPaidTaxAmount,
+                true
+              )})`
+            );
+          }
+          pushNotification(
+            'Muhasebeci Otomatik Ödeme Yaptı',
+            `${result.state.accountant?.name ?? 'Muhasebe Departmanı'} vadesi gelen ${parts.join(
+              ' ve '
+            )} ödemesini zamanında tamamladı!`,
+            'finance',
+            false
+          );
+        }
+
+        if (result.loanEnforcement.legalWarnings.length > 0) {
+          for (const warnLoan of result.loanEnforcement.legalWarnings) {
+            pushNotification(
+              'YASAL TAKİP UYARISI (15 Gün Gecikme!)',
+              `${warnLoan.bankName} krediniz ${warnLoan.overdueDays} gündür gecikmede! 30. günde nakit ve ${warnLoan.collateralBusinessName} haczedilecektir.`,
+              'finance',
+              true
+            );
+          }
+        }
+
         if (result.autoRenewedAdsCount > 0) {
           pushNotification(
             'Genel Müdür Otomatik Reklam Yeniledi',
@@ -772,6 +969,51 @@ export default function App() {
             'event',
             false
           );
+        }
+
+        if (result.ceoActionsLog.length > 0) {
+          pushNotification(
+            'Holding CEO Otonom Kararı',
+            result.ceoActionsLog.join(' · '),
+            'milestone',
+            true
+          );
+          // Sync any newly opened or upgraded branches created by Autonomous CEO to Supabase
+          const prevBizMap = new Map(prev.businesses.map((b) => [b.id, b]));
+          const holdingLabel =
+            result.state.playerIpo?.holdingName ||
+            result.state.supermarketChain?.name ||
+            'Anadolu Holdingi';
+          for (const biz of result.state.businesses) {
+            const oldBiz = prevBizMap.get(biz.id);
+            if (!oldBiz) {
+              const hourly = calculateBusinessHourlyIncome(
+                biz,
+                result.state.activeEvent,
+                tickNow,
+                result.state.businesses,
+                result.state
+              );
+              const valuation = calculateBusinessValuation(biz, result.state.activeEvent, tickNow);
+              publishBusinessToRoom(
+                ownedToRemoteRecord(biz, hourly, valuation, holdingLabel)
+              ).catch(() => {});
+            } else if (oldBiz.level !== biz.level) {
+              const hourly = calculateBusinessHourlyIncome(
+                biz,
+                result.state.activeEvent,
+                tickNow,
+                result.state.businesses,
+                result.state
+              );
+              const valuation = calculateBusinessValuation(biz, result.state.activeEvent, tickNow);
+              updateBusinessInRoom(biz.id, {
+                level: biz.level,
+                hourly_income: Math.round(hourly),
+                valuation: Math.round(valuation),
+              }).catch(() => {});
+            }
+          }
         }
 
         if (result.newFranchiseOpenings.length > 0) {
@@ -805,18 +1047,23 @@ export default function App() {
               'finance',
               true
             );
-            // Transfer ownership on Supabase public.businesses & update loan status
             updateBusinessInRoom(seized.business.id, {
               owner_id: seized.loan.lenderOwnerId,
               owner_name: seized.loan.bankName,
             }).catch(() => {});
+            setRoomRecords((prevRecs) =>
+              applyRealtimeBusinessPatch(prevRecs, seized.business.id, {
+                owner_id: seized.loan.lenderOwnerId,
+                owner_name: seized.loan.bankName,
+              })
+            );
             publishLoanRecord(seized.loan).catch(() => {});
           }
         }
 
         return result.state;
       });
-    }, 1000);
+    }, REAL_TICK_MS);
 
     return () => clearInterval(timer);
   }, [screen, gameSpeed, pushNotification, spawnCashPopup]);
@@ -873,33 +1120,28 @@ export default function App() {
     return Array.from(map.values());
   }, [remoteBanks, empire.ownBank]);
 
-  // Competitor records in current city room (merged with deterministic AI city rivals if room has none)
+  // Merge ALL nationwide real-player businesses + active city AI seed rivals
   const ownIds = useMemo(() => new Set(empire.businesses.map((b) => b.id)), [empire.businesses]);
   const acquiredRivalSet = useMemo(
     () => new Set(empire.acquiredRivalIds ?? []),
     [empire.acquiredRivalIds]
   );
   const seedCityRivals = useMemo(() => generateSeedCityRivals(activePlate), [activePlate]);
-  const effectiveRoomRecords = useMemo(() => {
-    const liveRivals = roomRecords.filter(
-      (rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id) && !acquiredRivalSet.has(rec.id)
-    );
-    if (liveRivals.length > 0) {
-      return roomRecords.filter((rec) => !acquiredRivalSet.has(rec.id));
-    }
-    const filteredSeeds = seedCityRivals.filter(
-      (seed) => !ownIds.has(seed.id) && !acquiredRivalSet.has(seed.id)
-    );
-    return [...roomRecords.filter((rec) => !acquiredRivalSet.has(rec.id)), ...filteredSeeds];
-  }, [roomRecords, seedCityRivals, user?.id, ownIds, acquiredRivalSet]);
-
   const competitorBusinesses = useMemo(
     () =>
-      effectiveRoomRecords.filter(
-        (rec) => rec.owner_id !== user?.id && !ownIds.has(rec.id) && !acquiredRivalSet.has(rec.id)
+      mergeWorldAndSeedRivals(
+        roomRecords,
+        seedCityRivals,
+        user?.id,
+        ownIds,
+        acquiredRivalSet
       ),
-    [effectiveRoomRecords, user?.id, ownIds, acquiredRivalSet]
+    [roomRecords, seedCityRivals, user?.id, ownIds, acquiredRivalSet]
   );
+
+  useEffect(() => {
+    competitorBusinessesRef.current = competitorBusinesses;
+  }, [competitorBusinesses]);
 
   // 75m minimum distance check for currently dropped pin
   const allExistingPoints = useMemo(
@@ -1191,7 +1433,13 @@ export default function App() {
       res.state
     );
     const valuation = calculateBusinessValuation(created, res.state.activeEvent, Date.now());
-    publishBusinessToRoom(ownedToRemoteRecord(created, hourly, valuation)).catch(() => {});
+    const holdingLabel =
+      res.state.playerIpo?.holdingName ||
+      res.state.supermarketChain?.name ||
+      companyTier.title;
+    const remoteRec = ownedToRemoteRecord(created, hourly, valuation, holdingLabel);
+    setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, remoteRec));
+    publishBusinessToRoom(remoteRec).catch(() => {});
 
     if (franchiseBrand) {
       const nextCount = franchiseBrand.branchCount + 1;
@@ -1274,16 +1522,48 @@ export default function App() {
     setRivalsModalOpen(false);
     setSelectedBusinessId(acquired.id);
 
-    updateBusinessInRoom(record.id, {
-      owner_id: user.id,
-      owner_name: user.name,
-    }).catch(() => {});
-
-    setRoomRecords((prev) =>
-      prev.map((r) =>
-        r.id === record.id ? { ...r, owner_id: user.id, owner_name: user.name } : r
-      )
+    const holdingLabel =
+      res.state.playerIpo?.holdingName ||
+      res.state.supermarketChain?.name ||
+      companyTier.title;
+    const ownerDisplay = formatOwnerDisplayName(user.name, holdingLabel);
+    const acquiredHourly = calculateBusinessHourlyIncome(
+      acquired,
+      res.state.activeEvent,
+      Date.now(),
+      res.state.businesses,
+      res.state
     );
+    const acquiredVal = calculateBusinessValuation(acquired, res.state.activeEvent, Date.now());
+
+    if (isRealPlayerBusiness(record)) {
+      updateBusinessInRoom(record.id, {
+        owner_id: user.id,
+        owner_name: ownerDisplay,
+        level: acquired.level,
+        hourly_income: Math.round(acquiredHourly),
+        valuation: Math.round(acquiredVal),
+      }).catch(() => {});
+      setRoomRecords((prev) =>
+        applyRealtimeBusinessPatch(prev, record.id, {
+          owner_id: user.id,
+          owner_name: ownerDisplay,
+          level: acquired.level,
+          hourly_income: Math.round(acquiredHourly),
+          valuation: Math.round(acquiredVal),
+        })
+      );
+    } else {
+      // Newly acquired AI seed branch is published to public.businesses so other players see your new ownership
+      const publishedAcquired = ownedToRemoteRecord(
+        acquired,
+        acquiredHourly,
+        acquiredVal,
+        holdingLabel
+      );
+      setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, publishedAcquired));
+      publishBusinessToRoom(publishedAcquired).catch(() => {});
+    }
 
     pushNotification(
       'Rakip İşletme Devralındı!',
@@ -1352,11 +1632,19 @@ export default function App() {
       res.state
     );
     const valuation = calculateBusinessValuation(res.business, res.state.activeEvent, Date.now());
-    updateBusinessInRoom(res.business.id, {
+    const holdingLabel =
+      res.state.playerIpo?.holdingName ||
+      res.state.supermarketChain?.name ||
+      companyTier.title;
+    const ownerDisplay = user ? formatOwnerDisplayName(user.name, holdingLabel) : undefined;
+    const patch = {
       level: res.business.level,
-      hourly_income: hourly,
-      valuation,
-    }).catch(() => {});
+      hourly_income: Math.round(hourly),
+      valuation: Math.round(valuation),
+      ...(ownerDisplay ? { owner_name: ownerDisplay } : {}),
+    };
+    setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, res.business!.id, patch));
+    updateBusinessInRoom(res.business.id, patch).catch(() => {});
 
     pushNotification(
       'İşletme Yükseltildi',
@@ -1637,8 +1925,13 @@ export default function App() {
     );
   };
 
-  // --- v1.2.0 Banking & Loans Handlers ---
-  const handleTakeLoan = (bankId: string, amount: number, collateralBusinessId: string) => {
+  // --- v1.2.0 / v1.3.0 Banking, Monthly Installments, Tax & Corporate HQ Handlers ---
+  const handleTakeLoan = (
+    bankId: string,
+    amount: number,
+    collateralBusinessId: string,
+    termMonths = 6
+  ) => {
     if (!user) return;
     const bank = allBanks.find((b) => b.id === bankId);
     const biz = empire.businesses.find((b) => b.id === collateralBusinessId) ?? null;
@@ -1652,7 +1945,8 @@ export default function App() {
       val,
       { id: user.id, name: user.name },
       180,
-      Date.now()
+      Date.now(),
+      termMonths
     );
     if (!res.ok || !res.loan) {
       if (res.error) pushNotification('Kredi Reddedildi', res.error, 'finance', false);
@@ -1664,7 +1958,28 @@ export default function App() {
     publishLoanRecord(res.loan).catch(() => {});
     pushNotification(
       'Kredi Hesabınıza Aktarıldı',
-      `${bank.bankName} üzerinden ${formatTL(amount)} kredi kullanıldı. Teminat: ${biz.customName}`,
+      `${bank.bankName} üzerinden ${formatTL(amount)} (${termMonths} ay taksit · Aylık ${formatTL(
+        res.loan.monthlyInstallment ?? 0
+      )}) kredi kullanıldı.`,
+      'finance',
+      true
+    );
+  };
+
+  const handlePayLoanInstallment = (loanId: string) => {
+    const res = payMonthlyLoanInstallment(empire, loanId, Date.now());
+    if (!res.ok || !res.loan) {
+      if (res.error) pushNotification('Taksit Ödenemedi', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    publishLoanRecord(res.loan).catch(() => {});
+    pushNotification(
+      res.paidInFull ? 'Kredi Tamamen Kapatıldı!' : 'Aylık Kredi Taksiti Ödendi',
+      `${formatTL(res.paidAmount ?? 0)} ödendi · Kredi Puanı +${res.creditScoreDelta ?? 0} (Yeni Puan: ${
+        res.state.creditScore
+      })`,
       'finance',
       true
     );
@@ -1684,6 +1999,105 @@ export default function App() {
       `Kredi puanınız ${res.state.creditScore} seviyesine yükseldi ve teminat kaldırıldı.`,
       'finance',
       true
+    );
+  };
+
+  const handlePayTaxBill = (taxId: string) => {
+    const res = payPendingTaxBill(empire, taxId, Date.now());
+    if (!res.ok || !res.paidBill) {
+      if (res.error) pushNotification('Vergi Ödenemedi', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playClick();
+    setEmpire(res.state);
+    pushNotification(
+      'Vergi Tahakkuku Ödendi',
+      `${res.paidBill.monthNumber}. Ay Vergi Tahakkuku (${formatTL(res.paidBill.amount)}) ödendi. Kredi Puanı: ${res.state.creditScore}`,
+      'finance',
+      false
+    );
+  };
+
+  const handleHireAccountant = (accountantId: string) => {
+    const res = hireAccountant(empire, accountantId, Date.now());
+    if (!res.ok || !res.accountant) {
+      if (res.error) pushNotification('Muhasebeci Atanamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Muhasebe Departmanı Aktif!',
+      `${res.accountant.name} (${res.accountant.title}) işe alındı. Aylık vergi ve kredi taksitleriniz otomatik ödenecek!`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleDismissAccountant = () => {
+    const res = dismissAccountant(empire, Date.now());
+    if (!res.ok) return;
+    soundEngine.playClick();
+    setEmpire(res.state);
+    pushNotification(
+      'Muhasebeci Görevden Alındı',
+      'Artık aylık vergi ve kredi taksitlerini manuel takip etmelisiniz.',
+      'system',
+      false
+    );
+  };
+
+  const handleRefreshAccountantPool = () => {
+    if (empire.cash < 2500) {
+      pushNotification('Yetersiz Nakit', 'Aday havuzunu yenilemek için ₺2.500 gerekir.', 'finance', false);
+      return;
+    }
+    soundEngine.playClick();
+    const seed = Date.now();
+    setEmpire((prev) => ({
+      ...prev,
+      cash: prev.cash - 2500,
+      accountantPool: generateAccountantPool(seed),
+      ceoPool: generateCeoPool(seed + 77),
+      lastSavedAt: seed,
+    }));
+  };
+
+  const handleHireCeo = (ceoId: string) => {
+    const res = hireCeo(empire, ceoId, companyTier.level, netWorth, Date.now());
+    if (!res.ok || !res.ceo) {
+      if (res.error) pushNotification('CEO Atanamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Holding CEO Atandı!',
+      `${res.ceo.name} (${res.ceo.title}) göreve başladı. Otonom Büyüme anahtarını açarak holdingi otomatik büyütebilirsiniz!`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleDismissCeo = () => {
+    const res = dismissCeo(empire, Date.now());
+    if (!res.ok) return;
+    soundEngine.playClick();
+    setEmpire(res.state);
+  };
+
+  const handleToggleCeoAutonomous = (enabled: boolean) => {
+    const res = toggleCeoAutonomousGrowth(empire, enabled, Date.now());
+    if (!res.ok) return;
+    soundEngine.playClick();
+    setEmpire(res.state);
+    pushNotification(
+      enabled ? 'CEO Otonom Büyüme Açıldı' : 'CEO Otonom Büyüme Kapatıldı',
+      enabled
+        ? 'CEO, nakdinizin %40 rezervini koruyarak şube açma, yönetici atama ve reklam kararlarını otonom yürütecek.'
+        : 'Otonom CEO hamleleri duraklatıldı.',
+      'milestone',
+      false
     );
   };
 
@@ -1783,6 +2197,7 @@ export default function App() {
     setSelectedBusinessId(null);
     if (interiorBusinessId === businessId) setInteriorBusinessId(null);
     spawnCashPopup(res.collectedAmount);
+    setRoomRecords((prev) => applyRealtimeBusinessDelete(prev, businessId));
     removeBusinessFromRoom(businessId).catch(() => {});
   };
 
@@ -2429,6 +2844,7 @@ export default function App() {
                   now={now}
                   onEnterInterior={(id) => setInteriorBusinessId(id)}
                   onOpenHrModal={(id) => {
+                    setHrInitialSubView('branches');
                     setHrTargetBusinessId(id);
                     handleSelectManagementTab('hr');
                   }}
@@ -2447,7 +2863,20 @@ export default function App() {
                   cash={empire.cash}
                   ownBranchCount={empire.businesses.length}
                   maxBranches={companyTier.maxBranches}
+                  hasBranchInCity={empire.businesses.some(
+                    (b) => b.cityPlate === selectedCompetitor.city_plate
+                  )}
+                  blitzActive={(empire.competitiveBlitzes ?? []).some(
+                    (bl) =>
+                      bl.targetRivalId === selectedCompetitor.id &&
+                      bl.endsAtGameMin > (empire.gameMinutes ?? 540)
+                  )}
                   onTakeover={handleTakeoverCompetitor}
+                  onLaunchBlitz={handleLaunchCompetitiveBlitz}
+                  onOpenRivalsModal={() => {
+                    setSelectedCompetitorId(null);
+                    handleSelectManagementTab('rivals');
+                  }}
                   onClose={() => setSelectedCompetitorId(null)}
                 />
               ) : null}
@@ -2468,6 +2897,7 @@ export default function App() {
               onSelectBusiness={handleSelectOwnBusiness}
               onEnterInterior={(id) => setInteriorBusinessId(id)}
               onOpenHrModal={(id) => {
+                setHrInitialSubView('branches');
                 setHrTargetBusinessId(id);
                 handleSelectManagementTab('hr');
               }}
@@ -2516,6 +2946,10 @@ export default function App() {
         state={empire}
         activeCityPlate={activeProvince.plate}
         activeCityName={activeProvince.name}
+        founderName={user?.name ?? 'Kurucu Yatırımcı'}
+        companyLevel={companyTier.level}
+        netWorth={netWorth}
+        initialSubView={hrInitialSubView}
         onSelectBranch={(id) => setHrTargetBusinessId(id)}
         onSelectManagementTab={handleSelectManagementTab}
         onToggleGmAutoAds={handleToggleGmAutoAds}
@@ -2523,6 +2957,12 @@ export default function App() {
         onDismissStaff={handleDismissStaff}
         onRefreshPool={handleRefreshCandidatePool}
         onRestockBusiness={handleRestockBusiness}
+        onHireAccountant={handleHireAccountant}
+        onDismissAccountant={handleDismissAccountant}
+        onRefreshAccountantPool={handleRefreshAccountantPool}
+        onHireCeo={handleHireCeo}
+        onDismissCeo={handleDismissCeo}
+        onToggleCeoAutonomous={handleToggleCeoAutonomous}
         onClose={() => setHrModalOpen(false)}
       />
 
@@ -2590,6 +3030,7 @@ export default function App() {
         netWorth={netWorth}
         now={now}
         onTakeLoan={handleTakeLoan}
+        onPayInstallment={handlePayLoanInstallment}
         onRepayLoan={handleRepayLoan}
         onCreateBank={handleCreateBank}
         onUpdateBank={handleUpdateBank}
@@ -2618,6 +3059,13 @@ export default function App() {
         state={empire}
         quotes={stockQuotes}
         now={now}
+        onPayTaxBill={handlePayTaxBill}
+        onOpenHrAccounting={() => {
+          soundEngine.playClick();
+          setAccountingModalOpen(false);
+          setHrInitialSubView('hq');
+          handleSelectManagementTab('hr');
+        }}
         onSwitchToBanking={() => {
           soundEngine.playClick();
           setAccountingModalOpen(false);
@@ -2659,7 +3107,7 @@ export default function App() {
         state={empire}
         netWorth={netWorth}
         activeProvince={activeProvince}
-        roomRecords={effectiveRoomRecords}
+        roomRecords={competitorBusinesses}
         allFranchises={allFranchises}
         allBanks={allBanks}
         onClose={() => setLeaderboardModalOpen(false)}
