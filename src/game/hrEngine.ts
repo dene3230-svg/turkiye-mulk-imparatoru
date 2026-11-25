@@ -9,6 +9,7 @@ import type {
   StaffRole,
 } from '../types/game';
 import { hasChainBrandInCity } from './strategyEngine';
+import { canOfficeHireRole } from './officeEngine';
 
 export const MAX_BRANCH_WORKERS = 4;
 export const MAX_BRANCH_ASSISTANT_MANAGERS = 1;
@@ -196,6 +197,7 @@ export const SECTOR_WORKER_TITLE: Record<BusinessTypeId, string> = {
   gida_fabrikasi: 'Üretim İşçisi',
   elektronik_fabrikasi: 'Montaj Teknisyeni',
   tekstil_fabrikasi: 'Tekstil Ustası',
+  enerji_santrali: 'Enerji Mühendisi',
 };
 
 const FIRST_NAMES = [
@@ -505,6 +507,14 @@ export function hireCandidateFromPool(
   const meta = ROLE_META[candidate.role];
 
   if (meta.scope === 'city') {
+    const officeCheck = canOfficeHireRole(state, candidate.role);
+    if (!officeCheck.allowed) {
+      return {
+        state,
+        ok: false,
+        error: `${meta.label} adaylarını çekebilmek için Ofisim bölümünden en az "${officeCheck.requiredTierName}" seviyesine yükselmelisiniz.`,
+      };
+    }
     const cityBranches = state.businesses.filter((b) => b.cityPlate === targetCityPlate);
     const hasChainHere = hasChainBrandInCity(state.businesses, targetCityPlate);
     if (candidate.role === 'bolge_sorumlusu' && cityBranches.length < 2 && !hasChainHere) {

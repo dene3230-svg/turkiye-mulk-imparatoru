@@ -2,13 +2,25 @@ import type {
   BankRecord,
   CreditTierRule,
   EmpireState,
+  LoanEligibilityCheck,
+  LoanEligibilityResult,
   LoanRecord,
   OwnedBusiness,
 } from '../types/game';
-import { BANK_MIN_NET_WORTH } from './catalog';
+import {
+  BANK_LICENSE_COST,
+  BANK_MIN_NET_WORTH,
+  BANK_MIN_POOL_CAPITAL,
+} from './catalog';
+import { calculateOfficeBenefits } from './officeEngine';
 
 export const CREDIT_SCORE_MIN = 0;
 export const CREDIT_SCORE_MAX = 1900;
+
+// v1.4.1 Sıkı Banka Kredi Kriterleri (Yeni / Zarar Eden Firmalara Kredi Yok)
+export const BANK_MIN_OPERATING_DAYS = 15;
+export const BANK_MIN_BRAND_RECOGNITION = 15;
+export const BANK_MIN_OFFICE_PRESTIGE = 20;
 
 export const CREDIT_TIERS: CreditTierRule[] = [
   {
@@ -26,9 +38,9 @@ export const CREDIT_TIERS: CreditTierRule[] = [
     label: 'Yüksek Risk',
     minScore: 700,
     maxScore: 999,
-    maxLoanAmount: 250_000,
-    rateSpread: 0.12, // Baz faize +12%
-    collateralMultiplier: 1.5, // 1.5x işletme teminatı
+    maxLoanAmount: 1_500_000,
+    rateSpread: 0.14, // Baz faize +%14
+    collateralMultiplier: 1.6, // 1.6x işletme teminatı
     badgeColor: '#EA580C',
   },
   {
@@ -36,9 +48,9 @@ export const CREDIT_TIERS: CreditTierRule[] = [
     label: 'Standart',
     minScore: 1000,
     maxScore: 1299,
-    maxLoanAmount: 1_500_000,
-    rateSpread: 0.04, // Baz faize +4%
-    collateralMultiplier: 1.2, // 1.2x işletme teminatı
+    maxLoanAmount: 12_000_000,
+    rateSpread: 0.05, // Baz faize +%5
+    collateralMultiplier: 1.25, // 1.25x işletme teminatı
     badgeColor: '#0284C7',
   },
   {
@@ -46,9 +58,9 @@ export const CREDIT_TIERS: CreditTierRule[] = [
     label: 'İyi Patron',
     minScore: 1300,
     maxScore: 1599,
-    maxLoanAmount: 7_500_000,
+    maxLoanAmount: 75_000_000,
     rateSpread: 0, // Baz faiz oranı (%0 ek)
-    collateralMultiplier: 1.0, // 1.0x teminat
+    collateralMultiplier: 1.05, // 1.05x teminat
     badgeColor: '#059669',
   },
   {
@@ -56,9 +68,9 @@ export const CREDIT_TIERS: CreditTierRule[] = [
     label: 'VIP Holding',
     minScore: 1600,
     maxScore: 1900,
-    maxLoanAmount: 50_000_000,
-    rateSpread: -0.03, // Baz faiz üzerinden %3 VIP indirimi
-    collateralMultiplier: 0.85,
+    maxLoanAmount: 500_000_000,
+    rateSpread: -0.025, // Baz faiz üzerinden %2.5 VIP indirimi
+    collateralMultiplier: 0.9,
     badgeColor: '#CA8A04',
   },
 ];
@@ -75,11 +87,11 @@ export const DEFAULT_SYSTEM_BANKS: BankRecord[] = [
     hqCityName: 'İstanbul',
     hqLat: 41.0782,
     hqLng: 29.0112,
-    poolCapital: 120_000_000,
-    baseInterestRate: 0.12,
-    minCreditScore: 700,
+    poolCapital: 3_500_000_000,
+    baseInterestRate: 0.16,
+    minCreditScore: 850,
     totalLoansIssued: 42,
-    totalInterestEarned: 18_400_000,
+    totalInterestEarned: 480_000_000,
     seizedAssetsCount: 3,
     createdAt: 1735689600000,
     isSystemBank: true,
@@ -95,11 +107,11 @@ export const DEFAULT_SYSTEM_BANKS: BankRecord[] = [
     hqCityName: 'Ankara',
     hqLat: 39.9208,
     hqLng: 32.8541,
-    poolCapital: 250_000_000,
-    baseInterestRate: 0.09,
-    minCreditScore: 1100,
+    poolCapital: 8_200_000_000,
+    baseInterestRate: 0.125,
+    minCreditScore: 1150,
     totalLoansIssued: 29,
-    totalInterestEarned: 24_900_000,
+    totalInterestEarned: 820_000_000,
     seizedAssetsCount: 1,
     createdAt: 1735689600000,
     isSystemBank: true,
@@ -115,11 +127,11 @@ export const DEFAULT_SYSTEM_BANKS: BankRecord[] = [
     hqCityName: 'İzmir',
     hqLat: 38.4237,
     hqLng: 27.1428,
-    poolCapital: 185_000_000,
-    baseInterestRate: 0.105,
-    minCreditScore: 900,
+    poolCapital: 5_400_000_000,
+    baseInterestRate: 0.14,
+    minCreditScore: 1000,
     totalLoansIssued: 36,
-    totalInterestEarned: 21_200_000,
+    totalInterestEarned: 610_000_000,
     seizedAssetsCount: 2,
     createdAt: 1735689600000,
     isSystemBank: true,
@@ -142,10 +154,14 @@ export function getCreditTier(score: number): CreditTierRule {
 
 export function calculateEffectiveInterestRate(
   baseInterestRate: number,
-  creditScore: number
+  creditScore: number,
+  officeInterestDiscount = 0
 ): number {
   const tier = getCreditTier(creditScore);
-  return Math.max(0.02, Number((baseInterestRate + tier.rateSpread).toFixed(4)));
+  return Math.max(
+    0.03,
+    Number((baseInterestRate + tier.rateSpread - Math.max(0, officeInterestDiscount)).toFixed(4))
+  );
 }
 
 export function calculateRequiredCollateral(
@@ -154,6 +170,120 @@ export function calculateRequiredCollateral(
 ): number {
   const tier = getCreditTier(creditScore);
   return Math.round(loanAmount * tier.collateralMultiplier);
+}
+
+export function evaluateLoanEligibility(
+  state: EmpireState,
+  bank: BankRecord,
+  amount: number,
+  collateralBusiness: OwnedBusiness | null,
+  collateralValuation: number,
+  borrowerId?: string
+): LoanEligibilityResult {
+  const tier = getCreditTier(state.creditScore);
+  const officeBenefits = calculateOfficeBenefits(state);
+  const effectiveMaxLoan = Math.round(tier.maxLoanAmount * officeBenefits.loanLimitMultiplier);
+  const effectiveInterestRate = calculateEffectiveInterestRate(
+    bank.baseInterestRate,
+    state.creditScore,
+    officeBenefits.loanInterestDiscount
+  );
+  const principal = Math.max(0, Math.round(amount));
+  const requiredCollateral = calculateRequiredCollateral(principal, state.creditScore);
+  const currentGameDay = Math.floor((state.gameMinutes ?? 540) / 1440) + 1;
+  const brand = state.brandRecognition ?? 5;
+
+  // Latest closed day report (either pending or archived)
+  const latestReport =
+    [...(state.pendingDayEndReports ?? []), ...(state.dayEndHistory ?? [])].sort(
+      (a, b) => b.completedDay - a.completedDay
+    )[0] ?? null;
+  const hasProfitableBalanceSheet =
+    state.cash >= 0 && latestReport !== null && latestReport.dailyNetCashFlow > 0;
+
+  const checks: LoanEligibilityCheck[] = [
+    {
+      id: 'tenure',
+      label: `Faaliyet Süresi (En az ${BANK_MIN_OPERATING_DAYS} gün)`,
+      passed: currentGameDay >= BANK_MIN_OPERATING_DAYS,
+      detail:
+        currentGameDay >= BANK_MIN_OPERATING_DAYS
+          ? `${currentGameDay}. gün (Uygun)`
+          : `Yetersiz faaliyet süresi: ${currentGameDay}/${BANK_MIN_OPERATING_DAYS} gün (Yeni kurulan firmalara kredi açılmaz)`,
+    },
+    {
+      id: 'brand',
+      label: `Firma Tanınırlığı (En az %${BANK_MIN_BRAND_RECOGNITION})`,
+      passed: brand >= BANK_MIN_BRAND_RECOGNITION,
+      detail:
+        brand >= BANK_MIN_BRAND_RECOGNITION
+          ? `%${brand.toFixed(1)} tanınırlık (Uygun)`
+          : `Yetersiz firma tanınırlığı: %${brand.toFixed(1)} / %${BANK_MIN_BRAND_RECOGNITION}`,
+    },
+    {
+      id: 'office',
+      label: `Ofis Prestiji (En az ${BANK_MIN_OFFICE_PRESTIGE} puan)`,
+      passed: officeBenefits.officePrestige >= BANK_MIN_OFFICE_PRESTIGE,
+      detail:
+        officeBenefits.officePrestige >= BANK_MIN_OFFICE_PRESTIGE
+          ? `${officeBenefits.officePrestige}/100 prestij (${officeBenefits.tier.name})`
+          : `Yetersiz ofis prestiji: ${officeBenefits.officePrestige}/${BANK_MIN_OFFICE_PRESTIGE} (Ofisim’den ofisinizi geliştirin)`,
+    },
+    {
+      id: 'profitability',
+      label: 'Pozitif Bilanço & Nakit Akışı',
+      passed: hasProfitableBalanceSheet,
+      detail:
+        state.cash < 0
+          ? 'Kasa eksi bakiyede (Negatif nakit akışı)'
+          : !latestReport
+          ? 'Onaylı gün sonu kâr bilançosu henüz oluşmadı'
+          : latestReport.dailyNetCashFlow <= 0
+          ? `Son gün sonu bilançosu zarar etti (${latestReport.dailyNetCashFlow.toLocaleString('tr-TR')} ₺)`
+          : `Son gün sonu kârlı (+₺${latestReport.dailyNetCashFlow.toLocaleString('tr-TR')})`,
+    },
+    {
+      id: 'creditScore',
+      label: `Kredi Puanı (En az ${bank.minCreditScore})`,
+      passed: tier.key !== 'blacklist' && state.creditScore >= bank.minCreditScore,
+      detail:
+        tier.key === 'blacklist'
+          ? `Kara Liste (${state.creditScore} puan)`
+          : state.creditScore >= bank.minCreditScore
+          ? `${state.creditScore} puan (${tier.label})`
+          : `${state.creditScore} / ${bank.minCreditScore} puan gerekli`,
+    },
+    {
+      id: 'collateral',
+      label: `Teminat & Limit (${tier.collateralMultiplier}× değer)`,
+      passed:
+        Boolean(collateralBusiness) &&
+        !collateralBusiness?.pledgedLoanId &&
+        collateralValuation >= requiredCollateral &&
+        principal <= effectiveMaxLoan &&
+        principal <= bank.poolCapital &&
+        bank.ownerId !== borrowerId,
+      detail: !collateralBusiness
+        ? 'Rehinsiz teminat işletme bulunmuyor'
+        : collateralBusiness.pledgedLoanId
+        ? 'Seçilen işletme başka kredide rehinli'
+        : collateralValuation < requiredCollateral
+        ? `Teminat yetersiz (Gerekli: ₺${requiredCollateral.toLocaleString('tr-TR')})`
+        : principal > effectiveMaxLoan
+        ? `Kredi üst limitiniz aşılıyor (Maks: ₺${effectiveMaxLoan.toLocaleString('tr-TR')})`
+        : `Teminat uygun (₺${collateralValuation.toLocaleString('tr-TR')})`,
+    },
+  ];
+
+  const reasons = checks.filter((c) => !c.passed).map((c) => c.detail);
+  return {
+    eligible: reasons.length === 0,
+    reasons,
+    checks,
+    effectiveMaxLoan,
+    effectiveInterestRate,
+    requiredCollateral,
+  };
 }
 
 export function createPlayerBank(
@@ -181,21 +311,21 @@ export function createPlayerBank(
     return {
       state,
       ok: false,
-      error: 'Kendi bankanızı kurmak için şirket değeriniz en az ₺25.000.000 olmalıdır.',
+      error: `Kendi bankanızı kurmak için BDDK şartı gereği net şirket değeriniz en az ₺${BANK_MIN_NET_WORTH.toLocaleString('tr-TR')} (₺5 Milyar) olmalıdır.`,
     };
   }
   const name = params.bankName.trim();
   if (name.length < 3) {
     return { state, ok: false, error: 'Lütfen geçerli bir banka adı girin.' };
   }
-  const licenseCost = 2_000_000;
-  const pool = Math.max(1_000_000, Math.round(params.initialPoolCapital));
+  const licenseCost = BANK_LICENSE_COST;
+  const pool = Math.max(BANK_MIN_POOL_CAPITAL, Math.round(params.initialPoolCapital));
   const totalOutlay = licenseCost + pool;
   if (state.cash < totalOutlay) {
     return {
       state,
       ok: false,
-      error: `Banka lisansı (₺2 Mn) ve ilk kredi havuzu için toplam ₺${totalOutlay.toLocaleString('tr-TR')} nakit gereklidir.`,
+      error: `BDDK bankacılık lisansı (₺1 Milyar) ve asgari kredi havuzu (₺2 Milyar+) için toplam ₺${totalOutlay.toLocaleString('tr-TR')} nakit sermaye gereklidir.`,
     };
   }
 
@@ -288,63 +418,39 @@ export function takeLoanFromBank(
   now = Date.now(),
   termMonths = 6
 ): { state: EmpireState; ok: boolean; error?: string; loan?: LoanRecord } {
-  const tier = getCreditTier(state.creditScore);
-  if (tier.key === 'blacklist' || tier.maxLoanAmount <= 0) {
-    return {
-      state,
-      ok: false,
-      error: `Kredi puanınız (${state.creditScore}) Kara Liste (0-699) bölgesinde; kredi çekemezsiniz.`,
-    };
-  }
-  if (state.creditScore < bank.minCreditScore) {
-    return {
-      state,
-      ok: false,
-      error: `${bank.bankName} en az ${bank.minCreditScore} kredi puanı şartı arıyor.`,
-    };
-  }
   if (bank.ownerId === borrower.id) {
     return { state, ok: false, error: 'Kendi bankanızdan kredi çekemezsiniz.' };
   }
 
   const principal = Math.round(amount);
-  if (principal < 25_000) {
-    return { state, ok: false, error: 'Minimum kredi tutarı ₺25.000 olmalıdır.' };
-  }
-  if (principal > tier.maxLoanAmount) {
-    return {
-      state,
-      ok: false,
-      error: `${tier.label} kademeniz en fazla ₺${tier.maxLoanAmount.toLocaleString('tr-TR')} krediye izin verir.`,
-    };
-  }
-  if (principal > bank.poolCapital) {
-    return { state, ok: false, error: 'Bankanın kredi havuzu sermayesi bu tutar için yetersiz.' };
+  if (principal < 100_000) {
+    return { state, ok: false, error: 'Minimum ticari kredi tutarı ₺100.000 olmalıdır.' };
   }
 
-  const requiredCollateral = calculateRequiredCollateral(principal, state.creditScore);
-  if (!collateralBusiness) {
+  const eligibility = evaluateLoanEligibility(
+    state,
+    bank,
+    principal,
+    collateralBusiness,
+    collateralValuation,
+    borrower.id
+  );
+  if (!eligibility.eligible) {
     return {
       state,
       ok: false,
-      error: `Bu kredi için en az ₺${requiredCollateral.toLocaleString('tr-TR')} değerinde bir işletmeyi teminat göstermelisiniz.`,
-    };
-  }
-  if (collateralBusiness.pledgedLoanId) {
-    return { state, ok: false, error: 'Bu işletme zaten başka bir kredi için teminat gösterilmiş.' };
-  }
-  if (collateralValuation < requiredCollateral) {
-    return {
-      state,
-      ok: false,
-      error: `${tier.label} kademesi ${tier.collateralMultiplier}× teminat ister (Gerekli: ₺${requiredCollateral.toLocaleString('tr-TR')}, Seçilen: ₺${collateralValuation.toLocaleString('tr-TR')}).`,
+      error: `Kredi başvurusu reddedildi: ${eligibility.reasons[0]}`,
     };
   }
 
-  const effectiveRate = calculateEffectiveInterestRate(bank.baseInterestRate, state.creditScore);
+  const effectiveRate = eligibility.effectiveInterestRate;
   const totalDue = Math.round(principal * (1 + effectiveRate));
   const safeTermMonths = Math.max(1, Math.min(24, Math.round(termMonths)));
   const monthlyInstallment = Math.ceil(totalDue / safeTermMonths);
+  if (!collateralBusiness) {
+    return { state, ok: false, error: 'Kredi teminatı olarak geçerli bir işletme seçmelisiniz.' };
+  }
+
   const currentGameDay = Math.floor((state.gameMinutes ?? 540) / 1440) + 1;
   const dueAt = now + termDurationSec * 1000;
   const seizureAt = dueAt + 60_000; // Legacy fallback window

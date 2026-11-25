@@ -1,10 +1,10 @@
 {
-  "version": "1.4.0-fix",
+  "version": "1.4.1",
   "buildDate": "2026-11-25",
   "mandatory": false,
   "notes": [
-    "Mobil cihazlarda açılış ekranı donma ve çökme sorunu giderildi",
-    "Hızlı alt açılır menüler, gün gün simülasyon butonu, işletme inşaat süreleri, 00:00 gün sonu tahsilatı ve gerçekçi Türkiye vergi/maaş sistemi eklendi",
-    "İnşaat aşamasında Çift Vardiya Ekip Tut (-%35 süre) ve Gün+ modunda Otomatik Durdurma Koruması eklendi"
+    "Gerçekçi Türkiye fiyat ve maliyet marjları, milyarlık banka kurulum şartı, firma tanınırlığı, hizmet kalitesine bağlı müşteri trafiği, sıkı banka kredi kuralları ve Ofisim bölümü eklendi",
+    "Milyarlık Enerji Santrali, Holding Gökdeleni, B2B tedarik/kredi avantajları ve zararda eksi kasa simülasyonu devreye alındı",
+    "Mobil cihazlarda açılış ekranı donma ve çökme sorunu giderildi"
   ]
 }

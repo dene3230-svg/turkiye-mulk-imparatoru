@@ -7,11 +7,13 @@ import {
   Calculator,
   CalendarCheck2,
   Crown,
+  Gem,
   Landmark,
   LineChart,
   Newspaper,
   PieChart,
   Settings,
+  Smartphone,
   Store,
   Swords,
   Trophy,
@@ -32,6 +34,9 @@ export type BottomSheetActionId =
   | 'fin_banking'
   | 'fin_stocks'
   | 'fin_portfolio'
+  | 'office_design'
+  | 'office_phone'
+  | 'office_assets'
   | 'office_dayend'
   | 'office_missions'
   | 'office_news'
@@ -66,6 +71,10 @@ interface BottomSheetLauncherProps {
     pendingDayEndCount: number;
     pendingDayEndNet: number;
     claimableMissionsCount: number;
+    officePrestige?: number;
+    officeTierName?: string;
+    brandRecognition?: number;
+    personalAssetsCount?: number;
   };
 }
 
@@ -189,10 +198,37 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
       ],
     },
     office: {
-      title: 'Ofisim & Araçlar',
-      subtitle: '00:00 gün sonu kasa tahsilatı, hedefler, piyasa bülteni ve ayarlar',
-      accentBar: 'from-sky-400 to-indigo-500',
+      title: 'Ofisim & Kurumsal Prestij',
+      subtitle: 'Ofis tasarımı, akıllı telefon, kişisel varlıklar, 00:00 gün sonu raporu ve ayarlar',
+      accentBar: 'from-amber-400 via-sky-400 to-indigo-500',
       items: [
+        {
+          id: 'office_design',
+          title: 'Ofis Tasarımı & Prestij',
+          subtitle: `${stats.officeTierName ?? 'Home Ofis'} · Tedarik indirimi & kredi gücü`,
+          badge: `Prestij ${stats.officePrestige ?? 10}/100`,
+          badgeTone: (stats.officePrestige ?? 10) >= 20 ? 'emerald' : 'amber',
+          icon: <Building2 className="w-4 h-4" />,
+          accent: 'from-amber-500/25 to-amber-600/5 border-amber-400/45 text-amber-300',
+        },
+        {
+          id: 'office_phone',
+          title: 'Akıllı Telefonum',
+          subtitle: 'Müşteri yorumları, banka & İK kısayolları',
+          badge: `Tanınırlık %${(stats.brandRecognition ?? 5).toFixed(0)}`,
+          badgeTone: 'sky',
+          icon: <Smartphone className="w-4 h-4" />,
+          accent: 'from-sky-500/25 to-sky-600/5 border-sky-400/45 text-sky-300',
+        },
+        {
+          id: 'office_assets',
+          title: 'Kişisel Varlıklar',
+          subtitle: 'Saat, makam aracı, yalı, yat & özel jet',
+          badge: `${stats.personalAssetsCount ?? 0} Varlık`,
+          badgeTone: 'amber',
+          icon: <Gem className="w-4 h-4" />,
+          accent: 'from-violet-500/25 to-violet-600/5 border-violet-400/45 text-violet-300',
+        },
         {
           id: 'office_dayend',
           title: 'Gün Sonu Raporu (00:00)',
@@ -215,13 +251,6 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           accent: 'from-amber-500/20 to-amber-600/5 border-amber-500/35 text-amber-300',
         },
         {
-          id: 'office_news',
-          title: 'Piyasa Haberleri',
-          subtitle: 'Sektörel dalgalanmalar ve ekonomi bülteni',
-          icon: <Newspaper className="w-4 h-4" />,
-          accent: 'from-sky-500/20 to-sky-600/5 border-sky-500/35 text-sky-300',
-        },
-        {
           id: 'office_leaderboard',
           title: 'Liderlik Tablosu',
           subtitle: 'Türkiye geneli en büyük holding sıralaması',
@@ -229,9 +258,16 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           accent: 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/35 text-yellow-300',
         },
         {
+          id: 'office_news',
+          title: 'Piyasa Haberleri',
+          subtitle: 'Sektörel dalgalanmalar ve ekonomi bülteni',
+          icon: <Newspaper className="w-4 h-4" />,
+          accent: 'from-sky-500/20 to-sky-600/5 border-sky-500/35 text-sky-300',
+        },
+        {
           id: 'office_guide',
           title: 'Oyun Rehberi',
-          subtitle: 'İnşaat, 00:00 tahsilat, vergi ve strateji ipuçları',
+          subtitle: 'İnşaat, hizmet kalitesi, kredi ve strateji ipuçları',
           icon: <BookOpen className="w-4 h-4" />,
           accent: 'from-indigo-500/20 to-indigo-600/5 border-indigo-500/35 text-indigo-300',
         },
@@ -301,7 +337,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
 
         {/* Quick-Access Cards Grid */}
         <div
-          className={`p-2.5 sm:p-3 grid gap-2 overflow-y-auto panel-scroll ${
+          className={`p-2.5 sm:p-3 grid auto-rows-max content-start gap-2 overflow-y-auto panel-scroll ${
             active.items.length === 4 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'
           }`}
         >
@@ -314,7 +350,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
                 onClose();
                 onSelect(item.id);
               }}
-              className={`group text-left rounded-xl p-2.5 sm:p-3 bg-gradient-to-br ${item.accent} border hover:brightness-110 active:scale-[0.98] transition-all flex flex-col justify-between gap-2 min-h-[78px]`}
+              className={`group text-left rounded-xl p-2.5 sm:p-3 bg-gradient-to-br ${item.accent} border hover:brightness-110 active:scale-[0.98] transition-all flex flex-col justify-between gap-1.5 overflow-hidden`}
             >
               <div className="flex items-start justify-between gap-1.5">
                 <div className="w-8 h-8 rounded-lg bg-slate-950/60 border border-white/10 flex items-center justify-center shrink-0">

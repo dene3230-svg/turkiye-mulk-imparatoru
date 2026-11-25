@@ -1,6 +1,6 @@
 import type { OtaCheckResult, OtaVersionManifest } from '../types/game';
 
-export const APP_VERSION = '1.4.0-fix';
+export const APP_VERSION = '1.4.1';
 export const APP_BUILD_DATE = '2026-11-25';
 
 function parseSemverParts(v: string): { nums: number[]; fixRank: number } {

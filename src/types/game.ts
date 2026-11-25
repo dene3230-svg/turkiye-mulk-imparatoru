@@ -34,7 +34,8 @@ export type BusinessTypeId =
   | 'katli_otopark'
   | 'gida_fabrikasi'
   | 'elektronik_fabrikasi'
-  | 'tekstil_fabrikasi';
+  | 'tekstil_fabrikasi'
+  | 'enerji_santrali';
 
 export type BusinessCategory =
   | 'cafe'
@@ -56,8 +57,11 @@ export interface BusinessBlueprint {
   baseCost: number;
   baseHourlyIncome: number; // Real-world scale hourly income
   baseIncomePerSec: number; // Live gameplay income per second (exact 40s/day scale)
-  constructionDays: number; // 3..15 in-game days of construction/renovation
+  constructionDays: number; // 3..18 in-game days of construction/renovation
   dailyRentBase: number; // Base daily commercial rent & utilities in TL
+  unitProductName: string; // e.g. 'Latte / Kahve'
+  unitSalePrice: number; // e.g. 200 TL
+  baseCogsRatio: number; // Direct raw material / COGS ratio (e.g. 0.44 -> total costs ~70-80% incl. rent/payroll/tax)
   baseCapacity: number; // Customer / production capacity
   vaultCapacitySec: number;
   minCompanyLevel: number;
@@ -317,6 +321,11 @@ export interface OwnedBusiness {
   constructionDailyInstallment?: number; // Daily renovation installment cost during construction
   doubleShiftApplied?: boolean; // True once player hired Double Shift Crew (-35% remaining days)
   dailyAccruedGross?: number; // Sales accrued since 00:00 today, settled at midnight 00:00
+  // v1.4.1 Service Quality (1.0..5.0★) & Staff Morale (0..100)
+  serviceQuality?: number; // 1.0 .. 5.0 stars
+  staffMorale?: number; // 0 .. 100
+  qualityInvestmentLevel?: number; // 0 .. 5 training & hygiene investment tier
+  customerTrafficPct?: number; // Derived % customer demand from service quality (20..125)
   // Franchise, Chain & Advertising metadata
   chainBrandName?: string; // Shared brand name across cloned branches (2+ = Zincir Marka)
   chainBranchNumber?: number; // 1, 2, 3...
@@ -462,6 +471,84 @@ export interface LoanRecord {
   defaultInterestAccrued?: number; // Total penalty interest accrued while overdue
   legalWarningSent?: boolean; // Set true once overdueDays >= 15
   status: LoanStatus;
+}
+
+export interface LoanEligibilityCheck {
+  id: string;
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface LoanEligibilityResult {
+  eligible: boolean;
+  reasons: string[];
+  checks: LoanEligibilityCheck[];
+  effectiveMaxLoan: number;
+  effectiveInterestRate: number;
+  requiredCollateral: number;
+}
+
+// --- v1.4.1 Ofisim (Office Tiers, Equipment, Prestige, Personal Assets & Service Quality) ---
+export type OfficeTierId =
+  | 'home_office'
+  | 'plaza_floor'
+  | 'bosphorus_suite'
+  | 'holding_tower';
+
+export interface OfficeTierDef {
+  id: OfficeTierId;
+  level: 1 | 2 | 3 | 4;
+  name: string;
+  subtitle: string;
+  description: string;
+  cost: number;
+  minBrandRecognition: number;
+  basePrestige: number;
+  supplyDiscountRate: number;
+  loanInterestDiscount: number;
+  maxHireableExecutive: 'sube_muduru' | 'bolge_sorumlusu' | 'genel_mudur' | 'ceo';
+  accentColor: string;
+}
+
+export interface OfficeUpgradeDef {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  minOfficeLevel: 1 | 2 | 3 | 4;
+  prestigeBonus: number;
+  supplyDiscountBonus: number;
+  loanInterestDiscountBonus: number;
+  brandBonus: number;
+}
+
+export interface PersonalAssetDef {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  cost: number;
+  prestigeBonus: number;
+  brandBonus: number;
+}
+
+export interface OfficeBenefits {
+  tier: OfficeTierDef;
+  officePrestige: number; // 0 .. 100
+  supplyDiscountRate: number; // 0 .. 0.15
+  loanInterestDiscount: number; // 0 .. 0.05
+  loanLimitMultiplier: number; // 1.0 .. 1.8
+  maxHireableExecutive: 'sube_muduru' | 'bolge_sorumlusu' | 'genel_mudur' | 'ceo';
+}
+
+export interface ServiceQualityReport {
+  stars: number; // 1.0 .. 5.0
+  customerTrafficMultiplier: number; // 0.20 .. 1.25
+  customerTrafficPct: number; // 20 .. 125
+  staffMorale: number; // 0 .. 100
+  statusLabel: string;
+  issues: string[];
 }
 
 // --- v1.3.0 Genel Müdürlük: Muhasebe Departmanı (Level 1+) & Holding CEO ---
@@ -690,6 +777,11 @@ export interface EmpireState {
   // v1.4.0 Midnight 00:00 Day-End Reports & Ledger History
   pendingDayEndReports?: DayEndSummary[];
   dayEndHistory?: DayEndSummary[];
+  // v1.4.1 Brand Recognition (0..100%), Office Tiers, Upgrades & Personal Assets
+  brandRecognition?: number; // 0 .. 100
+  officeTierId?: OfficeTierId;
+  officeUpgradeIds?: string[];
+  personalAssetIds?: string[];
   activeMissions: MissionDef[]; // Self-renewing dynamic mission pool (always 4 active)
   claimedMissionIds: string[];
   completedMissionsCount: number;

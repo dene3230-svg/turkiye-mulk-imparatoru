@@ -7,6 +7,7 @@ import type {
   StockQuote,
 } from '../types/game';
 import {
+  BANK_LICENSE_COST,
   FACTORY_SUPPLY_DISCOUNT,
   SUPERMARKET_CHAIN_DISCOUNT,
   getBlueprintById,
@@ -27,6 +28,7 @@ import {
 import { getChainStatusForBusiness } from './strategyEngine';
 import { calculateHourlyTaxBreakdown } from './corporateEngine';
 import { calculatePortfolioMarketValue } from './stockMarket';
+import { calculateOfficeBenefits, calculatePersonalAssetsValuation } from './officeEngine';
 
 export type AccountingPeriod = 'daily' | 'monthly' | 'annual';
 
@@ -149,25 +151,22 @@ export function calculateAccountingReport(
     const branchHourlyRent = Math.round(calculateDailyRentAndUtilities(biz) / 24);
     hourlyRentAndUtilities += branchHourlyRent;
 
-    const supplyRatio =
-      bp?.category === 'parking'
-        ? 0.05
-        : bp?.category === 'factory'
-        ? 0.16
-        : bp?.category === 'mall' || bp?.category === 'tourism'
-        ? 0.14
-        : 0.22;
+    const supplyRatio = bp?.baseCogsRatio ?? 0.44;
     const supplyGross = underConstruction ? 0 : Math.round(grossHourly * supplyRatio);
 
     const chainStatus = getChainStatusForBusiness(biz, state.businesses);
-    let discountPct = automation.bulkSupplyDiscount + chainStatus.supplyDiscount;
+    const officeBenefits = calculateOfficeBenefits(state);
+    let discountPct =
+      automation.bulkSupplyDiscount +
+      chainStatus.supplyDiscount +
+      officeBenefits.supplyDiscountRate;
     if (hasFactorySupplySynergy(biz, state.businesses)) {
       discountPct += FACTORY_SUPPLY_DISCOUNT;
     }
     if (biz.blueprintId === 'supermarket' && state.supermarketChain) {
       discountPct += SUPERMARKET_CHAIN_DISCOUNT;
     }
-    discountPct = Math.min(0.65, discountPct);
+    discountPct = Math.min(0.68, discountPct);
 
     const discountSaved = Math.round(supplyGross * discountPct);
     const supplyNet = Math.max(0, supplyGross - discountSaved);
@@ -380,9 +379,16 @@ export function buildPeriodAccountingSummary(
   const totalStockAssets = stockQuotes.length
     ? calculatePortfolioMarketValue(state, stockQuotes)
     : (state.stockPortfolio ?? []).reduce((s, h) => s + Math.round(h.shares * h.avgCost), 0);
-  const totalBankAssets = state.ownBank ? Math.round(state.ownBank.poolCapital + 2_000_000) : 0;
+  const totalBankAssets = state.ownBank
+    ? Math.round(state.ownBank.poolCapital + BANK_LICENSE_COST)
+    : 0;
+  const totalPersonalAssets = calculatePersonalAssetsValuation(state);
   const totalAssets =
-    totalCashAssets + totalRealEstateAssets + totalStockAssets + totalBankAssets;
+    totalCashAssets +
+    totalRealEstateAssets +
+    totalStockAssets +
+    totalBankAssets +
+    totalPersonalAssets;
 
   const totalLoanLiabilities = (state.activeLoans ?? [])
     .filter((l) => l.status === 'active' || l.status === 'garnishing')

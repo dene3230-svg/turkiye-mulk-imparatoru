@@ -37,6 +37,7 @@ import type {
   GameSpeed,
   MissionDef,
   NotificationItem,
+  OfficeTierId,
   OtaCheckResult,
   PinLocationInfo,
   ProvinceInfo,
@@ -46,6 +47,8 @@ import type {
   UserProfile,
 } from './types/game';
 import {
+  STARTING_BRAND_RECOGNITION,
+  STARTING_CASH,
   STARTING_CREDIT_SCORE,
   isFactoryType,
   isValidBusinessType,
@@ -127,6 +130,13 @@ import {
   takeLoanFromBank,
   updateOwnBankSettings,
 } from './game/bankingEngine';
+import {
+  buyOfficeUpgrade,
+  buyPersonalAsset,
+  calculateOfficeBenefits,
+  investInBranchQuality,
+  upgradeOfficeTier,
+} from './game/officeEngine';
 import {
   DEFAULT_PROVINCE_PLATE,
   getProvinceByPlate,
@@ -215,6 +225,7 @@ import {
 } from './components/BottomSheetLauncher';
 import { DayEndReportModal } from './components/DayEndReportModal';
 import { DaySimAutoStopModal } from './components/DaySimAutoStopModal';
+import { OfficeModal, type OfficeModalTabId } from './components/OfficeModal';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
 const TUTORIAL_STORAGE_KEY = 'tmi_tutorial_done_v122';
@@ -275,7 +286,7 @@ function finiteOr(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-// Backward-compatible & crash-proof migration for saved games -> v1.4.0-fix state
+// Backward-compatible & crash-proof migration for saved games -> v1.4.1 state
 function migrateSavedEmpire(
   saved: EmpireState | null,
   owner: UserProfile,
@@ -338,6 +349,10 @@ function migrateSavedEmpire(
           constructionDailyInstallment: Math.max(0, finiteOr(legacy.constructionDailyInstallment, 0)),
           doubleShiftApplied: Boolean(legacy.doubleShiftApplied),
           dailyAccruedGross: Math.max(0, finiteOr(legacy.dailyAccruedGross, 0)),
+          serviceQuality: Math.min(5, Math.max(1, finiteOr(legacy.serviceQuality, 3.6))),
+          staffMorale: Math.min(100, Math.max(15, finiteOr(legacy.staffMorale, 74))),
+          qualityInvestmentLevel: Math.max(0, Math.floor(finiteOr(legacy.qualityInvestmentLevel, 0))),
+          customerTrafficPct: Math.min(140, Math.max(15, finiteOr(legacy.customerTrafficPct, 75))),
         };
       });
 
@@ -381,7 +396,7 @@ function migrateSavedEmpire(
 
     const baseMigrated: EmpireState = {
       ...saved,
-      cash: finiteOr(saved.cash, 250_000),
+      cash: finiteOr(saved.cash, STARTING_CASH),
       totalEarnedLifetime: Math.max(0, finiteOr(saved.totalEarnedLifetime, 0)),
       hq: derivedHq,
       businesses: migratedBusinesses,
@@ -432,6 +447,19 @@ function migrateSavedEmpire(
         ? saved.pendingDayEndReports
         : [],
       dayEndHistory: Array.isArray(saved.dayEndHistory) ? saved.dayEndHistory : [],
+      brandRecognition: Math.min(
+        100,
+        Math.max(0, finiteOr(saved.brandRecognition, STARTING_BRAND_RECOGNITION))
+      ),
+      officeTierId:
+        saved.officeTierId === 'home_office' ||
+        saved.officeTierId === 'plaza_floor' ||
+        saved.officeTierId === 'bosphorus_suite' ||
+        saved.officeTierId === 'holding_tower'
+          ? saved.officeTierId
+          : 'home_office',
+      officeUpgradeIds: Array.isArray(saved.officeUpgradeIds) ? saved.officeUpgradeIds : [],
+      personalAssetIds: Array.isArray(saved.personalAssetIds) ? saved.personalAssetIds : [],
       lastSavedAt: finiteOr(saved.lastSavedAt, nowTs),
     };
 
@@ -534,6 +562,8 @@ export default function App() {
   const [bottomSheetGroup, setBottomSheetGroup] = useState<BottomSheetGroup | null>(null);
   const [dayEndModalOpen, setDayEndModalOpen] = useState(false);
   const [daySimAutoStopAlert, setDaySimAutoStopAlert] = useState<DaySimAutoStopAlert | null>(null);
+  const [officeModalOpen, setOfficeModalOpen] = useState(false);
+  const [officeModalTab, setOfficeModalTab] = useState<OfficeModalTabId>('design');
   const [patronChatOpen, setPatronChatOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => !isTutorialCompleted());
 
@@ -548,9 +578,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v140-fix',
-      title: 'Türkiye Mülk İmparatoru v1.4.0-fix',
-      body: 'Mobil cihazlarda açılış ekranı donma ve çökme sorunu giderildi. Güvenli yerel veri kurtarma ve arka plan senkronizasyonu aktif!',
+      id: 'welcome-v141',
+      title: 'Türkiye Mülk İmparatoru v1.4.1',
+      body: 'Gerçekçi Türkiye fiyat ve maliyet marjları, milyarlık banka kurulum şartı, firma tanınırlığı, hizmet kalitesine bağlı müşteri trafiği, sıkı banka kredi kuralları ve Ofisim bölümü eklendi!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -1733,6 +1763,7 @@ export default function App() {
       setBankingModalOpen(false);
       setAccountingModalOpen(false);
       setHubMenuOpen(false);
+      setOfficeModalOpen(false);
       setBottomSheetGroup(null);
       setActiveDrawer(tab === 'portfolio' ? 'portfolio' : null);
       setHrModalOpen(tab === 'hr');
@@ -1760,6 +1791,7 @@ export default function App() {
       setBankingModalOpen(false);
       setAccountingModalOpen(false);
       setHubMenuOpen(false);
+      setOfficeModalOpen(false);
       setLeaderboardModalOpen(false);
 
       switch (actionId) {
@@ -1793,6 +1825,18 @@ export default function App() {
         case 'fin_portfolio':
           setBorsaMode('portfolio');
           setBorsaModalOpen(true);
+          break;
+        case 'office_design':
+          setOfficeModalTab('design');
+          setOfficeModalOpen(true);
+          break;
+        case 'office_phone':
+          setOfficeModalTab('phone');
+          setOfficeModalOpen(true);
+          break;
+        case 'office_assets':
+          setOfficeModalTab('assets');
+          setOfficeModalOpen(true);
           break;
         case 'office_dayend':
           setDayEndModalOpen(true);
@@ -2786,6 +2830,75 @@ export default function App() {
     setTutorialOpen(true);
   };
 
+  const handleUpgradeOfficeTier = (tierId: OfficeTierId) => {
+    const res = upgradeOfficeTier(empire, tierId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Ofis Yükseltme Reddedildi', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    const benefits = calculateOfficeBenefits(res.state);
+    pushNotification(
+      'Yeni Merkez Ofise Taşındınız!',
+      `${benefits.tier.name} aktif. Prestij ${benefits.officePrestige}/100 · Tedarik İndirimi -%${Math.round(
+        benefits.supplyDiscountRate * 100
+      )}.`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleBuyOfficeUpgrade = (upgradeId: string) => {
+    const res = buyOfficeUpgrade(empire, upgradeId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Ofis Donanımı Alınamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    const benefits = calculateOfficeBenefits(res.state);
+    pushNotification(
+      'Ofis Donanımı Kuruldu',
+      `${res.upgrade?.name ?? 'Donanım'} eklendi. Yeni Prestij: ${benefits.officePrestige}/100.`,
+      'milestone',
+      false
+    );
+  };
+
+  const handleBuyPersonalAsset = (assetId: string) => {
+    const res = buyPersonalAsset(empire, assetId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Kişisel Varlık Alınamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Kişisel Varlık Portföyünüze Eklendi',
+      `${res.asset?.name ?? 'Varlık'} satın alındı. Prestij ve banka itibarı arttı.`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleInvestBranchQuality = (businessId: string) => {
+    const res = investInBranchQuality(empire, businessId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Kalite Yatırımı Yapılamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    const updatedBiz = res.state.businesses.find((b) => b.id === businessId);
+    pushNotification(
+      'Hizmet Kalitesi & Eğitim Yatırımı',
+      `${updatedBiz?.customName ?? 'Şube'} için personel eğitimi ve hijyen yatırımı tamamlandı.`,
+      'milestone',
+      false
+    );
+  };
+
   const handleResetGame = () => {
     const fresh = createInitialEmpireState(Date.now(), startingCityPlate);
     setEmpire(fresh);
@@ -2798,6 +2911,7 @@ export default function App() {
     setHrModalOpen(false);
     setHoldingModalOpen(false);
     setRivalsModalOpen(false);
+    setOfficeModalOpen(false);
     setChainCloneDraft(null);
     setPreselectedFranchise(null);
     focusHeadquarters(fresh);
@@ -2806,11 +2920,16 @@ export default function App() {
     }
     pushNotification(
       'İmparatorluk Sıfırlandı',
-      'Yeni bir başlangıç yapıldı. ₺250.000 başlangıç sermayesi ve 1100 kredi puanı hesabınızda.',
+      'Yeni bir başlangıç yapıldı. ₺3.000.000 başlangıç sermayesi ve 1100 kredi puanı hesabınızda.',
       'system',
       false
     );
   };
+
+  const officeBenefits = useMemo(
+    () => calculateOfficeBenefits(empire),
+    [empire.officeTierId, empire.officeUpgradeIds, empire.personalAssetIds]
+  );
 
   const selectedBusiness = useMemo(
     () => empire.businesses.find((b) => b.id === selectedBusinessId) ?? null,
@@ -2924,13 +3043,20 @@ export default function App() {
                 <div className="mt-0.5 flex items-baseline gap-2 whitespace-nowrap">
                   <span
                     data-testid="hud-cash"
-                    className="font-mono-num text-[clamp(12px,1.55vw,15.5px)] font-extrabold leading-none text-slate-900 dark:text-white"
+                    className={`font-mono-num text-[clamp(12px,1.55vw,15.5px)] font-extrabold leading-none ${
+                      empire.cash < 0
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-slate-900 dark:text-white'
+                    }`}
                   >
                     {formatTL(empire.cash)}
                   </span>
                   <span className="font-mono-num text-[clamp(9.5px,1.1vw,11px)] font-semibold leading-none text-slate-500 dark:text-slate-400">
                     Şube {empire.businesses.length}/{companyTier.maxBranches}
-                    <span className="hidden min-[960px]:inline"> · Puan {empire.creditScore}</span>
+                    <span className="hidden min-[960px]:inline">
+                      {' '}
+                      · Tan. %{Math.round(empire.brandRecognition ?? 5)} · Puan {empire.creditScore}
+                    </span>
                   </span>
                   <span
                     data-testid="hud-income"
@@ -3150,6 +3276,7 @@ export default function App() {
                 setBankingModalOpen(false);
                 setAccountingModalOpen(false);
                 setHubMenuOpen(false);
+                setOfficeModalOpen(false);
                 setHoldingModalOpen(false);
                 setLeaderboardModalOpen(false);
                 setSelectedBusinessId(null);
@@ -3167,6 +3294,7 @@ export default function App() {
                 !borsaModalOpen &&
                 !bankingModalOpen &&
                 !accountingModalOpen &&
+                !officeModalOpen &&
                 !hubMenuOpen
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-sm hover:bg-amber-300'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
@@ -3236,6 +3364,7 @@ export default function App() {
                 setBankingModalOpen(false);
                 setAccountingModalOpen(false);
                 setHubMenuOpen(false);
+                setOfficeModalOpen(false);
                 setActiveDrawer((prev) => (prev === 'market' ? null : 'market'));
               }}
               className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
@@ -3265,6 +3394,7 @@ export default function App() {
                 setBankingModalOpen(false);
                 setAccountingModalOpen(false);
                 setHubMenuOpen(false);
+                setOfficeModalOpen(false);
                 setActiveDrawer((prev) => (prev === 'missions' ? null : 'missions'));
               }}
               className={`compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
@@ -3291,7 +3421,7 @@ export default function App() {
                 setBottomSheetGroup((prev) => (prev === 'office' ? null : 'office'));
               }}
               className={`compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                bottomSheetGroup === 'office' || hubMenuOpen || dayEndModalOpen
+                bottomSheetGroup === 'office' || officeModalOpen || hubMenuOpen || dayEndModalOpen
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
@@ -3417,6 +3547,7 @@ export default function App() {
                   onHireDoubleShift={handleHireDoubleShift}
                   onOpenDayEndReport={() => setDayEndModalOpen(true)}
                   onRestock={handleRestockBusiness}
+                  onInvestQuality={handleInvestBranchQuality}
                   onCollect={handleCollectBusiness}
                   onUpgrade={handleUpgradeBusiness}
                   onBoost={handleBoostBusiness}
@@ -3687,7 +3818,37 @@ export default function App() {
             0
           ),
           claimableMissionsCount: claimableMissionCount,
+          officePrestige: officeBenefits.officePrestige,
+          officeTierName: officeBenefits.tier.name,
+          brandRecognition: Math.round(empire.brandRecognition ?? 5),
+          personalAssetsCount: (empire.personalAssetIds ?? []).length,
         }}
+      />
+
+      <OfficeModal
+        open={officeModalOpen}
+        initialTab={officeModalTab}
+        state={empire}
+        companyName={empire.playerIpo?.holdingName ?? companyTier.title}
+        netWorth={netWorth}
+        onUpgradeOfficeTier={handleUpgradeOfficeTier}
+        onBuyOfficeUpgrade={handleBuyOfficeUpgrade}
+        onBuyPersonalAsset={handleBuyPersonalAsset}
+        onQuickNavigate={(target) => {
+          soundEngine.playClick();
+          setOfficeModalOpen(false);
+          if (target === 'banking') {
+            setBankingModalOpen(true);
+          } else if (target === 'hr') {
+            setHrInitialSubView('branches');
+            handleSelectManagementTab('hr');
+          } else if (target === 'accounting') {
+            setAccountingModalOpen(true);
+          } else if (target === 'dayend') {
+            setDayEndModalOpen(true);
+          }
+        }}
+        onClose={() => setOfficeModalOpen(false)}
       />
 
       <DayEndReportModal

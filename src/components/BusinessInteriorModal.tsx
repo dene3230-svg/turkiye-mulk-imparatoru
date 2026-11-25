@@ -264,6 +264,13 @@ const FLOOR_THEMES: Record<
     label: 'CNC DOKUMA & İHRACAT BANDI',
     accent: '#C084FC',
   },
+  enerji_santrali: {
+    floor: '#071C12',
+    grid: 'rgba(34,197,94,0.16)',
+    counter: '#15803D',
+    label: 'YÜKSEK GERİLİM TÜRBİN & ŞEBEKE KONTROLÜ',
+    accent: '#22C55E',
+  },
 };
 
 export function BusinessInteriorModal({

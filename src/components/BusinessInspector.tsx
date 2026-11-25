@@ -21,6 +21,7 @@ import {
   Hammer,
   Zap,
   Clock,
+  Star,
 } from 'lucide-react';
 import type { AdCampaignTierId, EmpireState, OwnedBusiness } from '../types/game';
 import { getBlueprintById } from '../game/catalog';
@@ -47,6 +48,10 @@ import {
   getChainStatusForBusiness,
   isAdCampaignActive,
 } from '../game/strategyEngine';
+import {
+  calculateBranchServiceQuality,
+  calculateQualityInvestmentCost,
+} from '../game/officeEngine';
 
 interface BusinessInspectorProps {
   business: OwnedBusiness;
@@ -57,6 +62,7 @@ interface BusinessInspectorProps {
   onCloneBusiness?: (businessId: string) => void;
   onLaunchAdCampaign?: (businessId: string, tierId: AdCampaignTierId) => void;
   onHireDoubleShift?: (businessId: string) => void;
+  onInvestQuality?: (businessId: string) => void;
   onOpenDayEndReport?: () => void;
   onRestock: (businessId: string) => void;
   onCollect: (businessId: string) => void;
@@ -75,6 +81,7 @@ export function BusinessInspector({
   onCloneBusiness,
   onLaunchAdCampaign,
   onHireDoubleShift,
+  onInvestQuality,
   onOpenDayEndReport,
   onRestock,
   onCollect,
@@ -94,6 +101,13 @@ export function BusinessInspector({
   const currentGameMin = state.gameMinutes ?? 540;
   const chainStatus = getChainStatusForBusiness(business, state.businesses);
   const hasActiveAd = isAdCampaignActive(business.activeAdCampaign, currentGameMin);
+  const serviceQuality = calculateBranchServiceQuality(
+    business,
+    state.cityManagers ?? [],
+    state.businesses
+  );
+  const qualityLv = business.qualityInvestmentLevel ?? 0;
+  const qualityInvestCost = calculateQualityInvestmentCost(business);
 
   const incomePerSec = calculateBusinessIncomePerSec(
     business,
@@ -131,6 +145,8 @@ export function BusinessInspector({
   const doubleShiftCost = calculateDoubleShiftCost(business);
   const dailyRentEstimate = calculateDailyRentAndUtilities(business);
   const dailyAccruedWhole = Math.floor(business.dailyAccruedGross ?? 0);
+  const unitSalePrice = bp?.unitSalePrice ?? 200;
+  const unitEstCost = Math.round(unitSalePrice * Math.min(0.82, (bp?.baseCogsRatio ?? 0.44) + 0.31));
 
   return (
     <aside
@@ -311,6 +327,49 @@ export function BusinessInspector({
           <DoorOpen className="h-4 w-4" />
           <span>{underConstruction ? 'Şantiyeyi İncele (İç Mekan)' : 'İçeri Gir / Yönet (Canlı İç Mekan)'}</span>
         </button>
+
+        {/* Service Quality (1-5★) & Realistic Unit Margin Card (v1.4.1) */}
+        <div
+          data-testid="service-quality-card"
+          className={`rounded-xl border p-2.5 space-y-2 ${
+            serviceQuality.stars >= 3.5
+              ? 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30'
+              : serviceQuality.stars >= 2.5
+              ? 'border-amber-300 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/30'
+              : 'border-rose-300 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/35'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
+              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500 shrink-0" />
+              <span>Hizmet Kalitesi: {serviceQuality.stars.toFixed(1)} ★</span>
+            </span>
+            <span className="font-mono-num text-[11px] font-black text-amber-700 dark:text-amber-300">
+              Trafik %{serviceQuality.customerTrafficPct}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-[10.5px] text-slate-600 dark:text-slate-300">
+            <span>{bp?.unitProductName ?? 'Birim Ürün'}: <strong>{formatTL(unitSalePrice)}</strong></span>
+            <span>Masraf ~<strong>{formatTL(unitEstCost)}</strong> · Moral %{serviceQuality.staffMorale}</span>
+          </div>
+          {serviceQuality.issues.length > 0 && (
+            <div className="text-[10.5px] font-semibold text-rose-700 dark:text-rose-300">
+              Uyarı: {serviceQuality.issues[0]}
+            </div>
+          )}
+          {onInvestQuality && (
+            <button
+              type="button"
+              data-testid="invest-quality-btn"
+              disabled={state.cash < qualityInvestCost}
+              onClick={() => onInvestQuality(business.id)}
+              className="flex min-h-[34px] w-full items-center justify-between gap-2 rounded-lg border border-amber-400/70 bg-amber-500/15 px-2.5 text-[11px] font-bold text-amber-900 hover:bg-amber-500/25 disabled:opacity-45 dark:text-amber-200"
+            >
+              <span>Kalite & Eğitim Yatırımı (Sv.{qualityLv}/5)</span>
+              <span className="font-mono-num">{formatTL(qualityInvestCost, true)}</span>
+            </button>
+          )}
+        </div>
 
         {/* Live Metrics */}
         <div className="grid grid-cols-2 gap-2">

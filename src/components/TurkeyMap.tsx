@@ -67,6 +67,7 @@ const TYPE_GLYPHS: Record<BusinessTypeId, string> = {
   gida_fabrikasi: '🏭',
   elektronik_fabrikasi: '⚙️',
   tekstil_fabrikasi: '🧵',
+  enerji_santrali: '⚡',
 };
 
 interface MapPinItem {

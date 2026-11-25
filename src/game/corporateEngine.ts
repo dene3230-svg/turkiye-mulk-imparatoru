@@ -14,9 +14,10 @@ import { TURKEY_PROVINCES, resolvePinLocation } from './provinces81';
 import { payMonthlyLoanInstallment } from './bankingEngine';
 import { hireCandidateFromPool } from './hrEngine';
 import { launchBusinessAdCampaign } from './strategyEngine';
+import { canOfficeHireRole } from './officeEngine';
 
 export const HOLDING_MIN_LEVEL = 5;
-export const HOLDING_MIN_NET_WORTH = 5_500_000;
+export const HOLDING_MIN_NET_WORTH = 120_000_000;
 
 export function isHoldingStageUnlocked(companyLevel: number, netWorth: number): boolean {
   return companyLevel >= HOLDING_MIN_LEVEL || netWorth >= HOLDING_MIN_NET_WORTH;
@@ -42,19 +43,19 @@ export function getProgressiveTaxRates(
   branchCount: number,
   netWorth = 0
 ): TaxRatesBreakdown {
-  if (branchCount <= 2 && netWorth < 1_500_000) {
+  if (branchCount <= 2 && netWorth < 12_000_000) {
     return {
       stageIndex: 0,
       stageLabel: 'Genç Girişimci Teşviki (1–2 Şube)',
-      kdvRate: 0.08,
-      sgkRate: 0.12, // Muhtasar / Stopaj (Maaş & Kira Stopajı)
-      corporateRate: 0.15, // Kurumlar / Gelir Vergisi teşvikli
-      municipalRate: 0.012, // Çevre Temizlik & İlan Reklam
+      kdvRate: 0.1,
+      sgkRate: 0.14, // Muhtasar / Stopaj (Maaş & Kira Stopajı)
+      corporateRate: 0.18, // Kurumlar / Gelir Vergisi teşvikli
+      municipalRate: 0.015, // Çevre Temizlik & İlan Reklam
       incentiveNote:
         'İlk 1–2 şubede Genç Girişimci KDV, Muhtasar/Stopaj ve Kurumlar Vergisi teşviki uygulanır.',
     };
   }
-  if (branchCount <= 5 && netWorth < 3_500_000) {
+  if (branchCount <= 5 && netWorth < 45_000_000) {
     return {
       stageIndex: 1,
       stageLabel: 'Büyüyen KOBİ Kademesi (3–5 Şube)',
@@ -432,7 +433,15 @@ export function hireCeo(
     return {
       state,
       ok: false,
-      error: `Profesyonel CEO atamak için Holding seviyesine (Sv.${HOLDING_MIN_LEVEL} · ₺5,5 Mln net değer) ulaşmalısınız.`,
+      error: `Profesyonel CEO atamak için Holding seviyesine (Sv.${HOLDING_MIN_LEVEL} · ₺120 Mn net değer) ulaşmalısınız.`,
+    };
+  }
+  const officeCheck = canOfficeHireRole(state, 'ceo');
+  if (!officeCheck.allowed) {
+    return {
+      state,
+      ok: false,
+      error: `Profesyonel CEO istihdam etmek için Ofisim bölümünden "${officeCheck.requiredTierName}" seviyesine yükselmelisiniz.`,
     };
   }
   const pool = state.ceoPool && state.ceoPool.length > 0 ? state.ceoPool : generateCeoPool(now);

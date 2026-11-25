@@ -13,13 +13,19 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { BankRecord, EmpireState, ProvinceInfo } from '../types/game';
-import { BANK_MIN_NET_WORTH } from '../game/catalog';
+import {
+  BANK_LICENSE_COST,
+  BANK_MIN_NET_WORTH,
+  BANK_MIN_POOL_CAPITAL,
+} from '../game/catalog';
 import {
   CREDIT_TIERS,
   calculateEffectiveInterestRate,
   calculateRequiredCollateral,
+  evaluateLoanEligibility,
   getCreditTier,
 } from '../game/bankingEngine';
+import { calculateOfficeBenefits } from '../game/officeEngine';
 import { getCurrentGameDay } from '../game/corporateEngine';
 import { calculateBusinessValuation, formatTL } from '../game/economy';
 import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
@@ -64,7 +70,7 @@ interface BankingModalProps {
 }
 
 const BANK_COLORS = ['#0F766E', '#1D4ED8', '#B45309', '#7C3AED', '#BE123C', '#0891B2'];
-const MIN_LOAN_AMOUNT = 25_000;
+const MIN_LOAN_AMOUNT = 100_000;
 const TERM_OPTIONS = [3, 6, 12];
 
 export function BankingModal({
@@ -86,25 +92,26 @@ export function BankingModal({
 }: BankingModalProps) {
   const [subTab, setSubTab] = useState<'loans' | 'own-bank'>('loans');
   const [selectedBankId, setSelectedBankId] = useState<string>(allBanks[0]?.id ?? '');
-  const [loanAmount, setLoanAmount] = useState<number>(100_000);
+  const [loanAmount, setLoanAmount] = useState<number>(500_000);
   const [termMonths, setTermMonths] = useState<number>(6);
   const [collateralBizId, setCollateralBizId] = useState<string>(
     state.businesses.find((b) => !b.pledgedLoanId)?.id ?? ''
   );
 
-  // Own Bank creation / management form
+  // Own Bank creation / management form (multi-billion TL scale)
   const [bankName, setBankName] = useState('');
   const [brandColor, setBrandColor] = useState(BANK_COLORS[2]);
-  const [poolCapital, setPoolCapital] = useState(5_000_000);
-  const [baseRatePct, setBaseRatePct] = useState(12);
-  const [minScore, setMinScore] = useState(1000);
-  const [addCapital, setAddCapital] = useState(1_000_000);
+  const [poolCapital, setPoolCapital] = useState(BANK_MIN_POOL_CAPITAL);
+  const [baseRatePct, setBaseRatePct] = useState(14);
+  const [minScore, setMinScore] = useState(1050);
+  const [addCapital, setAddCapital] = useState(250_000_000);
 
   if (!open) return null;
 
   const currentGameDay = getCurrentGameDay(state.gameMinutes);
   const creditScore = state.creditScore ?? 1100;
   const tier = getCreditTier(creditScore);
+  const officeBenefits = calculateOfficeBenefits(state);
   const scorePct = Math.min(100, Math.max(0, (creditScore / 1900) * 100));
 
   const selectedBank = allBanks.find((b) => b.id === selectedBankId) ?? allBanks[0];
@@ -118,17 +125,33 @@ export function BankingModal({
   const maxLoanForPlayer = Math.max(
     MIN_LOAN_AMOUNT,
     Math.min(
-      tier.maxLoanAmount > 0 ? tier.maxLoanAmount : MIN_LOAN_AMOUNT,
+      tier.maxLoanAmount > 0
+        ? Math.round(tier.maxLoanAmount * officeBenefits.loanLimitMultiplier)
+        : MIN_LOAN_AMOUNT,
       selectedBank?.poolCapital ?? tier.maxLoanAmount
     )
   );
   const sliderStep =
-    maxLoanForPlayer >= 10_000_000 ? 100_000 : maxLoanForPlayer >= 2_000_000 ? 50_000 : 25_000;
+    maxLoanForPlayer >= 50_000_000 ? 500_000 : maxLoanForPlayer >= 5_000_000 ? 100_000 : 50_000;
   const clampedLoanAmount = Math.min(maxLoanForPlayer, Math.max(MIN_LOAN_AMOUNT, loanAmount));
 
+  const eligibility = selectedBank
+    ? evaluateLoanEligibility(
+        state,
+        selectedBank,
+        clampedLoanAmount,
+        chosenBiz,
+        chosenBizVal
+      )
+    : null;
+
   const effRate = selectedBank
-    ? calculateEffectiveInterestRate(selectedBank.baseInterestRate, creditScore)
-    : 0.12;
+    ? calculateEffectiveInterestRate(
+        selectedBank.baseInterestRate,
+        creditScore,
+        officeBenefits.loanInterestDiscount
+      )
+    : 0.14;
   const totalInterest = Math.round(clampedLoanAmount * effRate);
   const totalRepayment = clampedLoanAmount + totalInterest;
   const estimatedMonthlyInstallment = Math.ceil(totalRepayment / termMonths);
@@ -141,14 +164,7 @@ export function BankingModal({
   const canOpenOwnBank = Boolean(state.ownBank) || netWorth >= BANK_MIN_NET_WORTH;
   const effectiveSubTab = subTab === 'own-bank' && !canOpenOwnBank ? 'loans' : subTab;
 
-  const canBorrow =
-    Boolean(selectedBank) &&
-    tier.maxLoanAmount > 0 &&
-    creditScore >= (selectedBank?.minCreditScore ?? 700) &&
-    clampedLoanAmount >= MIN_LOAN_AMOUNT &&
-    clampedLoanAmount <= Math.min(tier.maxLoanAmount, selectedBank?.poolCapital ?? 0) &&
-    Boolean(chosenBiz) &&
-    chosenBizVal >= reqCollateral;
+  const canBorrow = Boolean(selectedBank) && Boolean(eligibility?.eligible);
 
   const topTabs: MobileModalTab[] = [
     ...(onSwitchToAccounting
@@ -204,7 +220,7 @@ export function BankingModal({
                 disabled={!canOpenOwnBank}
                 title={
                   !canOpenOwnBank
-                    ? `Kendi bankanızı kurmak için ₺25.000.000 net değer gerekir (Mevcut: ${formatTL(netWorth, true)})`
+                    ? `BDDK şartı: Kendi bankanızı kurmak için ₺5 Milyar net değer gerekir (Mevcut: ${formatTL(netWorth, true)})`
                     : undefined
                 }
                 onClick={() => canOpenOwnBank && setSubTab('own-bank')}
@@ -220,7 +236,7 @@ export function BankingModal({
                 <span>
                   {state.ownBank
                     ? `Bankam: ${state.ownBank.bankName}`
-                    : 'Kendi Bankanı Kur (₺25 Mln)'}
+                    : 'Kendi Bankanı Kur (₺5 Milyar)'}
                 </span>
               </button>
             </div>
@@ -314,10 +330,63 @@ export function BankingModal({
                 </span>
               </div>
 
+              {/* Strict Bank Credit Qualification Audit (v1.4.1) */}
+              {eligibility && (
+                <div
+                  data-testid="loan-eligibility-audit"
+                  className={`rounded-xl border p-2.5 space-y-1.5 text-xs ${
+                    eligibility.eligible
+                      ? 'border-emerald-500/45 bg-emerald-950/25'
+                      : 'border-rose-500/45 bg-rose-950/25'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 font-bold">
+                    <span
+                      className={
+                        eligibility.eligible ? 'text-emerald-300' : 'text-rose-300'
+                      }
+                    >
+                      {eligibility.eligible
+                        ? 'Banka Kredi Denetimi Onaylandı'
+                        : 'Kredi Başvurusu Şu An Reddedilir (Eksik Kriterler)'}
+                    </span>
+                    <span className="font-mono-num text-[11px] text-slate-300">
+                      Ofis İndirimi: -%{(officeBenefits.loanInterestDiscount * 100).toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {eligibility.checks.map((chk) => (
+                      <div
+                        key={chk.id}
+                        className={`flex items-start gap-1.5 rounded-lg px-2 py-1 text-[11px] ${
+                          chk.passed
+                            ? 'bg-emerald-500/10 text-emerald-200'
+                            : 'bg-rose-500/15 text-rose-200'
+                        }`}
+                      >
+                        {chk.passed ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400 mt-0.5" />
+                        ) : (
+                          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-rose-400 mt-0.5" />
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-bold leading-tight">{chk.label}</div>
+                          <div className="text-[10px] opacity-90 leading-snug">{chk.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Bank Selector List */}
               <div className="grid grid-cols-1 gap-2">
                 {allBanks.map((bank) => {
-                  const rate = calculateEffectiveInterestRate(bank.baseInterestRate, creditScore);
+                  const rate = calculateEffectiveInterestRate(
+                    bank.baseInterestRate,
+                    creditScore,
+                    officeBenefits.loanInterestDiscount
+                  );
                   const isSel = selectedBank?.id === bank.id;
                   const scoreOk = creditScore >= bank.minCreditScore;
                   return (
@@ -526,15 +595,9 @@ export function BankingModal({
                   className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-amber-300/80 bg-amber-400 px-4 text-sm font-black text-slate-950 shadow-lg shadow-amber-500/20 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none"
                 >
                   <Coins className="h-4 w-4 shrink-0" />
-                  <span>
-                    {tier.maxLoanAmount <= 0
-                      ? 'Kara Liste — Kredi Kapalı'
-                      : selectedBank && creditScore < selectedBank.minCreditScore
-                      ? `Min. ${selectedBank.minCreditScore} Kredi Puanı Gerekir`
-                      : !chosenBiz
-                      ? 'Krediyi Onayla ve Çek (Önce İşletme Kurun)'
-                      : chosenBizVal < reqCollateral
-                      ? `Teminat Yetersiz (Gerekli: ${formatTL(reqCollateral, true)})`
+                  <span className="truncate">
+                    {!eligibility?.eligible && eligibility?.reasons[0]
+                      ? `Reddedildi: ${eligibility.reasons[0]}`
                       : `Krediyi Onayla · ${formatTL(clampedLoanAmount)}`}
                   </span>
                 </button>
@@ -771,12 +834,11 @@ export function BankingModal({
             </button>
           </section>
         ) : (
-          /* Create Own Bank Form (Only reachable when netWorth >= 25M) */
+          /* Create Own Bank Form (Only reachable when netWorth >= ₺5 Milyar) */
           <section className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-4 space-y-3">
-            <h3 className="text-sm font-black text-white">Kendi Bankanı Kur (BDDK Lisansı)</h3>
+            <h3 className="text-sm font-black text-white">Kendi Bankanı Kur (BDDK Milyarlık Lisans)</h3>
             <p className="text-xs text-slate-300">
-              Holdinginizin net değeri ₺25.000.000 eşiğini geçti. Kendi bankanızı kurarak faiz ve
-              puan kurallarını belirleyip diğer oyunculara kredi kullandırabilirsiniz.
+              Holdinginizin net değeri ₺5 Milyar BDDK eşiğini geçti. ₺1 Milyar lisans + en az ₺2 Milyar kredi havuzu ile kendi bankanızı kurup diğer şirketlere ticari kredi kullandırabilirsiniz.
             </p>
 
             <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
@@ -826,8 +888,8 @@ export function BankingModal({
                 </label>
                 <input
                   type="number"
-                  min={1000000}
-                  step={500000}
+                  min={BANK_MIN_POOL_CAPITAL}
+                  step={250000000}
                   value={poolCapital}
                   onChange={(e) => setPoolCapital(Number(e.target.value))}
                   className="mt-1 min-h-[42px] w-full rounded-lg border border-slate-500/70 bg-slate-950 px-3 font-mono-num text-sm text-white"
@@ -866,7 +928,10 @@ export function BankingModal({
 
             <button
               type="button"
-              disabled={bankName.trim().length < 3 || state.cash < poolCapital + 2_000_000}
+              disabled={
+                bankName.trim().length < 3 ||
+                state.cash < Math.max(BANK_MIN_POOL_CAPITAL, poolCapital) + BANK_LICENSE_COST
+              }
               onClick={() =>
                 onCreateBank({
                   bankName: bankName.trim(),
@@ -876,14 +941,14 @@ export function BankingModal({
                   hqCityName: activeProvince.name,
                   hqLat: activeProvince.lat,
                   hqLng: activeProvince.lng,
-                  initialPoolCapital: poolCapital,
+                  initialPoolCapital: Math.max(BANK_MIN_POOL_CAPITAL, poolCapital),
                   baseInterestRate: baseRatePct / 100,
                   minCreditScore: minScore,
                 })
               }
               className="min-h-[46px] w-full rounded-lg border border-amber-300/80 bg-amber-400 px-4 text-sm font-black text-slate-950 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
             >
-              Bankayı Kur · Lisans (₺2 Mn) + Havuz ({formatTL(poolCapital, true)})
+              Bankayı Kur · Lisans (₺1 Mr) + Havuz ({formatTL(Math.max(BANK_MIN_POOL_CAPITAL, poolCapital), true)})
             </button>
           </section>
         )}

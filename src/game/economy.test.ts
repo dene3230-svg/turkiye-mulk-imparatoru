@@ -1,10 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BANK_LICENSE_COST,
+  BANK_MIN_NET_WORTH,
+  BANK_MIN_POOL_CAPITAL,
   BUSINESS_BLUEPRINTS,
   COMPANY_TIERS,
+  IPO_MIN_NET_WORTH,
   MIN_BUSINESS_DISTANCE_METERS,
+  STARTING_BRAND_RECOGNITION,
+  STARTING_CASH,
   STARTING_CREDIT_SCORE,
+  getBlueprintById,
 } from './catalog.ts';
 import {
   GAME_MINUTES_PER_REAL_SEC,
@@ -86,16 +93,32 @@ import {
   sellStockShares,
 } from './stockMarket.ts';
 import {
+  BANK_MIN_BRAND_RECOGNITION,
+  BANK_MIN_OFFICE_PRESTIGE,
+  BANK_MIN_OPERATING_DAYS,
   DEFAULT_SYSTEM_BANKS,
   calculateEffectiveInterestRate,
   calculateRequiredCollateral,
   createPlayerBank,
   enforceOverdueLoans,
+  evaluateLoanEligibility,
   getCreditTier,
   payMonthlyLoanInstallment,
   repayLoan,
   takeLoanFromBank,
 } from './bankingEngine.ts';
+import {
+  OFFICE_TIERS,
+  OFFICE_UPGRADES,
+  PERSONAL_ASSETS,
+  buyOfficeUpgrade,
+  buyPersonalAsset,
+  calculateBranchServiceQuality,
+  calculateOfficeBenefits,
+  canOfficeHireRole,
+  investInBranchQuality,
+  upgradeOfficeTier,
+} from './officeEngine.ts';
 import {
   HOLDING_MIN_LEVEL,
   HOLDING_MIN_NET_WORTH,
@@ -152,6 +175,39 @@ function openAllBranches(state: EmpireState): EmpireState {
   };
 }
 
+/** Test helper: creates a bank-qualified established company state (Day 20+, Brand >= 25%, Plaza Office, positive day-end history). */
+function makeBankQualifiedState(state: EmpireState): EmpireState {
+  return {
+    ...state,
+    gameMinutes: Math.max(state.gameMinutes ?? 540, 20 * 1440 + 540),
+    brandRecognition: Math.max(state.brandRecognition ?? 5, 25),
+    officeTierId: state.officeTierId === 'home_office' ? 'plaza_floor' : (state.officeTierId ?? 'plaza_floor'),
+    dayEndHistory:
+      (state.dayEndHistory?.length ?? 0) > 0
+        ? state.dayEndHistory
+        : [
+            {
+              id: 'hist-seed-1',
+              completedDay: 19,
+              month: 1,
+              dayOfMonth: 19,
+              dailyGrossRevenue: 120_000,
+              dailySupplyCost: 48_000,
+              dailyUtilitiesAndRent: 22_000,
+              dailySalariesPaid: 18_000,
+              dailyNetCashFlow: 32_000,
+              manualCollectibleNet: 0,
+              autoSettledNet: 32_000,
+              creditScoreDelta: 5,
+              weeklyDividendPaid: 0,
+              monthlyClosing: null,
+              branchLines: [],
+              collected: true,
+            },
+          ],
+  };
+}
+
 test('all 81 Turkish provinces (01 Adana - 81 Düzce) and 7 regions are defined completely', () => {
   assert.equal(TURKEY_PROVINCES.length, 81);
   assert.equal(GEOGRAPHIC_REGIONS.length, 7);
@@ -161,9 +217,9 @@ test('all 81 Turkish provinces (01 Adana - 81 Düzce) and 7 regions are defined 
   assert.equal(getProvinceByPlate(81).name, 'Düzce');
 });
 
-test('all 13 business sectors exist including Parking and 3 Factories', () => {
+test('all 14 business sectors exist including Parking, 3 Factories & Multi-Billion Energy Plant', () => {
   const ids = BUSINESS_BLUEPRINTS.map((b) => b.id);
-  assert.equal(ids.length, 13);
+  assert.equal(ids.length, 14);
   for (const expected of [
     'kafe',
     'internet_kafe',
@@ -178,6 +234,7 @@ test('all 13 business sectors exist including Parking and 3 Factories', () => {
     'gida_fabrikasi',
     'elektronik_fabrikasi',
     'tekstil_fabrikasi',
+    'enerji_santrali',
   ]) {
     assert.ok(ids.includes(expected as typeof ids[number]), `Missing sector ${expected}`);
   }
@@ -207,7 +264,7 @@ test('75m minimum distance shield and starter 3-branch quota are strictly enforc
   assert.ok((distTooClose.nearestMeters ?? 999) < MIN_BUSINESS_DISTANCE_METERS);
 
   let state = createInitialEmpireState(1000);
-  state.cash = 280_000;
+  state.cash = 5_000_000;
   const owner = { id: 'p1', name: 'Patron' };
   const p1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067), 'Kafe 1', owner, [], 1000);
   assert.equal(p1.ok, true);
@@ -218,7 +275,8 @@ test('75m minimum distance shield and starter 3-branch quota are strictly enforc
 test('5-tier HR candidate pool & automation (Çalışan -> Müdür Yrd -> Şube Müd -> Bölge Sor 4x -> Genel Müdür +20%)', () => {
   const now = 50_000;
   let state = createInitialEmpireState(now);
-  state.cash = 5_000_000;
+  state.cash = 25_000_000;
+  state.officeTierId = 'bosphorus_suite'; // Unlocks Bölge Sorumlusu & Genel Müdür
   const owner = { id: 'p1', name: 'Patron' };
 
   // Build 2 cafes in Istanbul (plate 34)
@@ -277,7 +335,7 @@ test('5-tier HR candidate pool & automation (Çalışan -> Müdür Yrd -> Şube 
 test('Parking 250m (+15% cap), Factory (%35 supply), Supermarket Chain (3+), and Franchise (+35%) synergies work', () => {
   const now = 60_000;
   let state = createInitialEmpireState(now);
-  state.cash = 15_000_000;
+  state.cash = 500_000_000;
   const owner = { id: 'p1', name: 'Holding' };
 
   // Establish Kafe + nearby Otopark within 120m (< 250m)
@@ -346,7 +404,7 @@ test('Parking 250m (+15% cap), Factory (%35 supply), Supermarket Chain (3+), and
   assert.equal(franchiseBranch.business?.franchiseId, seedBrand.id);
 });
 
-test('BIST Devleri (8 exact tickers) and Player Holding IPO (>=10M & 1 factory or 5 businesses) work', () => {
+test('BIST Devleri (8 exact tickers) and Player Holding IPO (>=250M & 1 factory or 5 businesses) work', () => {
   const tickers = INITIAL_BIST_QUOTES.map((q) => q.ticker);
   assert.deepEqual(tickers, ['THYL', 'ASLS', 'BIMX', 'TOGR', 'TUPR', 'GRNT', 'ERCL', 'TRKC']);
 
@@ -361,11 +419,11 @@ test('BIST Devleri (8 exact tickers) and Player Holding IPO (>=10M & 1 factory o
   assert.equal(sell.ok, true);
   assert.equal(sell.state.stockPortfolio.length, 0);
 
-  // Ineligible at start (< 10M)
+  // Ineligible at start (< 250M)
   assert.equal(checkIpoEligibility(state, calculateNetWorth(state)).eligible, false);
 
-  // Give 12M cash + 1 factory -> eligible for IPO with 4-letter ticker FUGM!
-  state.cash = 12_000_000;
+  // Give 300M cash + 1 factory -> eligible for IPO with 4-letter ticker FUGM!
+  state.cash = IPO_MIN_NET_WORTH + 100_000_000;
   const fac = purchaseBusiness(
     state,
     'gida_fabrikasi',
@@ -391,29 +449,29 @@ test('BIST Devleri (8 exact tickers) and Player Holding IPO (>=10M & 1 factory o
   assert.ok((ipo.state.playerIpo?.raisedCapital ?? 0) > 0);
 });
 
-test('Banking: 0-1900 Credit Score 5 tiers, Player Bank (>=25M), Loans, Repayment, Garnishment & Automatic Seizure', () => {
+test('Banking: 0-1900 Credit Score 5 tiers, Multi-Billion Player Bank (>=5B), Loans, Repayment & Automatic Seizure', () => {
   assert.equal(STARTING_CREDIT_SCORE, 1100);
   assert.equal(getCreditTier(500).key, 'blacklist');
   assert.equal(getCreditTier(500).maxLoanAmount, 0);
   assert.equal(getCreditTier(850).key, 'high_risk');
-  assert.equal(getCreditTier(850).maxLoanAmount, 250_000);
-  assert.equal(getCreditTier(850).collateralMultiplier, 1.5);
+  assert.equal(getCreditTier(850).maxLoanAmount, 1_500_000);
+  assert.equal(getCreditTier(850).collateralMultiplier, 1.6);
   assert.equal(getCreditTier(1100).key, 'standard');
-  assert.equal(getCreditTier(1100).maxLoanAmount, 1_500_000);
+  assert.equal(getCreditTier(1100).maxLoanAmount, 12_000_000);
   assert.equal(getCreditTier(1450).key, 'good_boss');
-  assert.equal(getCreditTier(1450).maxLoanAmount, 7_500_000);
+  assert.equal(getCreditTier(1450).maxLoanAmount, 75_000_000);
   assert.equal(getCreditTier(1750).key, 'vip_holding');
-  assert.equal(getCreditTier(1750).maxLoanAmount, 50_000_000);
+  assert.equal(getCreditTier(1750).maxLoanAmount, 500_000_000);
 
-  // Rate spread check: base 10% -> VIP gets 7% (-3%), High Risk gets 22% (+12%)
-  assert.equal(calculateEffectiveInterestRate(0.1, 1750), 0.07);
-  assert.equal(calculateEffectiveInterestRate(0.1, 850), 0.22);
-  assert.equal(calculateRequiredCollateral(100_000, 1100), 120_000);
+  // Rate spread check: base 10% -> VIP gets 7.5% (-2.5%), High Risk gets 24% (+14%)
+  assert.equal(calculateEffectiveInterestRate(0.1, 1750), 0.075);
+  assert.equal(calculateEffectiveInterestRate(0.1, 850), 0.24);
+  assert.equal(calculateRequiredCollateral(100_000, 1100), 125_000);
 
-  // Create business & take collateralized loan
+  // Create business & take collateralized loan (on qualified established firm)
   const t0 = 100_000;
-  let state = createInitialEmpireState(t0);
-  state.cash = 600_000;
+  let state = makeBankQualifiedState(createInitialEmpireState(t0));
+  state.cash = 10_000_000;
   const bizRes = purchaseBusiness(
     state,
     'internet_kafe',
@@ -428,9 +486,9 @@ test('Banking: 0-1900 Credit Score 5 tiers, Player Bank (>=25M), Loans, Repaymen
   const loanRes = takeLoanFromBank(
     bizRes.state,
     bank,
-    100_000,
+    1_000_000,
     bizRes.business!,
-    200_000,
+    2_500_000,
     { id: 'u1', name: 'Patron' },
     180,
     t0
@@ -447,9 +505,9 @@ test('Banking: 0-1900 Credit Score 5 tiers, Player Bank (>=25M), Loans, Repaymen
   const loanRes2 = takeLoanFromBank(
     repaid.state,
     bank,
-    100_000,
+    1_000_000,
     repaid.state.businesses[0],
-    200_000,
+    2_500_000,
     { id: 'u1', name: 'Patron' },
     60,
     t0 + 40_000
@@ -464,27 +522,27 @@ test('Banking: 0-1900 Credit Score 5 tiers, Player Bank (>=25M), Loans, Repaymen
   assert.equal(pastSeizure.state.businesses.length, 0);
   assert.equal(pastSeizure.state.activeLoans[0].status, 'seized');
 
-  // Player bank creation requires >= 25M
+  // Player bank creation requires >= ₺5 Milyar net worth + ₺1 Mr license + ₺2 Mr min pool!
   const bankFail = createPlayerBank(
-    createInitialEmpireState(),
+    { ...createInitialEmpireState(), cash: 500_000_000 },
     {
-      bankName: 'Test Bank',
+      bankName: 'Küçük Bank',
       brandColor: '#000',
       emblem: '🏦',
       hqCityPlate: 34,
       hqCityName: 'İstanbul',
       hqLat: 41.04,
       hqLng: 29.0,
-      initialPoolCapital: 5_000_000,
+      initialPoolCapital: 2_000_000_000,
       baseInterestRate: 0.12,
       minCreditScore: 900,
     },
-    1_000_000,
+    500_000_000,
     { id: 'u1', name: 'Patron' }
   );
   assert.equal(bankFail.ok, false);
 
-  const richState = { ...createInitialEmpireState(), cash: 30_000_000 };
+  const richState = { ...createInitialEmpireState(), cash: 6_000_000_000 };
   const bankOk = createPlayerBank(
     richState,
     {
@@ -495,21 +553,22 @@ test('Banking: 0-1900 Credit Score 5 tiers, Player Bank (>=25M), Loans, Repaymen
       hqCityName: 'İstanbul',
       hqLat: 41.04,
       hqLng: 29.0,
-      initialPoolCapital: 5_000_000,
+      initialPoolCapital: BANK_MIN_POOL_CAPITAL,
       baseInterestRate: 0.1,
       minCreditScore: 1000,
     },
-    30_000_000,
+    6_000_000_000,
     { id: 'u1', name: 'Patron' }
   );
   assert.equal(bankOk.ok, true);
   assert.equal(bankOk.state.ownBank?.bankName, 'Boğaziçi Holding Bankası');
+  assert.equal(bankOk.state.cash, 6_000_000_000 - BANK_LICENSE_COST - BANK_MIN_POOL_CAPITAL);
 });
 
-test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
+test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   const now = 200_000;
   let state = createInitialEmpireState(now);
-  state.cash = 35_000_000;
+  state.cash = 1_500_000_000;
   const owner = { id: 'p1', name: 'Holding' };
   const kafe = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Kafe', owner, [], now);
   const avm = purchaseBusiness(kafe.state, 'avm', landPin(41.06, 29.02, 34), 'AVM', owner, [], now);
@@ -535,13 +594,13 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.4.0-fix');
+  assert.equal(APP_VERSION, '1.4.1');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
   assert.equal(compareSemver('1.4.0-fix', '1.4.1'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix2'), 1);
-  assert.ok(getCompanyTier(25_000_000).level >= 7);
+  assert.ok(getCompanyTier(BANK_MIN_NET_WORTH).level >= 7);
 });
 
 test('v1.3.0 Accelerated Time & Calendar controls: pause freezes clock/income, 1x/2x/4x scale accurately, formatGameClock shows Gün/Ay/HH:MM', () => {
@@ -590,7 +649,8 @@ test('v1.3.0 Accelerated Time & Calendar controls: pause freezes clock/income, 1
 test('v1.2.6 Auto-Collect Revenue: Şube Müdürü, Bölge Sorumlusu & Genel Müdür all auto-collect hourly, Müdür Yrd. does NOT', () => {
   const now = 400_000;
   let state = createInitialEmpireState(now);
-  state.cash = 10_000_000;
+  state.cash = 35_000_000;
+  state.officeTierId = 'plaza_floor'; // Unlocks Bölge Sorumlusu
   const owner = { id: 'p1', name: 'Patron' };
 
   // Build 2 cafes in Istanbul (34), 1 in Ankara (6), 1 in Izmir (35)
@@ -652,7 +712,7 @@ test('v1.2.6 Auto-Collect Revenue: Şube Müdürü, Bölge Sorumlusu & Genel Mü
 test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply savings, net profit & margin', () => {
   const now = 500_000;
   let state = createInitialEmpireState(now);
-  state.cash = 10_000_000;
+  state.cash = 150_000_000;
   const owner = { id: 'p1', name: 'Holding' };
 
   const kafe = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Merkez Kafe', owner, [], now);
@@ -863,7 +923,7 @@ test('v1.2.7 Headquarters (HQ) city and first business coordinates persist perma
 
   // Starting a new game in İzmir focuses İzmir by default
   let state = createInitialEmpireState(now, 35);
-  state.cash = 1_000_000;
+  state.cash = 10_000_000;
   assert.equal(state.hq?.cityPlate, 35);
   assert.equal(state.hq?.cityName, 'İzmir');
   const initialFocus = resolveInitialFocusTarget(state);
@@ -911,7 +971,7 @@ test('v1.2.7 Headquarters (HQ) city and first business coordinates persist perma
 test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supply discount, revenue boost & executive unlock', () => {
   const now = 950_000;
   let state = createInitialEmpireState(now, 34);
-  state.cash = 5_000_000;
+  state.cash = 10_000_000;
   const owner = { id: 'p1', name: 'Patron' };
 
   const first = purchaseBusiness(
@@ -981,17 +1041,24 @@ test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supp
   const accounting = calculateAccountingReport(state, [], now + 50);
   assert.ok(accounting.hourlySupplyDiscountSaved > 0, 'Zincir Marka supply discount must appear in accounting');
 
-  // Even though Istanbul only has 1 physical branch, belonging to a Zincir Marka unlocks Bölge Sorumlusu!
+  // Even though Istanbul only has 1 physical branch, belonging to a Zincir Marka unlocks Bölge Sorumlusu (with Plaza Office)!
   const pool = generateCandidatePool(20261, 'kafe');
   const rm = pool.find((c) => c.role === 'bolge_sorumlusu')!;
-  const hireRm = hireCandidateFromPool({ ...state, candidatePool: pool }, rm.id, null, 34, now + 100);
+  const hireRm = hireCandidateFromPool(
+    { ...state, officeTierId: 'plaza_floor', candidatePool: pool },
+    rm.id,
+    null,
+    34,
+    now + 100
+  );
   assert.equal(hireRm.ok, true);
 });
 
 test('v1.2.8 3-Tier Ad Campaigns boost income/capacity & Genel Müdür Auto-Ads renews expired campaigns automatically', () => {
   const now = 1_000_000;
   let state = createInitialEmpireState(now, 34);
-  state.cash = 10_000_000;
+  state.cash = 40_000_000;
+  state.officeTierId = 'bosphorus_suite'; // Unlocks Genel Müdür
   const owner = { id: 'p1', name: 'Patron' };
 
   const b1 = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Lezzet 1', owner, [], now);
@@ -1035,7 +1102,7 @@ test('v1.2.8 3-Tier Ad Campaigns boost income/capacity & Genel Müdür Auto-Ads 
 test('v1.2.8 Bidirectional Franchise Marketplace (Owned Branch -> Franchise -> AI Entrepreneur Applications & Royalties)', () => {
   const now = 1_100_000;
   let state = createInitialEmpireState(now, 34);
-  state.cash = 2_000_000;
+  state.cash = 8_000_000;
   const owner = { id: 'p1', name: 'Patron' };
 
   const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Anadolu Kahvecisi', owner, [], now);
@@ -1144,8 +1211,8 @@ test('v1.2.8 Rivals Strategy Center: National Directory, Dynamic 120%-150% Takeo
 
 test('v1.3.0 Monthly 30-Day Credit Installments, Timely +40 Score Boost, Default Interest, 15d Legal Warning & 30d Foreclosure', () => {
   const now = 1_300_000;
-  let state = createInitialEmpireState(now, 34);
-  state.cash = 1_500_000;
+  let state = makeBankQualifiedState(createInitialEmpireState(now, 34));
+  state.cash = 25_000_000;
   const owner = { id: 'p1', name: 'Patron' };
 
   const biz = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Teminat Restoran', owner, [], now);
@@ -1153,12 +1220,12 @@ test('v1.3.0 Monthly 30-Day Credit Installments, Timely +40 Score Boost, Default
   state = biz.state;
 
   const bank = DEFAULT_SYSTEM_BANKS[0];
-  const loanRes = takeLoanFromBank(state, bank, 100_000, biz.business!, 400_000, owner, 180, now, 6);
+  const loanRes = takeLoanFromBank(state, bank, 1_000_000, biz.business!, 6_000_000, owner, 180, now, 6);
   assert.equal(loanRes.ok, true);
   assert.ok(loanRes.loan);
   assert.equal(loanRes.loan.termMonths, 6);
-  assert.equal(loanRes.loan.nextDueGameDay, 31); // Day 1 + 30
-  assert.ok((loanRes.loan.monthlyInstallment ?? 0) > 15_000);
+  assert.equal(loanRes.loan.nextDueGameDay, 51); // Day 21 + 30
+  assert.ok((loanRes.loan.monthlyInstallment ?? 0) > 150_000);
 
   // Timely installment payment boosts credit score by +40 and advances nextDueGameDay by +30
   const scoreBefore = loanRes.state.creditScore;
@@ -1166,13 +1233,13 @@ test('v1.3.0 Monthly 30-Day Credit Installments, Timely +40 Score Boost, Default
   assert.equal(paid1.ok, true);
   assert.equal(paid1.creditScoreDelta, 40);
   assert.equal(paid1.state.creditScore, scoreBefore + 40);
-  assert.equal(paid1.loan?.nextDueGameDay, 61);
+  assert.equal(paid1.loan?.nextDueGameDay, 81);
 
-  // Simulate missing the next installment (advance to Day 62 -> 1 day overdue): sharp -110 score drop + default interest!
+  // Simulate missing the next installment (advance to Day 82 -> 1 day overdue): sharp -110 score drop + default interest!
   const overdueState1 = {
     ...paid1.state,
     cash: 0, // player broke so foreclosure will seize business later
-    gameMinutes: 61 * 1440 + 60, // Day 62
+    gameMinutes: 81 * 1440 + 60, // Day 82
   };
   const enf1 = enforceOverdueLoans(overdueState1, 0, now + 1000, 1);
   assert.ok(enf1.state.creditScore < paid1.state.creditScore - 90, 'Missed installment must sharply drop credit score');
@@ -1182,7 +1249,7 @@ test('v1.3.0 Monthly 30-Day Credit Installments, Timely +40 Score Boost, Default
   // Advance to 15 days overdue -> Legal Tracking Warning triggered!
   const overdueState15 = {
     ...enf1.state,
-    gameMinutes: (61 + 15) * 1440 + 60, // Day 77
+    gameMinutes: (81 + 15) * 1440 + 60, // Day 97
   };
   const enf15 = enforceOverdueLoans(overdueState15, 0, now + 2000, 14);
   assert.equal(enf15.legalWarnings.length, 1, '15+ overdue days must emit Yasal Takip Uyarısı');
@@ -1191,7 +1258,7 @@ test('v1.3.0 Monthly 30-Day Credit Installments, Timely +40 Score Boost, Default
   // Advance to 30 days overdue with 0 cash -> Collateral business foreclosed!
   const overdueState30 = {
     ...enf15.state,
-    gameMinutes: (61 + 30) * 1440 + 60, // Day 92
+    gameMinutes: (81 + 30) * 1440 + 60, // Day 112
   };
   const enf30 = enforceOverdueLoans(overdueState30, 0, now + 3000, 15);
   assert.equal(enf30.seizedLoans.length, 1, '30+ overdue days without cash must foreclose collateral business');
@@ -1211,26 +1278,26 @@ test('v1.3.0 Level-1 Muhasebe Departmanı auto-pays due monthly loan installment
   assert.equal(hiredAcc.ok, true);
   assert.equal(hiredAcc.state.accountant?.id, starterAcc.id);
 
-  // Add a business, a loan due on Day 31, and a pending tax bill due on Day 32
-  state = { ...hiredAcc.state, cash: 1_000_000 };
+  // Add a business, a loan due on Day 51, and a pending tax bill due on Day 51
+  state = { ...makeBankQualifiedState(hiredAcc.state), cash: 10_000_000 };
   const biz = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Muhasebeli Kafe', owner, [], now);
-  const loanRes = takeLoanFromBank(biz.state, DEFAULT_SYSTEM_BANKS[0], 50_000, biz.business!, 150_000, owner, 180, now, 3);
+  const loanRes = takeLoanFromBank(biz.state, DEFAULT_SYSTEM_BANKS[0], 500_000, biz.business!, 2_000_000, owner, 180, now, 3);
   assert.equal(loanRes.ok, true);
 
   const rawBill = createMonthlyTaxObligation(
     1,
-    30,
+    50,
     { kdv: 200, sgkStopaj: 100, corporateTax: 150, municipalTax: 50, totalTax: 500 },
     now
   )!;
   assert.ok(rawBill);
-  const taxBill = { ...rawBill, dueGameDay: 31 };
+  const taxBill = { ...rawBill, dueGameDay: 51 };
 
-  // Set clock right before Day 31 -> tick crosses into Day 31 -> Muhasebeci auto-pays BOTH loan installment & tax bill!
+  // Set clock right before Day 51 -> tick crosses into Day 51 -> Muhasebeci auto-pays BOTH loan installment & tax bill!
   const preDueState = {
     ...loanRes.state,
     pendingTaxes: [taxBill],
-    gameMinutes: 30 * 1440 - 10, // Day 30 23:50
+    gameMinutes: 50 * 1440 - 10, // Day 50 23:50
   };
   const tickRes = tickEconomy(preDueState, 1, now + 1000);
   assert.equal(tickRes.accountantAutoPay.autoPaidLoanCount, 1, 'Muhasebeci must auto-pay due monthly loan installment');
@@ -1240,17 +1307,17 @@ test('v1.3.0 Level-1 Muhasebe Departmanı auto-pays due monthly loan installment
   assert.equal(tickRes.state.pendingTaxes?.find((t) => t.id === taxBill.id)?.status, 'paid');
 });
 
-test('v1.3.0 Holding Board & Autonomous CEO: locked below Holding stage, unlocked at Sv.5/₺5.5M & protects 40% cash floor', () => {
+test('v1.3.0 Holding Board & Autonomous CEO: locked below Holding stage & Holding Tower, unlocked at Sv.5/₺120M & protects 40% cash floor', () => {
   const now = 1_500_000;
   let state = createInitialEmpireState(now, 34);
   const ceoCand = state.ceoPool![0];
 
   // Blocked at Level 1
-  const blocked = hireCeo(state, ceoCand.id, 1, 250_000, now);
+  const blocked = hireCeo(state, ceoCand.id, 1, 3_000_000, now);
   assert.equal(blocked.ok, false);
 
-  // Unlocked at Holding stage (Sv.5 / >= ₺5.5M)
-  state = { ...state, cash: 8_000_000 };
+  // Unlocked at Holding stage (Sv.5 / >= ₺120M) with Holding Tower office!
+  state = { ...state, cash: 200_000_000, officeTierId: 'holding_tower' };
   const owner = { id: 'p1', name: 'Kurucu Başkan' };
   const b1 = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Holding Restoran', owner, [], now);
   state = b1.state;
@@ -1272,15 +1339,15 @@ test('v1.3.0 Holding Board & Autonomous CEO: locked below Holding stage, unlocke
   });
   assert.ok(tickRes.ceoActionsLog.length >= 1, 'Autonomous CEO should log growth/management actions');
   assert.ok(
-    tickRes.state.cash >= cashBefore * 0.4 - 50_000,
+    tickRes.state.cash >= cashBefore * 0.4 - 500_000,
     'Autonomous CEO must strictly preserve the 40% cash reserve floor'
   );
 });
 
 test('v1.3.0 Realistic Progressive Tax Curve (KDV, SGK, Kurumlar, Belediye) scales fairly from Genç Girişimci to Holding', () => {
   const now = 1_600_000;
-  const starterRates = getProgressiveTaxRates(1, 250_000);
-  const holdingRates = getProgressiveTaxRates(12, 15_000_000);
+  const starterRates = getProgressiveTaxRates(1, 3_000_000);
+  const holdingRates = getProgressiveTaxRates(12, 300_000_000);
   assert.equal(starterRates.stageIndex, 0);
   assert.equal(holdingRates.stageIndex, 3);
   assert.ok(starterRates.kdvRate < holdingRates.kdvRate);
@@ -1482,16 +1549,18 @@ test('v1.3.2 Supabase Local Backfill Sync, Dual Coordinate Normalization (lat/ln
   assert.ok(formatted.includes('row-level security'));
 });
 
-test('v1.4.0 Construction Period (3-15d), Zero Revenue During Renovation, Daily Rent, and Double Shift (-35%) Crew', () => {
+test('v1.4.0 Construction Period (3-18d), Zero Revenue During Renovation, Daily Rent, and Double Shift (-35%) Crew', () => {
   const now = 1_800_000;
   let state = createInitialEmpireState(now, 34);
-  state.cash = 10_000_000;
+  state.cash = 25_000_000;
   const owner = { id: 'p1', name: 'Patron' };
 
-  // All blueprints define a realistic 3-15 day construction window
+  // All blueprints define a realistic 3-18 day construction window (including mega Energy Plant)
   for (const bp of BUSINESS_BLUEPRINTS) {
-    assert.ok(bp.constructionDays >= 3 && bp.constructionDays <= 15, `${bp.id} constructionDays out of 3..15 range`);
+    assert.ok(bp.constructionDays >= 3 && bp.constructionDays <= 20, `${bp.id} constructionDays out of 3..20 range`);
     assert.ok(bp.dailyRentBase > 0, `${bp.id} dailyRentBase must be positive`);
+    assert.ok(bp.unitSalePrice > 0, `${bp.id} unitSalePrice must be positive`);
+    assert.ok(bp.baseCogsRatio >= 0.3 && bp.baseCogsRatio <= 0.55, `${bp.id} baseCogsRatio must be realistic`);
   }
 
   // Establish a Restoran (starts under construction, generates 0 income while building)
@@ -1521,7 +1590,7 @@ test('v1.4.0 Day-by-Day Simulation Speed (Gün+) & Auto-Stop Guard (Construction
   assert.equal(getEffectiveSimSeconds(0.25, 'day'), 40);
 
   let state = createInitialEmpireState(now, 34);
-  state.cash = 1_000_000;
+  state.cash = 5_000_000;
   const owner = { id: 'p1', name: 'Patron' };
   const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Hızlı Kafe', owner, [], now);
   assert.equal(built.ok, true);
@@ -1556,7 +1625,7 @@ test('v1.4.0 Day-by-Day Simulation Speed (Gün+) & Auto-Stop Guard (Construction
 test('v1.4.0 Midnight 00:00 Day-End Report: Per-Branch P&L, Loss Flagging & Manual Settlement Into Cash', () => {
   const now = 2_000_000;
   let state = createInitialEmpireState(now, 34);
-  state.cash = 2_000_000;
+  state.cash = 25_000_000;
   const owner = { id: 'p1', name: 'Patron' };
 
   // Active Kafe + Under-construction Restoran (which incurs rent with 0 revenue -> loss line!)
@@ -1619,7 +1688,7 @@ test('v1.4.0 Turkey Min-Wage Payroll (+22.5% Employer SGK) & Daily/Monthly/Annua
 
   const now = 2_100_000;
   let state = createInitialEmpireState(now, 34);
-  state.cash = 5_000_000;
+  state.cash = 25_000_000;
   const owner = { id: 'p1', name: 'Patron' };
   const built = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Bilanço Restoran', owner, [], now);
   state = openAllBranches(built.state);
@@ -1698,6 +1767,191 @@ test('v1.4.0-fix Startup Resilience: corrupt localStorage recovery & non-blockin
   const okVal = await withSafeTimeout(Promise.resolve('live-data'), 500, 'fallback', 'ok-test');
   assert.equal(okVal, 'live-data');
 });
+
+test('v1.4.1 Realistic Turkish Pricing (₺200 coffee / 70-80% expense ratio), Multi-Billion Sectors & Negative Cash on Loss', () => {
+  const now = 2_200_000;
+  const fresh = createInitialEmpireState(now, 34);
+  assert.equal(fresh.cash, STARTING_CASH);
+  assert.equal(fresh.cash, 3_000_000);
+  assert.equal(fresh.brandRecognition, STARTING_BRAND_RECOGNITION);
+  assert.equal(fresh.officeTierId, 'home_office');
+
+  // Realistic unit price & establishment capitals
+  const kafeBp = getBlueprintById('kafe')!;
+  const avmBp = getBlueprintById('avm')!;
+  const energyBp = getBlueprintById('enerji_santrali')!;
+  assert.equal(kafeBp.unitSalePrice, 200);
+  assert.ok(kafeBp.baseCost >= 1_500_000, 'Kafe setup must be in millions TL');
+  assert.ok(avmBp.baseCost >= 600_000_000, 'AVM must be hundreds of millions TL');
+  assert.ok(energyBp.baseCost >= 1_000_000_000, 'Enerji Santrali must be 1B+ TL');
+  assert.equal(BANK_MIN_NET_WORTH, 5_000_000_000);
+  assert.equal(BANK_LICENSE_COST, 1_000_000_000);
+  assert.equal(BANK_MIN_POOL_CAPITAL, 2_000_000_000);
+
+  // Neglected low-service branch operating with low cash closes day at a LOSS and drives cash NEGATIVE (< 0)
+  let state = { ...fresh, cash: 5_000_000 };
+  const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Zarar Kafe', { id: 'p1', name: 'Patron' }, [], now);
+  assert.equal(built.ok, true);
+  state = {
+    ...openAllBranches(built.state),
+    cash: 2_000, // very low cash reserve so a loss day pushes treasury into negative!
+    businesses: built.state.businesses.map((b) => ({
+      ...b,
+      constructionDaysRemaining: 0,
+      stockLevel: 10,
+      maintenanceLevel: 15,
+      staffMorale: 30,
+      employees: [],
+    })),
+  };
+
+  const dayTick = tickEconomy(state, 40, now + 40_000);
+  assert.equal(dayTick.daysPassed, 1);
+  assert.ok(dayTick.dayEndSummary);
+  assert.equal(dayTick.dayEndSummary.branchLines[0].isLoss, true, 'Neglected branch with low traffic must close the day at a loss');
+  const settled = collectDayEndReport(dayTick.state);
+  assert.equal(settled.ok, true);
+  assert.ok(settled.state.cash < 0, 'Settling a loss day with low reserves must push treasury cash below 0 (eksi kasa)');
+});
+
+test('v1.4.1 Service Quality (1.0-5.0★) collapses traffic on low staffing/hygiene and Brand Recognition grows/decays over days', () => {
+  const now = 2_300_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+  const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Kalite Kafe', owner, [], now);
+  assert.equal(built.ok, true);
+  state = openAllBranches(built.state);
+
+  // Unstaffed & neglected branch has terrible service quality & crashed traffic
+  const neglectedBiz = {
+    ...state.businesses[0],
+    stockLevel: 15,
+    maintenanceLevel: 20,
+    staffMorale: 35,
+    employees: [],
+  };
+  const badReport = calculateBranchServiceQuality(neglectedBiz, state.cityManagers, [neglectedBiz]);
+  assert.ok(badReport.stars < 2.5, 'Neglected unstaffed branch must drop below 2.5★');
+  assert.ok(badReport.customerTrafficMultiplier < 0.5, 'Poor service quality must sharply reduce customer traffic');
+  assert.ok(badReport.issues.length >= 2);
+
+  // Invest in Quality & Training + hire 2 staff -> stars & traffic surge significantly
+  let improvedState = state;
+  const pool = generateCandidatePool(8881, 'kafe');
+  const workers = pool.filter((c) => c.role === 'calisan').slice(0, 2);
+  for (const w of workers) {
+    const h = hireCandidateFromPool({ ...improvedState, candidatePool: pool }, w.id, improvedState.businesses[0].id, 34, now + 50);
+    if (h.ok) improvedState = h.state;
+  }
+  const invested = investInBranchQuality(improvedState, improvedState.businesses[0].id, now + 100);
+  assert.equal(invested.ok, true);
+  const goodReport = calculateBranchServiceQuality(
+    invested.state.businesses[0],
+    invested.state.cityManagers,
+    invested.state.businesses
+  );
+  assert.ok(goodReport.stars > badReport.stars + 1.2, 'Staffing + quality investment must raise service quality stars');
+  assert.ok(goodReport.customerTrafficMultiplier > badReport.customerTrafficMultiplier * 1.8);
+
+  // Good service grows brandRecognition across a day; bad service decays it
+  const brandBefore = invested.state.brandRecognition ?? 5;
+  const goodDay = tickEconomy(invested.state, 40, now + 40_000);
+  assert.ok((goodDay.state.brandRecognition ?? 0) > brandBefore, 'Good service quality should gradually increase brand recognition');
+
+  const badBrandState = {
+    ...state,
+    brandRecognition: 20,
+    businesses: [neglectedBiz],
+  };
+  const badDay = tickEconomy(badBrandState, 40, now + 80_000);
+  assert.ok((badDay.state.brandRecognition ?? 20) < 20, 'Poor service quality must decay brand recognition');
+});
+
+test('v1.4.1 Strict Bank Credit Audit rejects brand-new/low-brand/low-prestige/loss firms and unlocks with office interest discount', () => {
+  const now = 2_400_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+  const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Yeni Kafe', owner, [], now);
+  assert.equal(built.ok, true);
+  state = openAllBranches(built.state);
+
+  const bank = DEFAULT_SYSTEM_BANKS[0];
+  // Brand-new Day 1 firm with Home Office & 5% brand recognition MUST BE REJECTED with explicit Turkish reasons
+  const auditDay1 = evaluateLoanEligibility(state, bank, 1_000_000, state.businesses[0], 3_000_000);
+  assert.equal(auditDay1.eligible, false);
+  assert.ok(auditDay1.reasons.length >= 3);
+  assert.ok(auditDay1.checks.some((c) => c.id === 'tenure' && !c.passed));
+  assert.ok(auditDay1.checks.some((c) => c.id === 'brand' && !c.passed));
+  assert.ok(auditDay1.checks.some((c) => c.id === 'office' && !c.passed));
+
+  const rejectedLoan = takeLoanFromBank(state, bank, 1_000_000, state.businesses[0], 3_000_000, owner, 180, now);
+  assert.equal(rejectedLoan.ok, false);
+  assert.ok((rejectedLoan.error ?? '').includes('Kredi başvurusu reddedildi'));
+
+  // Negative cash also strictly blocks credit even if established
+  const negCashQualified = { ...makeBankQualifiedState(state), cash: -50_000 };
+  const negAudit = evaluateLoanEligibility(negCashQualified, bank, 1_000_000, negCashQualified.businesses[0], 3_000_000);
+  assert.equal(negAudit.eligible, false);
+  assert.ok(negAudit.checks.some((c) => c.id === 'profitability' && !c.passed));
+
+  // Satisfying tenure (>=15d), brand (>=15%), office prestige (>=20), positive balance & collateral -> APPROVED!
+  const qualified = makeBankQualifiedState(state);
+  assert.ok(BANK_MIN_OPERATING_DAYS === 15);
+  assert.ok(BANK_MIN_BRAND_RECOGNITION === 15);
+  assert.ok(BANK_MIN_OFFICE_PRESTIGE === 20);
+  const okAudit = evaluateLoanEligibility(qualified, bank, 1_000_000, qualified.businesses[0], 3_000_000);
+  assert.equal(okAudit.eligible, true);
+  // Plaza office grants loan interest discount vs Home Office base rate
+  const baseRateNoOffice = calculateEffectiveInterestRate(bank.baseInterestRate, qualified.creditScore, 0);
+  assert.ok(okAudit.effectiveInterestRate < baseRateNoOffice, 'High-prestige office must reduce effective loan interest rate');
+});
+
+test('v1.4.1 Ofisim System: 4 Office Tiers, Equipment Upgrades, Personal Assets, B2B Supply Discount & Executive HR Gate', () => {
+  const now = 2_500_000;
+  let state = createInitialEmpireState(now, 34);
+  assert.equal(OFFICE_TIERS.length, 4);
+  assert.equal(OFFICE_UPGRADES.length, 6);
+  assert.equal(PERSONAL_ASSETS.length, 5);
+
+  // Home Office starts at 10 prestige and blocks Bölge Sorumlusu / Genel Müdür / CEO
+  const homeBenefits = calculateOfficeBenefits(state);
+  assert.equal(homeBenefits.tier.id, 'home_office');
+  assert.equal(homeBenefits.officePrestige, 10);
+  assert.equal(canOfficeHireRole(state, 'sube_muduru').allowed, true);
+  assert.equal(canOfficeHireRole(state, 'bolge_sorumlusu').allowed, false);
+  assert.equal(canOfficeHireRole(state, 'genel_mudur').allowed, false);
+  assert.equal(canOfficeHireRole(state, 'ceo').allowed, false);
+
+  // Buy starter office equipment (Yönetici Masası + Toplantı Salonu) -> increases prestige & supply discount
+  const desk = buyOfficeUpgrade(state, 'exec_desk', now);
+  assert.equal(desk.ok, true);
+  const meeting = buyOfficeUpgrade(desk.state, 'meeting_room', now + 10);
+  assert.equal(meeting.ok, true);
+  const afterEquip = calculateOfficeBenefits(meeting.state);
+  assert.ok(afterEquip.officePrestige >= 26);
+  assert.ok(afterEquip.supplyDiscountRate > 0);
+
+  // Upgrade to Plaza Katı requires >= 15% brand recognition
+  const plazaBlocked = upgradeOfficeTier({ ...meeting.state, cash: 50_000_000, brandRecognition: 8 }, 'plaza_floor', now + 20);
+  assert.equal(plazaBlocked.ok, false);
+
+  const plazaOk = upgradeOfficeTier({ ...meeting.state, cash: 50_000_000, brandRecognition: 20 }, 'plaza_floor', now + 30);
+  assert.equal(plazaOk.ok, true);
+  assert.equal(canOfficeHireRole(plazaOk.state, 'bolge_sorumlusu').allowed, true);
+  assert.equal(canOfficeHireRole(plazaOk.state, 'genel_mudur').allowed, false);
+
+  // Buy Personal Asset -> adds prestige, brand recognition & counts in Net Worth!
+  const nwBeforeAsset = calculateNetWorth(plazaOk.state, now + 40);
+  const watchRes = buyPersonalAsset(plazaOk.state, 'classic_watch', now + 40);
+  assert.equal(watchRes.ok, true);
+  assert.ok((watchRes.state.brandRecognition ?? 0) > (plazaOk.state.brandRecognition ?? 0));
+  assert.ok(calculateOfficeBenefits(watchRes.state).officePrestige > calculateOfficeBenefits(plazaOk.state).officePrestige);
+  // Personal asset preserves Net Worth (cash converted into owned luxury asset equity)
+  assert.equal(calculateNetWorth(watchRes.state, now + 40), nwBeforeAsset);
+});
+
 
 
 

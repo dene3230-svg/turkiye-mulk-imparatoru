@@ -20,6 +20,7 @@ import type {
 } from '../types/game';
 import {
   AVM_SYNERGY_MULTIPLIER,
+  BANK_LICENSE_COST,
   BUSINESS_BLUEPRINTS,
   COMPANY_TIERS,
   FACTORY_SUPPLIED_TYPES,
@@ -29,6 +30,7 @@ import {
   MIN_BUSINESS_DISTANCE_METERS,
   PARKING_CAPACITY_BONUS,
   PARKING_SYNERGY_RADIUS_METERS,
+  STARTING_BRAND_RECOGNITION,
   STARTING_CASH,
   STARTING_CREDIT_SCORE,
   SUPERMARKET_CHAIN_DISCOUNT,
@@ -79,6 +81,13 @@ import {
   runAutonomousCeoTick,
   type AccountantAutoPayResult,
 } from './corporateEngine';
+import {
+  calculateBranchServiceQuality,
+  calculateBrandDemandMultiplier,
+  calculateOfficeBenefits,
+  calculatePersonalAssetsValuation,
+  computeNextBrandRecognition,
+} from './officeEngine';
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
 // v1.4.0 Time Flow:
@@ -228,6 +237,10 @@ export function createInitialEmpireState(
     completedMissionsCount: 0,
     pendingDayEndReports: [],
     dayEndHistory: [],
+    brandRecognition: STARTING_BRAND_RECOGNITION,
+    officeTierId: 'home_office',
+    officeUpgradeIds: [],
+    personalAssetIds: [],
     activeEvent: {
       ...initialTemplate,
       startedAt: now,
@@ -385,7 +398,7 @@ export function calculateBusinessIncomePerSec(
   stateContext?: Pick<
     EmpireState,
     'cityManagers' | 'supermarketChain' | 'gameMinutes' | 'competitiveBlitzes'
-  >
+  > & { brandRecognition?: number }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
@@ -399,6 +412,15 @@ export function calculateBusinessIncomePerSec(
     allOwnBusinesses ?? [business]
   );
   const staffMultiplier = calculateStaffQualityMultiplier(business, automation);
+  const serviceReport = calculateBranchServiceQuality(
+    business,
+    stateContext?.cityManagers ?? [],
+    allOwnBusinesses ?? [business]
+  );
+  const serviceTrafficMult = serviceReport.customerTrafficMultiplier;
+  const brandDemandMult = calculateBrandDemandMultiplier(
+    stateContext?.brandRecognition ?? STARTING_BRAND_RECOGNITION
+  );
   const boostMultiplier = business.boostEndsAt > now ? 2.0 : 1.0;
 
   // Advertising campaign boost (Brochure +20%, Social +38%, Billboard +65%)
@@ -425,16 +447,16 @@ export function calculateBusinessIncomePerSec(
       ? 1 + PARKING_CAPACITY_BONUS
       : 1.0;
 
-  // Factory 35% supply cost reduction -> translates into strong +22% net profit boost (35% cost saving on ~62% COGS)
+  // Factory 35% supply cost reduction -> translates into realistic margin uplift
   const factorySynergy =
     allOwnBusinesses && hasFactorySupplySynergy(business, allOwnBusinesses)
-      ? 1 + FACTORY_SUPPLY_DISCOUNT * 0.65
+      ? 1 + FACTORY_SUPPLY_DISCOUNT * 0.45
       : 1.0;
 
-  // Supermarket chain bulk procurement discount (+14% net margin)
+  // Supermarket chain bulk procurement discount
   const supermarketChainSynergy =
     business.blueprintId === 'supermarket' && stateContext?.supermarketChain
-      ? 1 + SUPERMARKET_CHAIN_DISCOUNT * 0.7
+      ? 1 + SUPERMARKET_CHAIN_DISCOUNT * 0.45
       : 1.0;
 
   // Cloned Zincir Marka synergy (2+ branches under same brand: +10%/+15% revenue + supply savings)
@@ -442,7 +464,7 @@ export function calculateBusinessIncomePerSec(
     ? getChainStatusForBusiness(business, allOwnBusinesses)
     : null;
   const clonedChainSynergy = brandChainStatus?.isChain
-    ? 1 + brandChainStatus.revenueBonus + brandChainStatus.supplyDiscount * 0.4
+    ? 1 + brandChainStatus.revenueBonus + brandChainStatus.supplyDiscount * 0.35
     : 1.0;
 
   // Franchise branch +35% customer & revenue bonus (minus royalty share kept by brand owner)
@@ -467,6 +489,8 @@ export function calculateBusinessIncomePerSec(
       business.affinityMultiplier *
       levelMultiplier *
       staffMultiplier *
+      serviceTrafficMult *
+      brandDemandMult *
       boostMultiplier *
       adMultiplier *
       blitzMultiplier *
@@ -489,7 +513,7 @@ export function calculateBusinessHourlyIncome(
   stateContext?: Pick<
     EmpireState,
     'cityManagers' | 'supermarketChain' | 'gameMinutes' | 'competitiveBlitzes'
-  >
+  > & { brandRecognition?: number }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
@@ -606,12 +630,16 @@ export function calculateNetWorth(
   const stocksValue = stockQuotes
     ? calculatePortfolioMarketValue(state, stockQuotes)
     : (state.stockPortfolio ?? []).reduce((s, h) => s + Math.round(h.shares * h.avgCost), 0);
-  const bankValue = state.ownBank ? Math.round(state.ownBank.poolCapital + 2_000_000) : 0;
+  const bankValue = state.ownBank ? Math.round(state.ownBank.poolCapital + BANK_LICENSE_COST) : 0;
+  const personalAssetsValue = calculatePersonalAssetsValuation(state);
   const activeDebt = (state.activeLoans ?? [])
     .filter((l) => l.status === 'active' || l.status === 'garnishing')
     .reduce((s, l) => s + l.remainingAmount, 0);
 
-  return Math.max(0, Math.floor(state.cash) + assetsValue + stocksValue + bankValue - activeDebt);
+  return Math.max(
+    0,
+    Math.floor(state.cash) + assetsValue + stocksValue + bankValue + personalAssetsValue - activeDebt
+  );
 }
 
 export function getCompanyTier(netWorth: number): CompanyTier {
@@ -783,9 +811,13 @@ export function purchaseBusiness(
     notifiedHighVault: false,
     constructionTotalDays: bp.constructionDays,
     constructionDaysRemaining: bp.constructionDays,
-    constructionDailyInstallment: Math.round((baseCost * 0.025) / 100) * 100,
+    constructionDailyInstallment: Math.round((baseCost * 0.015) / 100) * 100,
     doubleShiftApplied: false,
     dailyAccruedGross: 0,
+    serviceQuality: 2.2,
+    staffMorale: 78,
+    qualityInvestmentLevel: 0,
+    customerTrafficPct: 51,
     chainBrandName: resolvedChainBrand,
     chainBranchNumber: chainCloneMeta?.chainBranchNumber ?? 1,
     franchiseId: franchiseBrand?.id,
@@ -1106,6 +1138,8 @@ export function tickEconomy(
   let autoSettledNet = 0;
   const branchLines: DayEndBranchLine[] = [];
 
+  const officeBenefits = calculateOfficeBenefits(state);
+
   const updatedBusinesses = state.businesses.map((b) => {
     const bp = getBlueprintById(b.blueprintId);
     const automation = resolveBusinessAutomation(b, cityManagers, state.businesses);
@@ -1113,10 +1147,12 @@ export function tickEconomy(
     const incomePerSec = calculateBusinessIncomePerSec(b, activeEvent, now, state.businesses, state);
     const earned = incomePerSec * safeDt;
     const capacity = calculateVaultCapacity(b);
+    const slots = getBranchStaffSlots(b);
 
-    // Stock & Maintenance dynamics (paused during construction)
+    // Stock, Maintenance & Staff Morale dynamics (paused during construction)
     let nextStock = b.stockLevel ?? 100;
     let nextMaint = b.maintenanceLevel ?? 100;
+    let nextMorale = b.staffMorale ?? (slots.workers > 0 ? 78 : 55);
 
     if (!wasUnderConstruction) {
       if (automation.autoStock) {
@@ -1130,7 +1166,22 @@ export function tickEconomy(
       } else {
         nextMaint = Math.max(20, nextMaint - safeDt * 0.16);
       }
+
+      // Morale degrades faster if understaffed (0-1 worker) or neglected; recovers with manager & quality investment
+      if (automation.fullAutomation) {
+        nextMorale = Math.min(96, nextMorale + safeDt * 0.08);
+      } else if (slots.workers <= 1 || nextMaint < 55) {
+        nextMorale = Math.max(25, nextMorale - safeDt * 0.18);
+      } else {
+        nextMorale = Math.max(45, nextMorale - safeDt * 0.05);
+      }
     }
+
+    const qualityPreview = calculateBranchServiceQuality(
+      { ...b, stockLevel: nextStock, maintenanceLevel: nextMaint, staffMorale: nextMorale },
+      cityManagers,
+      state.businesses
+    );
 
     // Intra-day: accumulate gross sales inside branch register (NEVER stream per-second to main cash)
     if (daysPassed === 0) {
@@ -1154,6 +1205,9 @@ export function tickEconomy(
         ...b,
         stockLevel: Number(nextStock.toFixed(1)),
         maintenanceLevel: Number(nextMaint.toFixed(1)),
+        staffMorale: Number(nextMorale.toFixed(1)),
+        serviceQuality: qualityPreview.stars,
+        customerTrafficPct: qualityPreview.customerTrafficPct,
         pendingCash: nextPending,
         dailyAccruedGross: nextDailyAccrued,
         notifiedHighVault: automation.autoCollectRevenue
@@ -1179,24 +1233,20 @@ export function tickEconomy(
     let branchSupply = 0;
     if (!wasUnderConstruction) {
       branchGross = Math.round((b.dailyAccruedGross ?? 0) + earned);
-      const supplyRatio =
-        bp?.category === 'parking'
-          ? 0.05
-          : bp?.category === 'factory'
-          ? 0.16
-          : bp?.category === 'mall' || bp?.category === 'tourism'
-          ? 0.14
-          : 0.22;
+      const supplyRatio = bp?.baseCogsRatio ?? 0.44;
       const rawSupply = Math.round(branchGross * supplyRatio);
       const chainStatus = getChainStatusForBusiness(b, state.businesses);
-      let discountPct = automation.bulkSupplyDiscount + chainStatus.supplyDiscount;
+      let discountPct =
+        automation.bulkSupplyDiscount +
+        chainStatus.supplyDiscount +
+        officeBenefits.supplyDiscountRate;
       if (hasFactorySupplySynergy(b, state.businesses)) {
         discountPct += FACTORY_SUPPLY_DISCOUNT;
       }
       if (b.blueprintId === 'supermarket' && state.supermarketChain) {
         discountPct += SUPERMARKET_CHAIN_DISCOUNT;
       }
-      discountPct = Math.min(0.65, discountPct);
+      discountPct = Math.min(0.68, discountPct);
       branchSupply = Math.max(0, Math.round(rawSupply * (1 - discountPct)));
     }
 
@@ -1235,6 +1285,9 @@ export function tickEconomy(
       ...b,
       stockLevel: Number(nextStock.toFixed(1)),
       maintenanceLevel: Number(nextMaint.toFixed(1)),
+      staffMorale: Number(nextMorale.toFixed(1)),
+      serviceQuality: qualityPreview.stars,
+      customerTrafficPct: qualityPreview.customerTrafficPct,
       constructionDaysRemaining: nextRem,
       dailyAccruedGross: 0,
       // Auto-settled branches clear immediately at 00:00; manual branches await Day-End Report collection
@@ -1416,11 +1469,21 @@ export function tickEconomy(
     }
   }
 
+  const brandUpdate = computeNextBrandRecognition(
+    state.brandRecognition ?? STARTING_BRAND_RECOGNITION,
+    cleanedBusinesses,
+    cityManagers,
+    daysPassed,
+    nextMinutes
+  );
+
+  // v1.4.1: Operating losses can push company treasury into negative balance (eksi kasa)!
   let preLoanState: EmpireState = {
     ...state,
     gameMinutes: nextMinutes,
     creditScore: nextCreditScore,
-    cash: Math.max(0, state.cash + autoCollectedAtMidnight + dividendPaid + passiveRoyaltyGain),
+    brandRecognition: brandUpdate.nextBrand,
+    cash: state.cash + autoCollectedAtMidnight + dividendPaid + passiveRoyaltyGain,
     totalEarnedLifetime:
       state.totalEarnedLifetime +
       Math.max(0, autoCollectedAtMidnight) +
@@ -1578,7 +1641,8 @@ export function collectDayEndReport(
     collectedAmount: netDelta,
     state: {
       ...state,
-      cash: Math.max(0, state.cash + netDelta),
+      // Allow negative netDelta (operating losses) to deduct from cash even below 0 (eksi bakiye)
+      cash: state.cash + netDelta,
       totalEarnedLifetime: state.totalEarnedLifetime + Math.max(0, netDelta),
       businesses: nextBusinesses,
       pendingDayEndReports: remaining,
