@@ -2,10 +2,13 @@ import type {
   BusinessBlueprint,
   BusinessTypeId,
   CompanyTier,
+  DayEndBranchLine,
   DayEndSummary,
+  DaySimAutoStopAlert,
   EmpireState,
   FranchiseApplication,
   FranchiseBrand,
+  GameSpeed,
   HeadquartersInfo,
   MarketEvent,
   MissionDef,
@@ -37,10 +40,13 @@ import {
 import { DEFAULT_PROVINCE_PLATE, getProvinceByPlate, haversineMeters } from './provinces81';
 import {
   MAX_BRANCH_WORKERS,
+  TURKEY_EMPLOYER_SGK_RATE,
   calculateStaffQualityMultiplier,
+  calculateTotalDailyPayrollBreakdown,
   calculateTotalHourlyPayroll,
   generateCandidatePool,
   getBranchStaffSlots,
+  getStaffDailyCost,
   resolveBusinessAutomation,
 } from './hrEngine';
 import {
@@ -73,21 +79,22 @@ import {
   runAutonomousCeoTick,
   type AccountantAutoPayResult,
 } from './corporateEngine';
-import type { GameSpeed } from '../types/game';
-
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
-// v1.3.0 Accelerated Time Flow:
+// v1.4.0 Time Flow:
 // 1x: 36 game min / real sec -> ~1.67s = 1 game hour, 40s = 1 full game day
 // 2x: ~75 game min / real sec -> ~0.80s = 1 game hour
 // 4x: ~171.4 game min / real sec -> ~0.35s = 1 game hour
+// 'day' (Gün Gün Simülasyon): 160x sim-sec -> at 250ms tick = 1.0 full game day per tick (4 days/sec)
 export const GAME_MINUTES_PER_REAL_SEC = 36;
 
 export function getEffectiveSimSeconds(realDtSec: number, speed: GameSpeed): number {
   if (speed === 0 || realDtSec <= 0) return 0;
   if (speed === 1) return realDtSec;
   if (speed === 2) return realDtSec * 2.0833;
-  return realDtSec * 4.7619;
+  if (speed === 4) return realDtSec * 4.7619;
+  if (speed === 'day') return realDtSec * 160;
+  return realDtSec;
 }
 
 export function formatGameClock(gameMinutes: number): {
@@ -219,12 +226,90 @@ export function createInitialEmpireState(
     activeMissions: createInitialDynamicMissions(),
     claimedMissionIds: [],
     completedMissionsCount: 0,
+    pendingDayEndReports: [],
+    dayEndHistory: [],
     activeEvent: {
       ...initialTemplate,
       startedAt: now,
       endsAt: now + initialTemplate.durationSec * 1000,
     },
     lastSavedAt: now,
+  };
+}
+
+/** Returns true if the business is still in its initial construction / renovation period. */
+export function isBusinessUnderConstruction(business: OwnedBusiness): boolean {
+  return (business.constructionDaysRemaining ?? 0) > 0;
+}
+
+/** Daily fixed commercial rent, electricity, water & construction installment for a branch. */
+export function calculateDailyRentAndUtilities(business: OwnedBusiness): number {
+  const bp = getBlueprintById(business.blueprintId);
+  if (!bp) return 0;
+  const levelScale = 1 + (business.level - 1) * 0.18;
+  const baseRent = Math.round(bp.dailyRentBase * business.landMultiplier * levelScale);
+  if (isBusinessUnderConstruction(business)) {
+    const constructionRent = Math.round(baseRent * 0.65);
+    const installment =
+      business.constructionDailyInstallment ??
+      Math.round((business.purchaseCost * 0.025) / 100) * 100;
+    return constructionRent + installment;
+  }
+  return baseRent;
+}
+
+/** Extra budget required to hire a Double Shift Crew (-35% remaining construction days). */
+export function calculateDoubleShiftCost(business: OwnedBusiness): number {
+  return Math.max(15_000, Math.round((business.purchaseCost * 0.14) / 500) * 500);
+}
+
+/**
+ * Hires a Double Shift Crew ("Çift Vardiya Ekip Tut") on an under-construction branch,
+ * reducing remaining renovation days by 35% (at least 1 full day saved).
+ */
+export function hireDoubleShiftCrew(
+  state: EmpireState,
+  businessId: string,
+  now = Date.now()
+): ActionResult {
+  const target = state.businesses.find((b) => b.id === businessId);
+  if (!target) return { state, ok: false, error: 'İşletme bulunamadı.' };
+  const rem = target.constructionDaysRemaining ?? 0;
+  if (rem <= 0) {
+    return { state, ok: false, error: 'Bu işletmenin inşaatı zaten tamamlandı.' };
+  }
+  if (target.doubleShiftApplied) {
+    return { state, ok: false, error: 'Bu şubede Çift Vardiya ekibi zaten aktif.' };
+  }
+  if (rem <= 1) {
+    return { state, ok: false, error: 'İnşaat yarın tamamlanacak; ek vardiya gerekmiyor.' };
+  }
+
+  const cost = calculateDoubleShiftCost(target);
+  if (state.cash < cost) {
+    return {
+      state,
+      ok: false,
+      error: `Çift vardiya ekibi için ${formatTL(cost)} gerekiyor (yetersiz bakiye).`,
+    };
+  }
+
+  const reducedDays = Math.max(1, Math.min(rem - 1, Math.round(rem * 0.65)));
+  const updated: OwnedBusiness = {
+    ...target,
+    constructionDaysRemaining: reducedDays,
+    doubleShiftApplied: true,
+  };
+
+  return {
+    ok: true,
+    business: updated,
+    state: {
+      ...state,
+      cash: state.cash - cost,
+      businesses: state.businesses.map((b) => (b.id === businessId ? updated : b)),
+      lastSavedAt: now,
+    },
   };
 }
 
@@ -304,6 +389,8 @@ export function calculateBusinessIncomePerSec(
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
+  // v1.4.0: Businesses under construction / renovation generate 0 revenue until completed.
+  if (isBusinessUnderConstruction(business)) return 0;
 
   const levelMultiplier = 1 + (business.level - 1) * 0.45;
   const automation = resolveBusinessAutomation(
@@ -406,6 +493,7 @@ export function calculateBusinessHourlyIncome(
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
+  if (isBusinessUnderConstruction(business)) return 0;
   const perSec = calculateBusinessIncomePerSec(
     business,
     activeEvent,
@@ -693,6 +781,11 @@ export function purchaseBusiness(
     boostEndsAt: 0,
     createdAt: now,
     notifiedHighVault: false,
+    constructionTotalDays: bp.constructionDays,
+    constructionDaysRemaining: bp.constructionDays,
+    constructionDailyInstallment: Math.round((baseCost * 0.025) / 100) * 100,
+    doubleShiftApplied: false,
+    dailyAccruedGross: 0,
     chainBrandName: resolvedChainBrand,
     chainBranchNumber: chainCloneMeta?.chainBranchNumber ?? 1,
     franchiseId: franchiseBrand?.id,
@@ -799,6 +892,11 @@ export function takeoverCompetitorBusiness(
     boostEndsAt: 0,
     createdAt: now,
     notifiedHighVault: false,
+    constructionTotalDays: 0,
+    constructionDaysRemaining: 0,
+    constructionDailyInstallment: 0,
+    doubleShiftApplied: false,
+    dailyAccruedGross: 0,
     chainBrandName: extractBaseBrandName(target.business_name),
     chainBranchNumber: 1,
   };
@@ -825,6 +923,8 @@ export interface TickResult {
   hoursPassed: number;
   daysPassed: number;
   dayEndSummary: DayEndSummary | null;
+  completedConstructions: OwnedBusiness[];
+  daySimAutoStop: DaySimAutoStopAlert | null;
   loanEnforcement: LoanEnforcementResult;
   autoRenewedAdsCount: number;
   autoAdsSpent: number;
@@ -833,6 +933,79 @@ export interface TickResult {
   accountantAutoPay: Omit<AccountantAutoPayResult, 'state'>;
   ceoActionsLog: string[];
   newTaxBillAmount: number;
+}
+
+/**
+ * Evaluates whether Day-by-Day Fast Simulation ("Gün Gün İlerleme") should auto-stop
+ * and protect the player:
+ * 1) Any business finished construction & is ready to open
+ * 2) A loan installment or monthly tax bill is due / overdue
+ * 3) Main cash dropped below critical liquidity threshold
+ */
+export function evaluateDaySimAutoStop(
+  prevState: EmpireState,
+  nextState: EmpireState,
+  completedConstructions: OwnedBusiness[],
+  newTaxBillAmount: number
+): DaySimAutoStopAlert | null {
+  const currentDay = Math.floor((nextState.gameMinutes ?? STARTING_GAME_MINUTES) / 1440) + 1;
+
+  if (completedConstructions.length > 0) {
+    const first = completedConstructions[0];
+    return {
+      reason: 'construction_completed',
+      title: 'İnşaat Tamamlandı — Açılışa Hazır!',
+      message:
+        completedConstructions.length === 1
+          ? `"${first.customName}" şubesinin tadilat ve kurulum süreci tamamlandı! İşletme artık müşteri kabul edip ciro üretmeye başladı.`
+          : `${completedConstructions.length} işletmenin inşaatı tamamlandı (ilk: "${first.customName}"). Şubeleriniz artık aktif ciro üretiyor!`,
+      businessId: first.id,
+      businessName: first.customName,
+      gameDay: currentDay,
+    };
+  }
+
+  const urgentLoan = (nextState.activeLoans ?? []).find(
+    (l) =>
+      (l.status === 'active' || l.status === 'garnishing') &&
+      ((l.overdueDays ?? 0) > 0 || (l.nextDueGameDay ?? 999_999) - currentDay <= 1)
+  );
+  const urgentTax = (nextState.pendingTaxes ?? []).find(
+    (t) => t.status !== 'paid' && (t.status === 'overdue' || t.dueGameDay - currentDay <= 1)
+  );
+
+  if (newTaxBillAmount > 0 || urgentLoan || urgentTax) {
+    const amount = newTaxBillAmount || (urgentLoan?.monthlyInstallment ?? 0) || urgentTax?.amount || 0;
+    const detail = urgentLoan
+      ? `${urgentLoan.bankName} kredi taksiti (${formatTL(urgentLoan.monthlyInstallment ?? 0)}) vadesi geldi.`
+      : newTaxBillAmount > 0
+      ? `Ay sonu mali beyanname ve vergi tahakkuku (${formatTL(newTaxBillAmount)}) oluşturuldu.`
+      : `Ödenmemiş vergi tahakkuku (${formatTL(urgentTax?.amount ?? 0)}) son ödeme gününe yaklaştı.`;
+    return {
+      reason: 'payment_due',
+      title: 'Kredi / Vergi Ödeme Vadesi Geldi',
+      message: `${detail} Gecikme faizi veya haciz riskine karşı simülasyon otomatik olarak 1x hızına alındı.`,
+      amount,
+      gameDay: currentDay,
+    };
+  }
+
+  const dailyFixedBurn =
+    nextState.businesses.reduce((s, b) => s + calculateDailyRentAndUtilities(b), 0) +
+    calculateTotalDailyPayrollBreakdown(nextState).dailyTotalCost;
+  const criticalThreshold = Math.max(25_000, Math.round(dailyFixedBurn * 2));
+
+  if (nextState.cash < criticalThreshold && (nextState.cash < prevState.cash || nextState.cash < 25_000)) {
+    return {
+      reason: 'critical_cash',
+      title: 'Kritik Nakit Uyarısı!',
+      message: `Kasa bakiyeniz ${formatTL(nextState.cash)} seviyesine düştü (güvenli eşik: ${formatTL(criticalThreshold)}). Günlük kira, maaş ve tedarik akışını kontrol etmeniz için hız 1x'e çekildi.`,
+      amount: nextState.cash,
+      gameDay: currentDay,
+    };
+  }
+
+  return null;
 }
 
 export function tickEconomy(
@@ -857,6 +1030,8 @@ export function tickEconomy(
       hoursPassed: 0,
       daysPassed: 0,
       dayEndSummary: null,
+      completedConstructions: [],
+      daySimAutoStop: null,
       loanEnforcement: {
         state,
         garnishedTotal: 0,
@@ -887,6 +1062,7 @@ export function tickEconomy(
   const daysPassed = Math.max(0, nextTotalDay - prevTotalDay);
 
   const highVaultBusinessIds: string[] = [];
+  const completedConstructions: OwnedBusiness[] = [];
 
   let activeEvent = state.activeEvent;
   let newMarketEvent: MarketEvent | null = null;
@@ -905,63 +1081,173 @@ export function tickEconomy(
     newMarketEvent = activeEvent;
   }
 
-  let autoCollectedHourlyAmount = 0;
+  // Allocate city manager daily payroll across overseen branches for accurate 00:00 branch P&L
+  const cityManagers = state.cityManagers ?? [];
+  const cityDailyPayrollByPlate = new Map<number, number>();
+  for (const m of cityManagers) {
+    if (m.assignedCityPlate !== undefined) {
+      cityDailyPayrollByPlate.set(
+        m.assignedCityPlate,
+        (cityDailyPayrollByPlate.get(m.assignedCityPlate) ?? 0) + getStaffDailyCost(m).dailyTotalCost
+      );
+    }
+  }
+  const cityBranchCountByPlate = new Map<number, number>();
+  for (const b of state.businesses) {
+    cityBranchCountByPlate.set(b.cityPlate, (cityBranchCountByPlate.get(b.cityPlate) ?? 0) + 1);
+  }
+
+  let autoCollectedAtMidnight = 0;
+  let dailyGrossRevenue = 0;
+  let dailySupplyCost = 0;
+  let dailyUtilitiesAndRent = 0;
+  let dailyBranchSalaries = 0;
+  let manualCollectibleNet = 0;
+  let autoSettledNet = 0;
+  const branchLines: DayEndBranchLine[] = [];
 
   const updatedBusinesses = state.businesses.map((b) => {
-    const automation = resolveBusinessAutomation(b, state.cityManagers ?? [], state.businesses);
+    const bp = getBlueprintById(b.blueprintId);
+    const automation = resolveBusinessAutomation(b, cityManagers, state.businesses);
+    const wasUnderConstruction = isBusinessUnderConstruction(b);
     const incomePerSec = calculateBusinessIncomePerSec(b, activeEvent, now, state.businesses, state);
     const earned = incomePerSec * safeDt;
     const capacity = calculateVaultCapacity(b);
 
-    // Stock & Maintenance dynamics: automated branches stay full, unmanaged branches decay gradually
+    // Stock & Maintenance dynamics (paused during construction)
     let nextStock = b.stockLevel ?? 100;
     let nextMaint = b.maintenanceLevel ?? 100;
 
-    if (automation.autoStock) {
-      nextStock = 100;
+    if (!wasUnderConstruction) {
+      if (automation.autoStock) {
+        nextStock = 100;
+      } else {
+        nextStock = Math.max(15, nextStock - safeDt * 0.22);
+      }
+
+      if (automation.autoMaintenance) {
+        nextMaint = 100;
+      } else {
+        nextMaint = Math.max(20, nextMaint - safeDt * 0.16);
+      }
+    }
+
+    // Intra-day: accumulate gross sales inside branch register (NEVER stream per-second to main cash)
+    if (daysPassed === 0) {
+      const nextDailyAccrued = wasUnderConstruction ? 0 : (b.dailyAccruedGross ?? 0) + earned;
+      const nextPending = wasUnderConstruction
+        ? b.pendingCash
+        : Math.min(Math.max(capacity, nextDailyAccrued), b.pendingCash + earned);
+
+      const hitHighRatio =
+        !wasUnderConstruction &&
+        !automation.autoCollectRevenue &&
+        capacity > 0 &&
+        nextPending / capacity >= HIGH_VAULT_NOTIFY_RATIO &&
+        !b.notifiedHighVault;
+
+      if (hitHighRatio) {
+        highVaultBusinessIds.push(b.id);
+      }
+
+      return {
+        ...b,
+        stockLevel: Number(nextStock.toFixed(1)),
+        maintenanceLevel: Number(nextMaint.toFixed(1)),
+        pendingCash: nextPending,
+        dailyAccruedGross: nextDailyAccrued,
+        notifiedHighVault: automation.autoCollectRevenue
+          ? false
+          : b.notifiedHighVault || hitHighRatio,
+      };
+    }
+
+    // Midnight 00:00 Settlement (daysPassed >= 1)
+    const prevRem = b.constructionDaysRemaining ?? 0;
+    const nextRem = prevRem > 0 ? Math.max(0, prevRem - daysPassed) : 0;
+
+    // Daily branch staff wages (gross + 22.5% employer SGK)
+    const ownStaffDaily = (b.employees ?? []).reduce((s, e) => s + getStaffDailyCost(e).dailyTotalCost, 0);
+    const sharedCityDaily = Math.round(
+      (cityDailyPayrollByPlate.get(b.cityPlate) ?? 0) /
+        Math.max(1, cityBranchCountByPlate.get(b.cityPlate) ?? 1)
+    );
+    const branchStaffWagesTotal = Math.round((ownStaffDaily + sharedCityDaily) * daysPassed);
+    const branchRentAndUtil = Math.round(calculateDailyRentAndUtilities(b) * daysPassed);
+
+    let branchGross = 0;
+    let branchSupply = 0;
+    if (!wasUnderConstruction) {
+      branchGross = Math.round((b.dailyAccruedGross ?? 0) + earned);
+      const supplyRatio =
+        bp?.category === 'parking'
+          ? 0.05
+          : bp?.category === 'factory'
+          ? 0.16
+          : bp?.category === 'mall' || bp?.category === 'tourism'
+          ? 0.14
+          : 0.22;
+      const rawSupply = Math.round(branchGross * supplyRatio);
+      const chainStatus = getChainStatusForBusiness(b, state.businesses);
+      let discountPct = automation.bulkSupplyDiscount + chainStatus.supplyDiscount;
+      if (hasFactorySupplySynergy(b, state.businesses)) {
+        discountPct += FACTORY_SUPPLY_DISCOUNT;
+      }
+      if (b.blueprintId === 'supermarket' && state.supermarketChain) {
+        discountPct += SUPERMARKET_CHAIN_DISCOUNT;
+      }
+      discountPct = Math.min(0.65, discountPct);
+      branchSupply = Math.max(0, Math.round(rawSupply * (1 - discountPct)));
+    }
+
+    const branchNet = branchGross - branchSupply - branchRentAndUtil - branchStaffWagesTotal;
+    const isAutoSettled = !wasUnderConstruction && automation.autoCollectRevenue;
+
+    dailyGrossRevenue += branchGross;
+    dailySupplyCost += branchSupply;
+    dailyUtilitiesAndRent += branchRentAndUtil;
+    dailyBranchSalaries += branchStaffWagesTotal;
+
+    if (isAutoSettled) {
+      autoSettledNet += branchNet;
+      autoCollectedAtMidnight += branchNet;
     } else {
-      nextStock = Math.max(15, nextStock - safeDt * 0.22);
+      manualCollectibleNet += branchNet;
     }
 
-    if (automation.autoMaintenance) {
-      nextMaint = 100;
-    } else {
-      nextMaint = Math.max(20, nextMaint - safeDt * 0.16);
-    }
+    branchLines.push({
+      businessId: b.id,
+      name: b.customName,
+      cityLabel: `${String(b.cityPlate).padStart(2, '0')} ${b.cityName}`,
+      sectorName: bp?.shortName ?? b.blueprintId,
+      underConstruction: wasUnderConstruction,
+      constructionDaysRemaining: nextRem,
+      grossRevenue: branchGross,
+      supplyCost: branchSupply,
+      utilitiesAndRent: branchRentAndUtil,
+      dailyStaffWages: branchStaffWagesTotal,
+      netDailyProfit: branchNet,
+      isLoss: branchNet < 0,
+      autoSettled: isAutoSettled,
+    });
 
-    // Auto-Collect Revenue rule:
-    // Şube Müdürü (single branch full automation), Bölge Sorumlusu (up to 4 branches),
-    // and Genel Müdür (all city branches) auto-transfer branch revenue straight into
-    // the main holding treasury every in-game hour.
-    let nextPending = Math.min(capacity, b.pendingCash + earned);
-    let directTransfer = 0;
-
-    if (automation.autoCollectRevenue && hoursPassed > 0) {
-      directTransfer = Math.floor(b.pendingCash + earned);
-      nextPending = b.pendingCash + earned - directTransfer;
-      autoCollectedHourlyAmount += directTransfer;
-    }
-
-    const hitHighRatio =
-      !automation.autoCollectRevenue &&
-      capacity > 0 &&
-      nextPending / capacity >= HIGH_VAULT_NOTIFY_RATIO &&
-      !b.notifiedHighVault;
-
-    if (hitHighRatio) {
-      highVaultBusinessIds.push(b.id);
-    }
-
-    return {
+    const updatedBiz: OwnedBusiness = {
       ...b,
       stockLevel: Number(nextStock.toFixed(1)),
       maintenanceLevel: Number(nextMaint.toFixed(1)),
-      pendingCash: nextPending,
-      totalEarned: b.totalEarned + directTransfer,
-      notifiedHighVault: automation.autoCollectRevenue
-        ? false
-        : b.notifiedHighVault || hitHighRatio,
+      constructionDaysRemaining: nextRem,
+      dailyAccruedGross: 0,
+      // Auto-settled branches clear immediately at 00:00; manual branches await Day-End Report collection
+      pendingCash: isAutoSettled ? 0 : Math.max(0, branchNet),
+      totalEarned: isAutoSettled ? b.totalEarned + Math.max(0, branchNet) : b.totalEarned,
+      notifiedHighVault: false,
     };
+
+    if (wasUnderConstruction && nextRem === 0) {
+      completedConstructions.push(updatedBiz);
+    }
+
+    return updatedBiz;
   });
 
   // Live stock dividends
@@ -975,29 +1261,34 @@ export function tickEconomy(
     0
   );
 
-  // Day-end summary, 7-day weekly dividend & 30-day monthly balance closing
+  // Day-end 00:00 report, 7-day weekly dividend & 30-day monthly balance closing
   let dayEndSummary: DayEndSummary | null = null;
   let weeklyDividendBonus = 0;
   let nextCreditScore = state.creditScore ?? STARTING_CREDIT_SCORE;
+  let nextPendingDayEndReports = [...(state.pendingDayEndReports ?? [])];
+  let nextDayEndHistory = [...(state.dayEndHistory ?? [])];
 
   if (daysPassed > 0) {
     const completedDay = nextTotalDay - 1;
     const completedMonth = Math.floor((completedDay - 1) / 30) + 1;
     const completedDayOfMonth = ((completedDay - 1) % 30) + 1;
 
-    const totalHourlyGross = updatedBusinesses.reduce(
-      (sum, b) =>
-        sum + calculateBusinessHourlyIncome(b, activeEvent, now, updatedBusinesses, state),
-      0
+    // Corporate HQ daily payroll (Accountant + CEO incl. 22.5% employer SGK)
+    const corpDailyCost = Math.round(
+      ((state.accountant?.hourlySalary ?? 0) + (state.ceo?.hourlySalary ?? 0)) *
+        24 *
+        (1 + TURKEY_EMPLOYER_SGK_RATE) *
+        daysPassed
     );
-    const dailyGrossRevenue = Math.round(totalHourlyGross * 24);
-    const dailySalariesPaid = Math.round(
-      (calculateTotalHourlyPayroll(state) +
-        (state.accountant?.hourlySalary ?? 0) +
-        (state.ceo?.hourlySalary ?? 0)) *
-        24
-    );
-    const dailyNetCashFlow = dailyGrossRevenue - dailySalariesPaid;
+    const totalDailySalariesPaid = dailyBranchSalaries + corpDailyCost;
+    const dailyNetCashFlow =
+      dailyGrossRevenue - dailySupplyCost - dailyUtilitiesAndRent - totalDailySalariesPaid;
+
+    // Deduct corporate HQ daily payroll automatically if accountant/CEO employed
+    if (corpDailyCost > 0) {
+      autoSettledNet -= corpDailyCost;
+      autoCollectedAtMidnight -= corpDailyCost;
+    }
 
     // Healthy daily standing gently grows credit score (+5/day), while garnishing reduces it (-10/day)
     const hasGarnishingLoan = (state.activeLoans ?? []).some((l) => l.status === 'garnishing');
@@ -1032,17 +1323,35 @@ export function tickEconomy(
       };
     }
 
+    const hasManualSettlement = branchLines.some((l) => !l.autoSettled);
+    const alreadyCollected = !hasManualSettlement;
+
     dayEndSummary = {
+      id: `dayend-${completedDay}-${now}`,
       completedDay,
       month: completedMonth,
       dayOfMonth: completedDayOfMonth,
       dailyGrossRevenue,
-      dailySalariesPaid,
+      dailySupplyCost,
+      dailyUtilitiesAndRent,
+      dailySalariesPaid: totalDailySalariesPaid,
       dailyNetCashFlow,
+      manualCollectibleNet,
+      autoSettledNet,
       creditScoreDelta,
       weeklyDividendPaid: weeklyDividendBonus,
       monthlyClosing,
+      branchLines,
+      collected: alreadyCollected,
     };
+
+    if (branchLines.length > 0 || corpDailyCost > 0) {
+      if (alreadyCollected) {
+        nextDayEndHistory = [dayEndSummary, ...nextDayEndHistory].slice(0, 365);
+      } else {
+        nextPendingDayEndReports = [dayEndSummary, ...nextPendingDayEndReports].slice(0, 30);
+      }
+    }
   }
 
   const cleanedBusinesses = updatedBusinesses.map((b) =>
@@ -1069,7 +1378,7 @@ export function tickEconomy(
         : bill;
     });
 
-    // Every 30th day (monthly closing): generate realistic monthly tax obligation if player has branches
+    // Every 30th day (monthly closing): generate realistic Turkish monthly tax obligation
     if (completedDay % 30 === 0 && updatedBusinesses.length > 0) {
       const totalHourlyGross = updatedBusinesses.reduce(
         (sum, b) =>
@@ -1080,11 +1389,20 @@ export function tickEconomy(
         calculateTotalHourlyPayroll(state) +
         (state.accountant?.hourlySalary ?? 0) +
         (state.ceo?.hourlySalary ?? 0);
-      const estNetWorth = calculateNetWorth({ ...state, businesses: updatedBusinesses }, now, stockQuotes);
+      const hourlyRentAndUtilities = Math.round(
+        updatedBusinesses.reduce((s, b) => s + calculateDailyRentAndUtilities(b), 0) / 24
+      );
+      const estNetWorth = calculateNetWorth(
+        { ...state, businesses: updatedBusinesses },
+        now,
+        stockQuotes
+      );
       const { breakdown } = calculateHourlyTaxBreakdown({
         hourlyGrossRevenue: totalHourlyGross,
         hourlyPayroll,
-        hourlyOperatingExpensesBeforeTax: hourlyPayroll + Math.round(totalHourlyGross * 0.22),
+        hourlyOperatingExpensesBeforeTax:
+          hourlyPayroll + hourlyRentAndUtilities + Math.round(totalHourlyGross * 0.2),
+        hourlyRentAndUtilities,
         branchCount: updatedBusinesses.length,
         netWorth: estNetWorth,
         accountant: state.accountant,
@@ -1102,13 +1420,18 @@ export function tickEconomy(
     ...state,
     gameMinutes: nextMinutes,
     creditScore: nextCreditScore,
-    cash: state.cash + autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
+    cash: Math.max(0, state.cash + autoCollectedAtMidnight + dividendPaid + passiveRoyaltyGain),
     totalEarnedLifetime:
-      state.totalEarnedLifetime + autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
+      state.totalEarnedLifetime +
+      Math.max(0, autoCollectedAtMidnight) +
+      dividendPaid +
+      passiveRoyaltyGain,
     franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
     businesses: cleanedBusinesses,
     competitiveBlitzes: activeBlitzes,
     pendingTaxes: nextPendingTaxes,
+    pendingDayEndReports: nextPendingDayEndReports,
+    dayEndHistory: nextDayEndHistory,
     activeEvent,
     lastSavedAt: now,
   };
@@ -1145,14 +1468,13 @@ export function tickEconomy(
   const newFranchiseOpenings = franchiseAppRes.autoApprovedApps;
 
   // v1.3.0 Muhasebeci / Mali Müşavir Automatic Tax & Monthly Loan Installment Payment
-  // Runs BEFORE overdue enforcement so employed Muhasebeci prevents overdue & foreclosure!
   const accPayRes = processAccountantAutoPayments(preLoanState, now);
   preLoanState = accPayRes.state;
 
   // Enforce overdue monthly loans (daily default interest -> 15d legal warning -> 30d foreclosure)
   const loanEnforcement = enforceOverdueLoans(
     preLoanState,
-    autoCollectedHourlyAmount + dividendPaid + passiveRoyaltyGain,
+    Math.max(0, autoCollectedAtMidnight) + dividendPaid + passiveRoyaltyGain,
     now,
     daysPassed
   );
@@ -1175,15 +1497,22 @@ export function tickEconomy(
     ceoActionsLog = ceoRes.actionsLog;
   }
 
+  const daySimAutoStop =
+    daysPassed > 0
+      ? evaluateDaySimAutoStop(state, finalState, completedConstructions, newTaxBillAmount)
+      : null;
+
   return {
     state: finalState,
     highVaultBusinessIds,
     newMarketEvent,
     dividendPaid,
-    autoCollectedHourlyAmount,
+    autoCollectedHourlyAmount: Math.max(0, autoCollectedAtMidnight),
     hoursPassed,
     daysPassed,
     dayEndSummary,
+    completedConstructions,
+    daySimAutoStop,
     loanEnforcement,
     autoRenewedAdsCount,
     autoAdsSpent,
@@ -1197,6 +1526,65 @@ export function tickEconomy(
     },
     ceoActionsLog,
     newTaxBillAmount,
+  };
+}
+
+/**
+ * Settles uncollected 00:00 Day-End Report(s) ("Gün Sonu Hasılatını Kasaya Aktar")
+ * into main treasury and archives them into dayEndHistory.
+ */
+export function collectDayEndReport(
+  state: EmpireState,
+  reportId?: string,
+  now = Date.now()
+): ActionResult {
+  const pending = state.pendingDayEndReports ?? [];
+  const targets = reportId ? pending.filter((r) => r.id === reportId) : pending;
+
+  if (targets.length === 0) {
+    return { state, ok: false, error: 'Tahsil edilecek gün sonu raporu bulunmuyor.' };
+  }
+
+  const targetIds = new Set(targets.map((r) => r.id));
+  const netDelta = targets.reduce((sum, r) => sum + r.manualCollectibleNet, 0);
+  const remaining = pending.filter((r) => !targetIds.has(r.id));
+  const archived = targets.map((r) => ({ ...r, collected: true }));
+
+  // Credit branch lifetime earnings for profitable manual lines in the collected reports
+  const branchNetGain = new Map<string, number>();
+  for (const rep of targets) {
+    for (const line of rep.branchLines) {
+      if (!line.autoSettled && line.netDailyProfit > 0) {
+        branchNetGain.set(
+          line.businessId,
+          (branchNetGain.get(line.businessId) ?? 0) + line.netDailyProfit
+        );
+      }
+    }
+  }
+
+  const nextBusinesses = state.businesses.map((b) => {
+    const gain = branchNetGain.get(b.id) ?? 0;
+    return {
+      ...b,
+      pendingCash: remaining.length === 0 ? 0 : Math.max(0, b.pendingCash - gain),
+      totalEarned: b.totalEarned + gain,
+      notifiedHighVault: false,
+    };
+  });
+
+  return {
+    ok: true,
+    collectedAmount: netDelta,
+    state: {
+      ...state,
+      cash: Math.max(0, state.cash + netDelta),
+      totalEarnedLifetime: state.totalEarnedLifetime + Math.max(0, netDelta),
+      businesses: nextBusinesses,
+      pendingDayEndReports: remaining,
+      dayEndHistory: [...archived, ...(state.dayEndHistory ?? [])].slice(0, 365),
+      lastSavedAt: now,
+    },
   };
 }
 

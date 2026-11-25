@@ -55,7 +55,9 @@ export interface BusinessBlueprint {
   upgradeFocus: string;
   baseCost: number;
   baseHourlyIncome: number; // Real-world scale hourly income
-  baseIncomePerSec: number; // Live gameplay income per second
+  baseIncomePerSec: number; // Live gameplay income per second (exact 40s/day scale)
+  constructionDays: number; // 3..15 in-game days of construction/renovation
+  dailyRentBase: number; // Base daily commercial rent & utilities in TL
   baseCapacity: number; // Customer / production capacity
   vaultCapacitySec: number;
   minCompanyLevel: number;
@@ -140,7 +142,10 @@ export interface StaffCandidate {
   speed: number; // 20..100
   efficiency: number; // 20..100
   leadership: number; // 20..100
-  hourlySalary: number;
+  hourlySalary: number; // Employer total hourly cost (wage + SGK)
+  dailyWage?: number; // Gross daily wage (Turkey min-wage indexed)
+  dailyEmployerSgk?: number; // Employer SGK premium per day (22.5%)
+  monthlyGrossSalary?: number; // Gross monthly salary
   hireCost: number;
 }
 
@@ -152,7 +157,22 @@ export interface HiredStaff extends StaffCandidate {
   autoAdsEnabled?: boolean; // Genel Müdür automatic ad campaign renewal toggle
 }
 
-export type GameSpeed = 0 | 1 | 2 | 4;
+export type GameSpeed = 0 | 1 | 2 | 4 | 'day';
+
+export type DaySimAutoStopReason =
+  | 'critical_cash'
+  | 'payment_due'
+  | 'construction_completed';
+
+export interface DaySimAutoStopAlert {
+  reason: DaySimAutoStopReason;
+  title: string;
+  message: string;
+  businessId?: string;
+  businessName?: string;
+  amount?: number;
+  gameDay: number;
+}
 
 export type AdCampaignTierId = 'brochure' | 'social' | 'billboard';
 
@@ -224,16 +244,39 @@ export interface BranchStaffSlots {
   maxBranchManagers: number;
 }
 
+export interface DayEndBranchLine {
+  businessId: string;
+  name: string;
+  cityLabel: string;
+  sectorName: string;
+  underConstruction: boolean;
+  constructionDaysRemaining: number;
+  grossRevenue: number;
+  supplyCost: number;
+  utilitiesAndRent: number;
+  dailyStaffWages: number;
+  netDailyProfit: number;
+  isLoss: boolean;
+  autoSettled: boolean;
+}
+
 export interface DayEndSummary {
+  id: string;
   completedDay: number;
   month: number;
   dayOfMonth: number;
   dailyGrossRevenue: number;
+  dailySupplyCost: number;
+  dailyUtilitiesAndRent: number;
   dailySalariesPaid: number;
   dailyNetCashFlow: number;
+  manualCollectibleNet: number;
+  autoSettledNet: number;
   creditScoreDelta: number;
   weeklyDividendPaid: number;
   monthlyClosing: MonthlyClosingSummary | null;
+  branchLines: DayEndBranchLine[];
+  collected: boolean;
 }
 
 export interface MonthlyClosingSummary {
@@ -268,6 +311,12 @@ export interface OwnedBusiness {
   boostEndsAt: number;
   createdAt: number;
   notifiedHighVault?: boolean;
+  // Construction & Renovation (v1.4.0)
+  constructionTotalDays?: number;
+  constructionDaysRemaining?: number; // > 0 means still under construction (no revenue, rent & installments accrue)
+  constructionDailyInstallment?: number; // Daily renovation installment cost during construction
+  doubleShiftApplied?: boolean; // True once player hired Double Shift Crew (-35% remaining days)
+  dailyAccruedGross?: number; // Sales accrued since 00:00 today, settled at midnight 00:00
   // Franchise, Chain & Advertising metadata
   chainBrandName?: string; // Shared brand name across cloned branches (2+ = Zincir Marka)
   chainBranchNumber?: number; // 1, 2, 3...
@@ -445,18 +494,18 @@ export interface CeoStaff {
 export interface TaxRatesBreakdown {
   stageIndex: number; // 0..3
   stageLabel: string;
-  kdvRate: number; // VAT on gross turnover
-  sgkRate: number; // Payroll SGK & Stopaj
-  corporateRate: number; // Kurumlar / Gelir Vergisi on operating profit
-  municipalRate: number; // Belediye İlan & Çevre Vergisi
+  kdvRate: number; // KDV (Katma Değer Vergisi)
+  sgkRate: number; // Muhtasar / Stopaj + İşveren SGK
+  corporateRate: number; // Kurumlar Vergisi
+  municipalRate: number; // Çevre Temizlik & İlan Reklam Vergisi
   incentiveNote: string;
 }
 
 export interface TaxBreakdownValues {
-  kdv: number;
-  sgkStopaj: number;
-  corporateTax: number;
-  municipalTax: number;
+  kdv: number; // KDV
+  sgkStopaj: number; // Muhtasar / Stopaj
+  corporateTax: number; // Kurumlar Vergisi
+  municipalTax: number; // Çevre Temizlik & İlan Reklam Vergisi
   totalTax: number;
 }
 
@@ -541,7 +590,10 @@ export interface AccountingBranchRow {
   cityLabel: string;
   sectorName: string;
   level: number;
+  underConstruction?: boolean;
+  constructionDaysRemaining?: number;
   hourlyGross: number;
+  hourlyRentAndUtilities?: number;
   hourlyExpenses: number;
   hourlyNet: number;
   marginPct: number;
@@ -558,18 +610,20 @@ export interface AccountingReport {
   hourlyTotalRevenue: number;
   // Expense items (hourly)
   hourlyStaffPayroll: number;
+  hourlyEmployerSgk: number;
+  hourlyRentAndUtilities: number;
   hourlySupplyGross: number;
   hourlySupplyDiscountSaved: number;
   hourlySupplyNet: number;
   hourlyFranchiseRoyaltyPaid: number;
   hourlyLoanInstallments: number;
   hourlyMaintenanceCost: number;
-  // v1.3.0 Realistic Progressive Tax Ledger (hourly)
+  // v1.4.0 Turkish Tax Ledger (hourly)
   taxRates: TaxRatesBreakdown;
   hourlyKdvTax: number;
-  hourlySgkTax: number;
-  hourlyCorporateTax: number;
-  hourlyMunicipalTax: number;
+  hourlySgkTax: number; // Muhtasar / Stopaj
+  hourlyCorporateTax: number; // Kurumlar Vergisi
+  hourlyMunicipalTax: number; // Çevre Temizlik & İlan Reklam Vergisi
   hourlyTotalTaxes: number;
   hourlyTotalExpenses: number;
   // Summary
@@ -633,6 +687,9 @@ export interface EmpireState {
   pendingTaxes?: PendingTaxObligation[];
   totalTaxesPaid?: number;
   lastCeoActionGameDay?: number;
+  // v1.4.0 Midnight 00:00 Day-End Reports & Ledger History
+  pendingDayEndReports?: DayEndSummary[];
+  dayEndHistory?: DayEndSummary[];
   activeMissions: MissionDef[]; // Self-renewing dynamic mission pool (always 4 active)
   claimedMissionIds: string[];
   completedMissionsCount: number;

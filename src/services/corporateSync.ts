@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { withSafeTimeout } from '../lib/safeStartup';
 import type {
   BankRecord,
   BusinessTypeId,
@@ -15,40 +16,48 @@ import { SEED_PLAYER_IPOS } from '../game/stockMarket';
 
 // --- FRANCHISES (public.franchises) ---
 export async function fetchAllFranchises(): Promise<FranchiseBrand[]> {
-  try {
-    const { data, error } = await supabase
-      .from('franchises')
-      .select(
-        'id, owner_id, owner_name, brand_name, business_type, license_fee, royalty_rate, branch_count, total_royalty_earned, created_at'
-      )
-      .order('branch_count', { ascending: false })
-      .limit(100);
+  return withSafeTimeout(
+    async () => {
+      try {
+        const { data, error } = await supabase
+          .from('franchises')
+          .select(
+            'id, owner_id, owner_name, brand_name, business_type, license_fee, royalty_rate, branch_count, total_royalty_earned, created_at'
+          )
+          .order('branch_count', { ascending: false })
+          .limit(100);
 
-    if (error || !data) {
-      return SEED_FRANCHISE_BRANDS;
-    }
+        if (error || !data) {
+          return SEED_FRANCHISE_BRANDS;
+        }
 
-    const remote: FranchiseBrand[] = data.map((row: Record<string, unknown>) => {
-      const rawType = String(row.business_type ?? 'kafe');
-      return {
-        id: String(row.id),
-        ownerId: String(row.owner_id),
-        ownerName: String(row.owner_name ?? 'Holding'),
-        brandName: String(row.brand_name ?? 'Marka'),
-        businessType: (isValidBusinessType(rawType) ? rawType : 'kafe') as BusinessTypeId,
-        licenseFee: Number(row.license_fee ?? 35_000),
-        royaltyRate: Number(row.royalty_rate ?? 0.15),
-        branchCount: Number(row.branch_count ?? 0),
-        totalRoyaltyEarned: Number(row.total_royalty_earned ?? 0),
-        createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
-      };
-    });
+        const remote: FranchiseBrand[] = data.map((row: Record<string, unknown>) => {
+          const rawType = String(row.business_type ?? 'kafe');
+          return {
+            id: String(row.id),
+            ownerId: String(row.owner_id),
+            ownerName: String(row.owner_name ?? 'Holding'),
+            brandName: String(row.brand_name ?? 'Marka'),
+            businessType: (isValidBusinessType(rawType) ? rawType : 'kafe') as BusinessTypeId,
+            licenseFee: Number(row.license_fee ?? 35_000),
+            royaltyRate: Number(row.royalty_rate ?? 0.15),
+            branchCount: Number(row.branch_count ?? 0),
+            totalRoyaltyEarned: Number(row.total_royalty_earned ?? 0),
+            createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
+          };
+        });
 
-    const ids = new Set(remote.map((r) => r.id));
-    return [...remote, ...SEED_FRANCHISE_BRANDS.filter((s) => !ids.has(s.id))];
-  } catch {
-    return SEED_FRANCHISE_BRANDS;
-  }
+        const ids = new Set(remote.map((r) => r.id));
+        return [...remote, ...SEED_FRANCHISE_BRANDS.filter((s) => !ids.has(s.id))];
+      } catch (err) {
+        console.warn('[corporateSync] Franchises okunamadı, yerel veriler kullanılıyor:', err);
+        return SEED_FRANCHISE_BRANDS;
+      }
+    },
+    5000,
+    SEED_FRANCHISE_BRANDS,
+    'fetchAllFranchises'
+  );
 }
 
 export async function publishFranchiseBrand(brand: FranchiseBrand): Promise<boolean> {
@@ -93,44 +102,52 @@ export async function incrementFranchiseUsage(
 
 // --- BANKS (public.banks) ---
 export async function fetchAllBanks(): Promise<BankRecord[]> {
-  try {
-    const { data, error } = await supabase
-      .from('banks')
-      .select(
-        'id, owner_id, owner_name, bank_name, brand_color, emblem, hq_city_plate, hq_city_name, hq_lat, hq_lng, pool_capital, base_interest_rate, min_credit_score, total_loans_issued, total_interest_earned, seized_assets_count, created_at'
-      )
-      .order('pool_capital', { ascending: false })
-      .limit(100);
+  return withSafeTimeout(
+    async () => {
+      try {
+        const { data, error } = await supabase
+          .from('banks')
+          .select(
+            'id, owner_id, owner_name, bank_name, brand_color, emblem, hq_city_plate, hq_city_name, hq_lat, hq_lng, pool_capital, base_interest_rate, min_credit_score, total_loans_issued, total_interest_earned, seized_assets_count, created_at'
+          )
+          .order('pool_capital', { ascending: false })
+          .limit(100);
 
-    if (error || !data) {
-      return DEFAULT_SYSTEM_BANKS;
-    }
+        if (error || !data) {
+          return DEFAULT_SYSTEM_BANKS;
+        }
 
-    const remote: BankRecord[] = data.map((row: Record<string, unknown>) => ({
-      id: String(row.id),
-      ownerId: String(row.owner_id),
-      ownerName: String(row.owner_name ?? 'Bankacı'),
-      bankName: String(row.bank_name ?? 'Özel Banka'),
-      brandColor: String(row.brand_color ?? '#B45309'),
-      emblem: String(row.emblem ?? '🏦'),
-      hqCityPlate: Number(row.hq_city_plate ?? 34),
-      hqCityName: String(row.hq_city_name ?? 'İstanbul'),
-      hqLat: Number(row.hq_lat ?? 41.04),
-      hqLng: Number(row.hq_lng ?? 29.0),
-      poolCapital: Number(row.pool_capital ?? 10_000_000),
-      baseInterestRate: Number(row.base_interest_rate ?? 0.12),
-      minCreditScore: Number(row.min_credit_score ?? 900),
-      totalLoansIssued: Number(row.total_loans_issued ?? 0),
-      totalInterestEarned: Number(row.total_interest_earned ?? 0),
-      seizedAssetsCount: Number(row.seized_assets_count ?? 0),
-      createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
-    }));
+        const remote: BankRecord[] = data.map((row: Record<string, unknown>) => ({
+          id: String(row.id),
+          ownerId: String(row.owner_id),
+          ownerName: String(row.owner_name ?? 'Bankacı'),
+          bankName: String(row.bank_name ?? 'Özel Banka'),
+          brandColor: String(row.brand_color ?? '#B45309'),
+          emblem: String(row.emblem ?? '🏦'),
+          hqCityPlate: Number(row.hq_city_plate ?? 34),
+          hqCityName: String(row.hq_city_name ?? 'İstanbul'),
+          hqLat: Number(row.hq_lat ?? 41.04),
+          hqLng: Number(row.hq_lng ?? 29.0),
+          poolCapital: Number(row.pool_capital ?? 10_000_000),
+          baseInterestRate: Number(row.base_interest_rate ?? 0.12),
+          minCreditScore: Number(row.min_credit_score ?? 900),
+          totalLoansIssued: Number(row.total_loans_issued ?? 0),
+          totalInterestEarned: Number(row.total_interest_earned ?? 0),
+          seizedAssetsCount: Number(row.seized_assets_count ?? 0),
+          createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
+        }));
 
-    const ids = new Set(remote.map((r) => r.id));
-    return [...remote, ...DEFAULT_SYSTEM_BANKS.filter((s) => !ids.has(s.id))];
-  } catch {
-    return DEFAULT_SYSTEM_BANKS;
-  }
+        const ids = new Set(remote.map((r) => r.id));
+        return [...remote, ...DEFAULT_SYSTEM_BANKS.filter((s) => !ids.has(s.id))];
+      } catch (err) {
+        console.warn('[corporateSync] Bankalar okunamadı, yerel veriler kullanılıyor:', err);
+        return DEFAULT_SYSTEM_BANKS;
+      }
+    },
+    5000,
+    DEFAULT_SYSTEM_BANKS,
+    'fetchAllBanks'
+  );
 }
 
 export async function publishBankRecord(bank: BankRecord): Promise<boolean> {
@@ -194,44 +211,52 @@ export async function publishLoanRecord(loan: LoanRecord): Promise<boolean> {
 
 // --- PLAYER IPO LISTINGS (public.ipo_listings) ---
 export async function fetchPlayerIpoListings(): Promise<StockQuote[]> {
-  try {
-    const { data, error } = await supabase
-      .from('ipo_listings')
-      .select(
-        'ticker, owner_id, owner_name, holding_name, price, open_price, market_cap, business_count, factory_count'
-      )
-      .order('market_cap', { ascending: false })
-      .limit(50);
+  return withSafeTimeout(
+    async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ipo_listings')
+          .select(
+            'ticker, owner_id, owner_name, holding_name, price, open_price, market_cap, business_count, factory_count'
+          )
+          .order('market_cap', { ascending: false })
+          .limit(50);
 
-    if (error || !data) {
-      return SEED_PLAYER_IPOS;
-    }
+        if (error || !data) {
+          return SEED_PLAYER_IPOS;
+        }
 
-    const remote: StockQuote[] = data.map((row: Record<string, unknown>) => {
-      const price = Number(row.price ?? 100);
-      return {
-        ticker: String(row.ticker),
-        name: String(row.holding_name ?? 'Holding A.Ş.'),
-        sector: 'Oyuncu Holdingi · Halka Arz',
-        isPlayerIpo: true,
-        ownerId: String(row.owner_id),
-        ownerName: String(row.owner_name ?? 'Patron'),
-        price,
-        previousPrice: price,
-        openPrice: Number(row.open_price ?? price),
-        dividendYieldAnnual: 0.07,
-        history: Array.from({ length: 12 }, () => price),
-        marketCap: Number(row.market_cap ?? 10_000_000),
-        businessCount: Number(row.business_count ?? 5),
-        factoryCount: Number(row.factory_count ?? 1),
-      };
-    });
+        const remote: StockQuote[] = data.map((row: Record<string, unknown>) => {
+          const price = Number(row.price ?? 100);
+          return {
+            ticker: String(row.ticker),
+            name: String(row.holding_name ?? 'Holding A.Ş.'),
+            sector: 'Oyuncu Holdingi · Halka Arz',
+            isPlayerIpo: true,
+            ownerId: String(row.owner_id),
+            ownerName: String(row.owner_name ?? 'Patron'),
+            price,
+            previousPrice: price,
+            openPrice: Number(row.open_price ?? price),
+            dividendYieldAnnual: 0.07,
+            history: Array.from({ length: 12 }, () => price),
+            marketCap: Number(row.market_cap ?? 10_000_000),
+            businessCount: Number(row.business_count ?? 5),
+            factoryCount: Number(row.factory_count ?? 1),
+          };
+        });
 
-    const tickers = new Set(remote.map((r) => r.ticker));
-    return [...remote, ...SEED_PLAYER_IPOS.filter((s) => !tickers.has(s.ticker))];
-  } catch {
-    return SEED_PLAYER_IPOS;
-  }
+        const tickers = new Set(remote.map((r) => r.ticker));
+        return [...remote, ...SEED_PLAYER_IPOS.filter((s) => !tickers.has(s.ticker))];
+      } catch (err) {
+        console.warn('[corporateSync] IPO listesi okunamadı, yerel veriler kullanılıyor:', err);
+        return SEED_PLAYER_IPOS;
+      }
+    },
+    5000,
+    SEED_PLAYER_IPOS,
+    'fetchPlayerIpoListings'
+  );
 }
 
 export async function publishPlayerIpoListing(quote: StockQuote): Promise<boolean> {

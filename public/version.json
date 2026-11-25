@@ -1,10 +1,10 @@
 {
-  "version": "1.3.2",
+  "version": "1.4.0-fix",
   "buildDate": "2026-11-25",
   "mandatory": false,
   "notes": [
-    "Mevcut işletmelerin Supabase ortak haritasına otomatik aktarımı ve rakip pin gösterimi düzeltildi",
-    "Harita veri okuması select('*') ile hem lat/lng hem latitude/longitude koordinat sütunlarını destekleyecek şekilde güçlendirildi",
-    "Supabase okuma/yazma hataları artık sessizce yutulmuyor; konsol ve bildirim merkezinde kısa hata mesajı gösteriliyor"
+    "Mobil cihazlarda açılış ekranı donma ve çökme sorunu giderildi",
+    "Hızlı alt açılır menüler, gün gün simülasyon butonu, işletme inşaat süreleri, 00:00 gün sonu tahsilatı ve gerçekçi Türkiye vergi/maaş sistemi eklendi",
+    "İnşaat aşamasında Çift Vardiya Ekip Tut (-%35 süre) ve Gün+ modunda Otomatik Durdurma Koruması eklendi"
   ]
 }

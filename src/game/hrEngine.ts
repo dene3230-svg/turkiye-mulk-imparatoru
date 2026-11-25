@@ -14,6 +14,79 @@ export const MAX_BRANCH_WORKERS = 4;
 export const MAX_BRANCH_ASSISTANT_MANAGERS = 1;
 export const MAX_BRANCH_MANAGERS = 1;
 
+// v1.4.0 Türkiye Güncel Asgari Ücret & İşveren SGK Maliyet Tabanı (2025/2026)
+export const TURKEY_MIN_WAGE_MONTHLY_NET = 22_104;
+export const TURKEY_MIN_WAGE_MONTHLY_GROSS = 26_005;
+export const TURKEY_MIN_WAGE_DAILY_GROSS = Math.round(TURKEY_MIN_WAGE_MONTHLY_GROSS / 30); // ₺867/gün brüt yevmiye
+export const TURKEY_EMPLOYER_SGK_RATE = 0.225; // %20.5 SGK İşveren + %2 İşsizlik = %22.5
+
+export const ROLE_WAGE_MULTIPLIER: Record<StaffRole, number> = {
+  calisan: 1.0, // Standart asgari ücret tabanı
+  mudur_yardimcisi: 1.4, // %40 daha yüksek
+  sube_muduru: 1.9, // %90 daha yüksek
+  bolge_sorumlusu: 2.8, // Bölge yöneticisi
+  genel_mudur: 4.2, // Genel Müdürlük / İl Koordinatörü
+};
+
+const STAR_WAGE_STEP: Record<1 | 2 | 3 | 4 | 5, number> = {
+  1: 1.0,
+  2: 1.08,
+  3: 1.16,
+  4: 1.25,
+  5: 1.35,
+};
+
+export interface StaffDailyWageBreakdown {
+  dailyGrossWage: number;
+  dailyEmployerSgk: number;
+  dailyTotalCost: number;
+  hourlyTotalCost: number;
+  monthlyGrossSalary: number;
+  monthlyTotalCost: number;
+}
+
+export function calculateRoleWageBreakdown(
+  role: StaffRole,
+  stars: 1 | 2 | 3 | 4 | 5
+): StaffDailyWageBreakdown {
+  const dailyGrossWage = Math.round(
+    TURKEY_MIN_WAGE_DAILY_GROSS * ROLE_WAGE_MULTIPLIER[role] * STAR_WAGE_STEP[stars]
+  );
+  const dailyEmployerSgk = Math.round(dailyGrossWage * TURKEY_EMPLOYER_SGK_RATE);
+  const dailyTotalCost = dailyGrossWage + dailyEmployerSgk;
+  const hourlyTotalCost = Math.max(1, Math.round(dailyTotalCost / 24));
+  return {
+    dailyGrossWage,
+    dailyEmployerSgk,
+    dailyTotalCost,
+    hourlyTotalCost,
+    monthlyGrossSalary: dailyGrossWage * 30,
+    monthlyTotalCost: dailyTotalCost * 30,
+  };
+}
+
+export function getStaffDailyCost(
+  staff: Pick<StaffCandidate, 'role' | 'stars' | 'dailyWage' | 'dailyEmployerSgk' | 'hourlySalary'>
+): StaffDailyWageBreakdown {
+  if (typeof staff.dailyWage === 'number' && staff.dailyWage > 0) {
+    const dailyGrossWage = Math.round(staff.dailyWage);
+    const dailyEmployerSgk =
+      typeof staff.dailyEmployerSgk === 'number'
+        ? Math.round(staff.dailyEmployerSgk)
+        : Math.round(dailyGrossWage * TURKEY_EMPLOYER_SGK_RATE);
+    const dailyTotalCost = dailyGrossWage + dailyEmployerSgk;
+    return {
+      dailyGrossWage,
+      dailyEmployerSgk,
+      dailyTotalCost,
+      hourlyTotalCost: Math.max(1, Math.round(dailyTotalCost / 24)),
+      monthlyGrossSalary: dailyGrossWage * 30,
+      monthlyTotalCost: dailyTotalCost * 30,
+    };
+  }
+  return calculateRoleWageBreakdown(staff.role, staff.stars);
+}
+
 export const ROLE_META: Record<
   StaffRole,
   {
@@ -30,8 +103,8 @@ export const ROLE_META: Record<
     shortLabel: 'Çalışan',
     scope: 'branch',
     description:
-      'Müşterilere hizmet verir; hız ve kapasiteyi artırır (Şube başına en fazla 4 çalışan).',
-    baseHourlySalary: 250,
+      'Türkiye asgari ücret tabanıyla çalışır; hız ve kapasiteyi artırır (Şube başına en fazla 4 çalışan).',
+    baseHourlySalary: calculateRoleWageBreakdown('calisan', 1).hourlyTotalCost,
     baseHireCost: 4_000,
   },
   mudur_yardimcisi: {
@@ -39,8 +112,8 @@ export const ROLE_META: Record<
     shortLabel: 'Müd. Yrd.',
     scope: 'branch',
     description:
-      'Atandığı şubede otomatik stok ve malzeme takibi yapar (Şube başına en fazla 1 adet).',
-    baseHourlySalary: 650,
+      'Taban ücretten %40 yüksek maaşla otomatik stok takibi yapar (Şube başına en fazla 1 adet).',
+    baseHourlySalary: calculateRoleWageBreakdown('mudur_yardimcisi', 1).hourlyTotalCost,
     baseHireCost: 26_000,
   },
   sube_muduru: {
@@ -48,8 +121,8 @@ export const ROLE_META: Record<
     shortLabel: 'Şube Müd.',
     scope: 'branch',
     description:
-      'Atandığı şubede tam otomasyon (otomatik stok, bakım ve saatlik hasılatın otomatik ana kasaya toplanması) sağlar (Şube başına 1 adet).',
-    baseHourlySalary: 1_250,
+      'Taban ücretten %90 yüksek maaşla atandığı şubede tam otomasyon ve 00:00 otomatik gün sonu tahsilatı sağlar.',
+    baseHourlySalary: calculateRoleWageBreakdown('sube_muduru', 1).hourlyTotalCost,
     baseHireCost: 65_000,
   },
   bolge_sorumlusu: {
@@ -57,8 +130,8 @@ export const ROLE_META: Record<
     shortLabel: 'Bölge Sor.',
     scope: 'city',
     description:
-      'Çok şubeli şehirlerde 4 şubeye kadar ortak tam otomasyon, %15 tedarik indirimi ve otomatik hasılat toplama sağlar (Min. 2 şube).',
-    baseHourlySalary: 3_600,
+      'Çok şubeli şehirlerde 4 şubeye kadar tam otomasyon, %15 tedarik indirimi ve otomatik tahsilat sağlar (Min. 2 şube).',
+    baseHourlySalary: calculateRoleWageBreakdown('bolge_sorumlusu', 1).hourlyTotalCost,
     baseHireCost: 195_000,
   },
   genel_mudur: {
@@ -66,51 +139,18 @@ export const ROLE_META: Record<
     shortLabel: 'Genel Müdür',
     scope: 'city',
     description:
-      'Şehirdeki tüm zincir şubelerde ortak tam otomasyon, +%20 verimlilik, otomatik hasılat toplama ve Otomatik Reklam Yönetimi sağlar (Min. 2 şube veya Zincir Marka).',
-    baseHourlySalary: 8_500,
+      'Şehirdeki tüm zincir şubelerde ortak tam otomasyon, +%20 verimlilik, otomatik tahsilat ve Otomatik Reklam Yönetimi sağlar.',
+    baseHourlySalary: calculateRoleWageBreakdown('genel_mudur', 1).hourlyTotalCost,
     baseHireCost: 560_000,
   },
 };
 
-const ROLE_STAR_PRICING: Record<
-  StaffRole,
-  Record<1 | 2 | 3 | 4 | 5, { hireCost: number; hourlySalary: number }>
-> = {
-  calisan: {
-    1: { hireCost: 4_000, hourlySalary: 250 },
-    2: { hireCost: 9_500, hourlySalary: 400 },
-    3: { hireCost: 16_500, hourlySalary: 650 },
-    4: { hireCost: 28_000, hourlySalary: 1_050 },
-    5: { hireCost: 44_000, hourlySalary: 1_600 },
-  },
-  mudur_yardimcisi: {
-    1: { hireCost: 26_000, hourlySalary: 650 },
-    2: { hireCost: 34_000, hourlySalary: 850 },
-    3: { hireCost: 42_500, hourlySalary: 1_100 },
-    4: { hireCost: 51_000, hourlySalary: 1_400 },
-    5: { hireCost: 59_000, hourlySalary: 1_750 },
-  },
-  sube_muduru: {
-    1: { hireCost: 65_000, hourlySalary: 1_200 },
-    2: { hireCost: 82_000, hourlySalary: 1_550 },
-    3: { hireCost: 105_000, hourlySalary: 1_950 },
-    4: { hireCost: 132_000, hourlySalary: 2_400 },
-    5: { hireCost: 168_000, hourlySalary: 2_950 },
-  },
-  bolge_sorumlusu: {
-    1: { hireCost: 165_000, hourlySalary: 2_800 },
-    2: { hireCost: 195_000, hourlySalary: 3_200 },
-    3: { hireCost: 235_000, hourlySalary: 3_800 },
-    4: { hireCost: 310_000, hourlySalary: 4_800 },
-    5: { hireCost: 410_000, hourlySalary: 6_200 },
-  },
-  genel_mudur: {
-    1: { hireCost: 440_000, hourlySalary: 6_500 },
-    2: { hireCost: 510_000, hourlySalary: 7_500 },
-    3: { hireCost: 590_000, hourlySalary: 8_800 },
-    4: { hireCost: 760_000, hourlySalary: 11_200 },
-    5: { hireCost: 960_000, hourlySalary: 14_200 },
-  },
+const ROLE_STAR_HIRE_COST: Record<StaffRole, Record<1 | 2 | 3 | 4 | 5, number>> = {
+  calisan: { 1: 4_000, 2: 9_000, 3: 15_000, 4: 24_000, 5: 36_000 },
+  mudur_yardimcisi: { 1: 26_000, 2: 33_000, 3: 41_000, 4: 49_000, 5: 58_000 },
+  sube_muduru: { 1: 65_000, 2: 80_000, 3: 102_000, 4: 128_000, 5: 160_000 },
+  bolge_sorumlusu: { 1: 165_000, 2: 195_000, 3: 235_000, 4: 300_000, 5: 390_000 },
+  genel_mudur: { 1: 440_000, 2: 510_000, 3: 590_000, 4: 740_000, 5: 920_000 },
 };
 
 export function getBranchStaffSlots(business: OwnedBusiness): BranchStaffSlots {
@@ -249,7 +289,8 @@ export function generateCandidatePool(
     const first = FIRST_NAMES[Math.floor(rand() * FIRST_NAMES.length)];
     const last = LAST_NAMES[Math.floor(rand() * LAST_NAMES.length)];
     const meta = ROLE_META[role];
-    const pricing = ROLE_STAR_PRICING[role][stars];
+    const wage = calculateRoleWageBreakdown(role, stars);
+    const hireCost = ROLE_STAR_HIRE_COST[role][stars];
 
     const roleTitle = role === 'calisan' ? SECTOR_WORKER_TITLE[sectorHint] : meta.label;
 
@@ -262,8 +303,11 @@ export function generateCandidatePool(
       speed: jitter(),
       efficiency: jitter(),
       leadership: role === 'calisan' ? Math.max(20, jitter() - 15) : Math.min(99, jitter() + 8),
-      hourlySalary: pricing.hourlySalary,
-      hireCost: pricing.hireCost,
+      hourlySalary: wage.hourlyTotalCost,
+      dailyWage: wage.dailyGrossWage,
+      dailyEmployerSgk: wage.dailyEmployerSgk,
+      monthlyGrossSalary: wage.monthlyGrossSalary,
+      hireCost,
     };
   });
 }
@@ -390,13 +434,35 @@ export function calculateStaffQualityMultiplier(
   return (1 + employeeBonus + automation.efficiencyBonus) * opsFactor;
 }
 
+export function calculateTotalDailyPayrollBreakdown(state: EmpireState): {
+  dailyGrossWages: number;
+  dailyEmployerSgk: number;
+  dailyTotalCost: number;
+} {
+  let dailyGrossWages = 0;
+  let dailyEmployerSgk = 0;
+  for (const b of state.businesses) {
+    for (const e of b.employees ?? []) {
+      const w = getStaffDailyCost(e);
+      dailyGrossWages += w.dailyGrossWage;
+      dailyEmployerSgk += w.dailyEmployerSgk;
+    }
+  }
+  for (const m of state.cityManagers ?? []) {
+    const w = getStaffDailyCost(m);
+    dailyGrossWages += w.dailyGrossWage;
+    dailyEmployerSgk += w.dailyEmployerSgk;
+  }
+  return {
+    dailyGrossWages,
+    dailyEmployerSgk,
+    dailyTotalCost: dailyGrossWages + dailyEmployerSgk,
+  };
+}
+
 export function calculateTotalHourlyPayroll(state: EmpireState): number {
-  const branchPayroll = state.businesses.reduce(
-    (sum, b) => sum + (b.employees ?? []).reduce((s, e) => s + e.hourlySalary, 0),
-    0
-  );
-  const cityPayroll = (state.cityManagers ?? []).reduce((sum, m) => sum + m.hourlySalary, 0);
-  return branchPayroll + cityPayroll;
+  const daily = calculateTotalDailyPayrollBreakdown(state);
+  return Math.round(daily.dailyTotalCost / 24);
 }
 
 export interface HrActionResult {

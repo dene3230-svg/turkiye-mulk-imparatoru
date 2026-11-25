@@ -1,6 +1,11 @@
 import { createClient, type Session } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import type { EmpireState, UserProfile } from '../types/game';
+import {
+  createSafeWebStorageAdapter,
+  safeReadStorageJson,
+  safeStorageSetItem,
+} from './safeStartup';
 
 const FALLBACK_SUPABASE_URL = 'https://uninkpbgcljtgndwetbw.supabase.co';
 const FALLBACK_SUPABASE_ANON_KEY = 'sb_publishable_OgsNojQw3kT53iN3LKKS2w_OKolvn9_';
@@ -15,6 +20,7 @@ export const NATIVE_OAUTH_REDIRECT = 'com.fugames.turkiyemulkimparatoru://login-
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
+    storage: createSafeWebStorageAdapter(),
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
@@ -41,17 +47,38 @@ export function sessionToUserProfile(session: Session): UserProfile {
   };
 }
 
+function isValidUserProfile(value: unknown): value is UserProfile {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<UserProfile>;
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.trim().length > 0 &&
+    typeof candidate.name === 'string' &&
+    candidate.name.trim().length > 0
+  );
+}
+
+function isValidStoredEmpire(value: unknown): value is EmpireState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<EmpireState>;
+  return (
+    typeof candidate.cash === 'number' &&
+    Number.isFinite(candidate.cash) &&
+    Array.isArray(candidate.businesses)
+  );
+}
+
 export function createOrLoadGuestProfile(): UserProfile {
-  try {
-    const raw = localStorage.getItem(GUEST_PROFILE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as UserProfile;
-      if (parsed?.id && parsed?.name) {
-        return parsed;
-      }
-    }
-  } catch {
-    // ignore storage errors
+  const existing = safeReadStorageJson<UserProfile | null>(
+    GUEST_PROFILE_KEY,
+    null,
+    isValidUserProfile
+  );
+  if (existing) {
+    return {
+      ...existing,
+      provider: existing.provider === 'google' ? 'google' : 'guest',
+    };
   }
 
   const profile: UserProfile = {
@@ -61,7 +88,7 @@ export function createOrLoadGuestProfile(): UserProfile {
   };
 
   try {
-    localStorage.setItem(GUEST_PROFILE_KEY, JSON.stringify(profile));
+    safeStorageSetItem(GUEST_PROFILE_KEY, JSON.stringify(profile));
   } catch {
     // ignore storage errors
   }
@@ -108,22 +135,16 @@ export async function signOutAccount(): Promise<void> {
 
 export function saveEmpireStateLocal(userId: string, state: EmpireState): void {
   try {
-    localStorage.setItem(`${EMPIRE_STORAGE_PREFIX}${userId}`, JSON.stringify(state));
+    safeStorageSetItem(`${EMPIRE_STORAGE_PREFIX}${userId}`, JSON.stringify(state));
   } catch {
     // quota or private mode
   }
 }
 
 export function loadEmpireStateLocal(userId: string): EmpireState | null {
-  try {
-    const raw = localStorage.getItem(`${EMPIRE_STORAGE_PREFIX}${userId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as EmpireState;
-    if (typeof parsed?.cash === 'number' && Array.isArray(parsed?.businesses)) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  return safeReadStorageJson<EmpireState | null>(
+    `${EMPIRE_STORAGE_PREFIX}${userId}`,
+    null,
+    isValidStoredEmpire
+  );
 }

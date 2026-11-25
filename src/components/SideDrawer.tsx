@@ -21,6 +21,8 @@ import {
   CopyPlus,
   Megaphone,
   Link2,
+  Hammer,
+  CalendarCheck2,
 } from 'lucide-react';
 import type {
   AdCampaignTierId,
@@ -33,6 +35,8 @@ import type {
 import { COMPANY_TIERS, getBlueprintById } from '../game/catalog';
 import {
   calculateBusinessHourlyIncome,
+  calculateDailyRentAndUtilities,
+  calculateDoubleShiftCost,
   calculateNetWorth,
   calculateTotalPendingCash,
   calculateUpgradeCost,
@@ -40,6 +44,7 @@ import {
   formatTL,
   getCompanyTier,
   getMissionProgress,
+  isBusinessUnderConstruction,
 } from '../game/economy';
 import { getBranchStaffSlots, resolveBusinessAutomation } from '../game/hrEngine';
 import { ensureDynamicMissions } from '../game/missionEngine';
@@ -71,6 +76,8 @@ interface SideDrawerProps {
   onOpenHrModal?: (businessId: string | null) => void;
   onCloneBusiness?: (businessId: string) => void;
   onLaunchAdCampaign?: (businessId: string, tierId: AdCampaignTierId) => void;
+  onHireDoubleShift?: (businessId: string) => void;
+  onOpenDayEndReport?: () => void;
   onCollectBusiness: (businessId: string) => void;
   onCollectAll: () => void;
   onUpgradeBusiness: (businessId: string) => void;
@@ -93,6 +100,8 @@ export function SideDrawer({
   onOpenHrModal,
   onCloneBusiness,
   onLaunchAdCampaign,
+  onHireDoubleShift,
+  onOpenDayEndReport,
   onCollectBusiness,
   onCollectAll,
   onUpgradeBusiness,
@@ -211,14 +220,34 @@ export function SideDrawer({
       >
         {tab === 'portfolio' && (
           <div className="space-y-3">
-            {totalPendingCash > 0 && (
+            {onOpenDayEndReport && (state.pendingDayEndReports ?? []).length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-400/55 bg-emerald-950/45 px-3.5 py-2.5">
+                <div className="text-xs text-emerald-200 flex items-center gap-2">
+                  <CalendarCheck2 className="h-4 w-4 text-emerald-300 shrink-0" />
+                  <span>
+                    <strong>{(state.pendingDayEndReports ?? []).length} adet 00:00 Gün Sonu Raporu</strong>{' '}
+                    hasılat tahsilatı bekliyor!
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenDayEndReport}
+                  className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 text-xs font-extrabold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
+                >
+                  <Coins className="h-4 w-4" />
+                  <span>Gün Sonu Raporunu Aç</span>
+                </button>
+              </div>
+            )}
+
+            {totalPendingCash > 0 && (state.pendingDayEndReports ?? []).length === 0 && (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/35 px-3.5 py-2.5">
                 <div className="text-xs text-emerald-200">
-                  Şube kasalarında toplam{' '}
+                  Şube kasalarında gün içi{' '}
                   <strong className="font-mono-num text-sm font-black text-emerald-300">
                     {formatTL(totalPendingCash)}
                   </strong>{' '}
-                  tahsilat bekliyor.
+                  satış birikti (00:00 kapanışında tahsil edilir).
                 </div>
                 <button
                   type="button"
@@ -278,12 +307,20 @@ export function SideDrawer({
                   const hasActiveAd = isAdCampaignActive(biz.activeAdCampaign, currentGameMin);
                   const isAdExpanded = expandedAdBizId === biz.id;
                   const quotaFull = state.businesses.length >= currentTier.maxBranches;
+                  const underConstruction = isBusinessUnderConstruction(biz);
+                  const remConstDays = biz.constructionDaysRemaining ?? 0;
+                  const doubleShiftCost = calculateDoubleShiftCost(biz);
+                  const dailyRent = calculateDailyRentAndUtilities(biz);
 
                   return (
                     <div
                       key={biz.id}
                       data-testid={`branch-card-${biz.id}`}
-                      className="flex flex-col justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
+                      className={`flex flex-col justify-between gap-2.5 rounded-xl border p-3 ${
+                        underConstruction
+                          ? 'border-amber-500/50 bg-amber-950/20'
+                          : 'border-slate-800 bg-slate-900/80'
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <button
@@ -299,6 +336,11 @@ export function SideDrawer({
                               <span className="truncate text-sm font-bold text-white hover:text-amber-300">
                                 {biz.customName}
                               </span>
+                              {underConstruction && (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/25 border border-amber-400/50 px-1.5 py-0.5 text-[11px] font-extrabold text-amber-200">
+                                  <Hammer className="h-3 w-3" /> İnşaat · {remConstDays}g Kaldı
+                                </span>
+                              )}
                               {isHq && (
                                 <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
                                   Merkez Üs
@@ -312,7 +354,7 @@ export function SideDrawer({
                                   <Link2 className="h-3 w-3" /> Zincir Marka ({chainStatus.branchCount} Şube)
                                 </span>
                               )}
-                              {automation.autoCollectRevenue && (
+                              {automation.autoCollectRevenue && !underConstruction && (
                                 <span
                                   data-testid="portfolio-auto-collect-badge"
                                   className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300"
@@ -335,10 +377,7 @@ export function SideDrawer({
                             <div className="mt-0.5 text-xs text-slate-400">
                               {String(biz.cityPlate).padStart(2, '0')} {biz.cityName} ·{' '}
                               {biz.districtName} · Sv.{biz.level}/{bp?.maxLevel ?? 10} ·{' '}
-                              {bp?.shortName}
-                              {chainStatus.isChain
-                                ? ` · -%${Math.round(chainStatus.supplyDiscount * 100)} Tedarik`
-                                : ''}
+                              {bp?.shortName} · Kira -{formatTL(dailyRent, true)}/gün
                             </div>
                             <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-slate-300">
                               <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
@@ -354,8 +393,12 @@ export function SideDrawer({
                           </div>
                         </button>
 
-                        <span className="shrink-0 font-mono-num text-sm font-black text-emerald-400">
-                          {formatTL(hourly)}/sa
+                        <span
+                          className={`shrink-0 font-mono-num text-sm font-black ${
+                            underConstruction ? 'text-amber-300' : 'text-emerald-400'
+                          }`}
+                        >
+                          {underConstruction ? 'İnşaatta' : `${formatTL(hourly)}/sa`}
                         </span>
                       </div>
 
@@ -391,19 +434,45 @@ export function SideDrawer({
                         </div>
                       </div>
 
-                      {/* Primary Revenue & Upgrade Actions */}
+                      {/* Primary Revenue / Construction Double Shift & Upgrade Actions */}
                       <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={pending <= 0}
-                          onClick={() => onCollectBusiness(biz.id)}
-                          className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
-                        >
-                          <Coins className="h-3.5 w-3.5" />
-                          <span>
-                            {pending > 0 ? `Hasılatı Topla (${formatTL(pending, true)})` : 'Kasa Boş'}
-                          </span>
-                        </button>
+                        {underConstruction ? (
+                          onHireDoubleShift && !biz.doubleShiftApplied && remConstDays >= 2 ? (
+                            <button
+                              type="button"
+                              data-testid={`drawer-double-shift-${biz.id}`}
+                              disabled={state.cash < doubleShiftCost}
+                              onClick={() => onHireDoubleShift(biz.id)}
+                              className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-400 px-3 text-xs font-black text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                            >
+                              <Zap className="h-3.5 w-3.5" />
+                              <span>Çift Vardiya (-%35 · {formatTL(doubleShiftCost, true)})</span>
+                            </button>
+                          ) : (
+                            <div className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-bold text-amber-200 whitespace-nowrap">
+                              <Hammer className="h-3.5 w-3.5" />
+                              <span>
+                                {biz.doubleShiftApplied
+                                  ? `Çift Vardiya Aktif (${remConstDays}g)`
+                                  : `Açılışa ${remConstDays} Gün Kaldı`}
+                              </span>
+                            </div>
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={pending <= 0}
+                            onClick={() => onCollectBusiness(biz.id)}
+                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                          >
+                            <Coins className="h-3.5 w-3.5" />
+                            <span>
+                              {pending > 0
+                                ? `Hasılatı Topla (${formatTL(pending, true)})`
+                                : '00:00 Bekliyor'}
+                            </span>
+                          </button>
+                        )}
 
                         {bp && biz.level < bp.maxLevel && (
                           <button

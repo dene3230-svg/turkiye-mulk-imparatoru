@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { withSafeTimeout } from '../lib/safeStartup';
 import type { BusinessTypeId, OwnedBusiness, RemoteBusinessRecord } from '../types/game';
 import { isValidBusinessType } from '../game/catalog';
 import { getProvinceByPlate } from '../game/provinces81';
@@ -381,40 +382,47 @@ export async function fetchAllWorldBusinesses(): Promise<{
   connected: boolean;
   error?: string;
 }> {
-  try {
-    let { data, error } = await supabase
-      .from('businesses')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1000);
+  return withSafeTimeout(
+    async () => {
+      try {
+        let { data, error } = await supabase
+          .from('businesses')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(1000);
 
-    // Fallback if table has no `created_at` column
-    if (error && error.message?.toLowerCase().includes('created_at')) {
-      const retry = await supabase.from('businesses').select('*').limit(1000);
-      data = retry.data;
-      error = retry.error;
-    }
+        // Fallback if table has no `created_at` column
+        if (error && error.message?.toLowerCase().includes('created_at')) {
+          const retry = await supabase.from('businesses').select('*').limit(1000);
+          data = retry.data;
+          error = retry.error;
+        }
 
-    if (error) {
-      const msg = formatSupabaseError(error, 'Supabase işletmeler okunamadı');
-      console.error('[Supabase businesses SELECT hatası]', error);
-      return { records: [], connected: false, error: msg };
-    }
+        if (error) {
+          const msg = formatSupabaseError(error, 'Supabase işletmeler okunamadı');
+          console.warn('[Supabase businesses SELECT hatası]', error);
+          return { records: [], connected: false, error: msg };
+        }
 
-    if (!Array.isArray(data)) {
-      return { records: [], connected: true };
-    }
+        if (!Array.isArray(data)) {
+          return { records: [], connected: true };
+        }
 
-    const records = data
-      .map((row) => normalizeRecord(row as Record<string, unknown>))
-      .filter((item): item is RemoteBusinessRecord => item !== null);
+        const records = data
+          .map((row) => normalizeRecord(row as Record<string, unknown>))
+          .filter((item): item is RemoteBusinessRecord => item !== null);
 
-    return { records, connected: true };
-  } catch (err) {
-    const msg = formatSupabaseError(err, 'Supabase işletmeler okunamadı');
-    console.error('[Supabase businesses SELECT istisnası]', err);
-    return { records: [], connected: false, error: msg };
-  }
+        return { records, connected: true };
+      } catch (err) {
+        const msg = formatSupabaseError(err, 'Supabase işletmeler okunamadı');
+        console.warn('[Supabase businesses SELECT istisnası]', err);
+        return { records: [], connected: false, error: msg };
+      }
+    },
+    6000,
+    { records: [], connected: false, error: 'Supabase yanıt süresi aşıldı (yerel mod).' },
+    'fetchAllWorldBusinesses'
+  );
 }
 
 export async function fetchCityBusinesses(
@@ -627,25 +635,32 @@ export async function publishBusinessToRoom(
   record: RemoteBusinessRecord
 ): Promise<{ ok: boolean; error?: string }> {
   postLocalBusinessBroadcast({ type: 'upsert', record });
-  try {
-    let { error } = await supabase.from('businesses').upsert(record, { onConflict: 'id' });
-    if (error && isCoordColumnError(error.message ?? '')) {
-      const retry = await supabase
-        .from('businesses')
-        .upsert(toLatLngAltPayload(record), { onConflict: 'id' });
-      error = retry.error;
-    }
-    if (error) {
-      const msg = formatSupabaseError(error, 'İşletme Supabase veritabanına kaydedilemedi');
-      console.error('[Supabase businesses UPSERT hatası]', error);
-      return { ok: false, error: msg };
-    }
-    return { ok: true };
-  } catch (err) {
-    const msg = formatSupabaseError(err, 'İşletme Supabase veritabanına kaydedilemedi');
-    console.error('[Supabase businesses UPSERT istisnası]', err);
-    return { ok: false, error: msg };
-  }
+  return withSafeTimeout(
+    async () => {
+      try {
+        let { error } = await supabase.from('businesses').upsert(record, { onConflict: 'id' });
+        if (error && isCoordColumnError(error.message ?? '')) {
+          const retry = await supabase
+            .from('businesses')
+            .upsert(toLatLngAltPayload(record), { onConflict: 'id' });
+          error = retry.error;
+        }
+        if (error) {
+          const msg = formatSupabaseError(error, 'İşletme Supabase veritabanına kaydedilemedi');
+          console.warn('[Supabase businesses UPSERT hatası]', error);
+          return { ok: false, error: msg };
+        }
+        return { ok: true };
+      } catch (err) {
+        const msg = formatSupabaseError(err, 'İşletme Supabase veritabanına kaydedilemedi');
+        console.warn('[Supabase businesses UPSERT istisnası]', err);
+        return { ok: false, error: msg };
+      }
+    },
+    6000,
+    { ok: false, error: 'Supabase kayıt zaman aşımına uğradı.' },
+    'publishBusinessToRoom'
+  );
 }
 
 /**
@@ -659,25 +674,38 @@ export async function syncPlayerBusinessesToWorld(
   for (const rec of records) {
     postLocalBusinessBroadcast({ type: 'upsert', record: rec });
   }
-  try {
-    let { error } = await supabase.from('businesses').upsert(records, { onConflict: 'id' });
-    if (error && isCoordColumnError(error.message ?? '')) {
-      const retry = await supabase
-        .from('businesses')
-        .upsert(records.map(toLatLngAltPayload), { onConflict: 'id' });
-      error = retry.error;
-    }
-    if (error) {
-      const msg = formatSupabaseError(error, 'Mevcut işletmeler Supabase veritabanına aktarılamadı');
-      console.error('[Supabase businesses BATCH UPSERT hatası]', error);
-      return { ok: false, syncedCount: 0, error: msg };
-    }
-    return { ok: true, syncedCount: records.length };
-  } catch (err) {
-    const msg = formatSupabaseError(err, 'Mevcut işletmeler Supabase veritabanına aktarılamadı');
-    console.error('[Supabase businesses BATCH UPSERT istisnası]', err);
-    return { ok: false, syncedCount: 0, error: msg };
-  }
+  return withSafeTimeout(
+    async () => {
+      try {
+        let { error } = await supabase.from('businesses').upsert(records, { onConflict: 'id' });
+        if (error && isCoordColumnError(error.message ?? '')) {
+          const retry = await supabase
+            .from('businesses')
+            .upsert(records.map(toLatLngAltPayload), { onConflict: 'id' });
+          error = retry.error;
+        }
+        if (error) {
+          const msg = formatSupabaseError(
+            error,
+            'Mevcut işletmeler Supabase veritabanına aktarılamadı'
+          );
+          console.warn('[Supabase businesses BATCH UPSERT hatası]', error);
+          return { ok: false, syncedCount: 0, error: msg };
+        }
+        return { ok: true, syncedCount: records.length };
+      } catch (err) {
+        const msg = formatSupabaseError(
+          err,
+          'Mevcut işletmeler Supabase veritabanına aktarılamadı'
+        );
+        console.warn('[Supabase businesses BATCH UPSERT istisnası]', err);
+        return { ok: false, syncedCount: 0, error: msg };
+      }
+    },
+    6000,
+    { ok: false, syncedCount: 0, error: 'Toplu işletme senkronizasyonu zaman aşımına uğradı.' },
+    'syncPlayerBusinessesToWorld'
+  );
 }
 
 export async function updateBusinessInRoom(

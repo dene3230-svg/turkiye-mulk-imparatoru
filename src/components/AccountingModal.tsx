@@ -14,10 +14,18 @@ import {
   ShieldCheck,
   Calculator,
   Coins,
+  Scale,
+  Hammer,
+  CalendarCheck2,
 } from 'lucide-react';
 import type { EmpireState, StockQuote } from '../types/game';
-import { calculateAccountingReport } from '../game/accountingEngine';
+import {
+  buildPeriodAccountingSummary,
+  calculateAccountingReport,
+  type AccountingPeriod,
+} from '../game/accountingEngine';
 import { formatGameClock, formatTL } from '../game/economy';
+import { TURKEY_MIN_WAGE_MONTHLY_NET } from '../game/hrEngine';
 import { MobileGameModal, type MobileModalTab } from './MobileGameModal';
 
 interface AccountingModalProps {
@@ -27,6 +35,7 @@ interface AccountingModalProps {
   now: number;
   onPayTaxBill?: (taxId: string) => void;
   onOpenHrAccounting?: () => void;
+  onOpenDayEndReport?: () => void;
   onSwitchToBanking?: () => void;
   onSwitchToBorsa?: () => void;
   onSwitchToInvestments?: () => void;
@@ -40,32 +49,35 @@ export function AccountingModal({
   now,
   onPayTaxBill,
   onOpenHrAccounting,
+  onOpenDayEndReport,
   onSwitchToBanking,
   onSwitchToBorsa,
   onSwitchToInvestments,
   onClose,
 }: AccountingModalProps) {
-  const [period, setPeriod] = useState<'hourly' | 'daily'>('hourly');
+  const [period, setPeriod] = useState<AccountingPeriod>('daily');
 
   const report = useMemo(
     () => calculateAccountingReport(state, quotes, now),
     [state, quotes, now]
   );
 
+  const summary = useMemo(
+    () => buildPeriodAccountingSummary(report, period, state, quotes, now),
+    [report, period, state, quotes, now]
+  );
+
   if (!open) return null;
 
   const clock = formatGameClock(state.gameMinutes);
-  const mult = period === 'daily' ? 24 : 1;
-  const unit = period === 'daily' ? '/gün' : '/sa';
+  const mult = summary.multiplierHours;
+  const unit = period === 'daily' ? '/gün' : period === 'monthly' ? '/ay' : '/yıl';
   const holdingCount = (state.stockPortfolio ?? []).filter((h) => h.shares > 0).length;
   const pendingBills = (state.pendingTaxes ?? []).filter((b) => b.status !== 'paid');
+  const pendingDayEndCount = (state.pendingDayEndReports ?? []).length;
 
-  const totalRevenue = report.hourlyTotalRevenue * mult;
-  const totalExpenses = report.hourlyTotalExpenses * mult;
-  const netProfit = report.hourlyNetProfit * mult;
-
-  const rawBarTotal = totalRevenue + totalExpenses;
-  const revBarPct = rawBarTotal > 0 ? Math.round((totalRevenue / rawBarTotal) * 100) : 0;
+  const rawBarTotal = summary.totalRevenue + summary.totalExpenses;
+  const revBarPct = rawBarTotal > 0 ? Math.round((summary.totalRevenue / rawBarTotal) * 100) : 0;
   const expBarPct = rawBarTotal > 0 ? 100 - revBarPct : 0;
 
   const topTabs: MobileModalTab[] = [
@@ -91,57 +103,69 @@ export function AccountingModal({
   const revenueRows = [
     {
       label: 'Şube & Fabrika Brüt Cirosu',
-      value: report.hourlyBranchGross * mult,
+      value: summary.branchGross,
       color: 'bg-emerald-500',
     },
     {
       label: 'Franchise Telif (Royalty) Geliri',
-      value: report.hourlyFranchiseRoyaltyIncome * mult,
+      value: Math.round(report.hourlyFranchiseRoyaltyIncome * mult),
       color: 'bg-amber-400',
     },
     {
       label: 'Banka Kredi Faiz Kazancı',
-      value: report.hourlyBankInterestIncome * mult,
+      value: Math.round(report.hourlyBankInterestIncome * mult),
       color: 'bg-sky-400',
     },
     {
       label: 'Borsa Temettü Gelirleri',
-      value: report.hourlyStockDividendIncome * mult,
+      value: Math.round(report.hourlyStockDividendIncome * mult),
       color: 'bg-indigo-400',
     },
   ];
 
   const expenseRows = [
     {
-      label: 'Personel, Yönetici & Genel Müdürlük Maaşları',
-      value: report.hourlyStaffPayroll * mult,
-      note: null as string | null,
+      label: 'Personel & Yönetici Brüt Maaşları (Asgari Ücret Bazlı)',
+      value: summary.staffGrossPayroll,
+      note: `Baz Net Asgari Ücret: ${formatTL(TURKEY_MIN_WAGE_MONTHLY_NET)}/ay`,
       color: 'bg-rose-500',
     },
     {
-      label: 'Stok & Tedarik (Net)',
-      value: report.hourlySupplyNet * mult,
+      label: 'İşveren SGK Primi (%22,5)',
+      value: summary.employerSgk,
+      note: null as string | null,
+      color: 'bg-pink-500',
+    },
+    {
+      label: 'Ticari Kira, Elektrik, Su & İnşaat Taksitleri',
+      value: summary.rentAndUtilities,
+      note: null as string | null,
+      color: 'bg-orange-500',
+    },
+    {
+      label: 'Mal & Tedarik Maliyeti (Net)',
+      value: summary.supplyNet,
       note:
-        report.hourlySupplyDiscountSaved > 0
-          ? `Fabrika/Zincir indirimi: -${formatTL(report.hourlySupplyDiscountSaved * mult, true)}`
+        summary.supplyDiscountSaved > 0
+          ? `Fabrika/Zincir indirimi: -${formatTL(summary.supplyDiscountSaved, true)}`
           : null,
       color: 'bg-orange-400',
     },
     {
-      label: `KDV (%${Math.round(report.taxRates.kdvRate * 100)})`,
-      value: report.hourlyKdvTax * mult,
+      label: `KDV (%${Math.round(report.taxRates.kdvRate * 100)} Net)`,
+      value: summary.kdvTax,
       note: null as string | null,
       color: 'bg-amber-400',
     },
     {
-      label: `Personel SGK & Stopaj Primi (%${Math.round(report.taxRates.sgkRate * 100)})`,
-      value: report.hourlySgkTax * mult,
-      note: null as string | null,
+      label: `Muhtasar / Stopaj Vergisi (%${Math.round(report.taxRates.sgkRate * 100)})`,
+      value: summary.muhtasarStopajTax,
+      note: 'Maaş ve ticari işyeri kira stopajı dahil',
       color: 'bg-pink-400',
     },
     {
-      label: `Kurumlar / Gelir Vergisi (%${Math.round(report.taxRates.corporateRate * 100)})`,
-      value: report.hourlyCorporateTax * mult,
+      label: `Kurumlar Vergisi (%${Math.round(report.taxRates.corporateRate * 100)})`,
+      value: summary.corporateTax,
       note: state.accountant
         ? `${state.accountant.title} yasal optimizasyonu: -%${Math.round(
             state.accountant.taxOptimizationRate * 100
@@ -150,20 +174,14 @@ export function AccountingModal({
       color: 'bg-fuchsia-400',
     },
     {
-      label: `Belediye İlan ve Çevre Vergisi (%${(report.taxRates.municipalRate * 100).toFixed(1)})`,
-      value: report.hourlyMunicipalTax * mult,
+      label: `Çevre Temizlik & İlan Reklam Vergisi (%${(report.taxRates.municipalRate * 100).toFixed(1)})`,
+      value: summary.municipalTax,
       note: null as string | null,
       color: 'bg-violet-400',
     },
     {
-      label: 'Banka Kredi Taksitleri (Aylık Amortisman)',
-      value: report.hourlyLoanInstallments * mult,
-      note: null as string | null,
-      color: 'bg-red-500',
-    },
-    {
-      label: 'Ödenen Franchise Payları & İşletme Bakım',
-      value: (report.hourlyFranchiseRoyaltyPaid + report.hourlyMaintenanceCost) * mult,
+      label: 'Banka Kredi Taksitleri, Franchise Payı & Bakım',
+      value: summary.loanInstallments + summary.franchiseRoyaltyPaid + summary.maintenanceCost,
       note: null as string | null,
       color: 'bg-slate-400',
     },
@@ -172,8 +190,8 @@ export function AccountingModal({
   return (
     <div data-testid="accounting-modal">
       <MobileGameModal
-        title="Finans Merkezi"
-        subtitle="Muhasebe, Gelir-Gider & Kademeli Vergi Bilançosu"
+        title="Finans & Muhasebe Merkezi"
+        subtitle="Gün Sonu, Ay Sonu & Yıl Sonu Bilanço + Türkiye Vergi Sistemi"
         icon={<FileSpreadsheet className="h-4 w-4" />}
         tabs={topTabs}
         activeTabId="muhasebe"
@@ -184,36 +202,59 @@ export function AccountingModal({
         }}
         subHeader={
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                data-testid="accounting-period-hourly"
-                onClick={() => setPeriod('hourly')}
-                className={`min-h-[40px] rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
-                  period === 'hourly'
-                    ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
-                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
-                }`}
-              >
-                Saatlik Bilanço
-              </button>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
               <button
                 type="button"
                 data-testid="accounting-period-daily"
                 onClick={() => setPeriod('daily')}
-                className={`min-h-[40px] rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
+                className={`min-h-[38px] rounded-lg border px-3 text-xs font-bold whitespace-nowrap transition-all ${
                   period === 'daily'
                     ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
-                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
+                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:bg-slate-700'
                 }`}
               >
-                Günlük (24 Saat)
+                Gün Sonu Raporu
+              </button>
+              <button
+                type="button"
+                data-testid="accounting-period-monthly"
+                onClick={() => setPeriod('monthly')}
+                className={`min-h-[38px] rounded-lg border px-3 text-xs font-bold whitespace-nowrap transition-all ${
+                  period === 'monthly'
+                    ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
+                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:bg-slate-700'
+                }`}
+              >
+                Ay Sonu Raporu
+              </button>
+              <button
+                type="button"
+                data-testid="accounting-period-annual"
+                onClick={() => setPeriod('annual')}
+                className={`min-h-[38px] rounded-lg border px-3 text-xs font-bold whitespace-nowrap transition-all ${
+                  period === 'annual'
+                    ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
+                    : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:bg-slate-700'
+                }`}
+              >
+                Yıl Sonu Bilanço Raporu
               </button>
             </div>
-            <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600/70 bg-slate-950/90 px-3 py-1.5 text-xs font-bold text-amber-300">
-              <CalendarDays className="h-3.5 w-3.5" />
-              <span>{clock.label}</span>
-              <span className="text-slate-400">· {clock.totalDaysLabel}</span>
+            <div className="flex items-center gap-2">
+              {onOpenDayEndReport && pendingDayEndCount > 0 && (
+                <button
+                  type="button"
+                  onClick={onOpenDayEndReport}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/60 bg-emerald-500/20 px-2.5 py-1.5 text-xs font-extrabold text-emerald-200 hover:bg-emerald-500/30 whitespace-nowrap"
+                >
+                  <CalendarCheck2 className="h-3.5 w-3.5" />
+                  <span>00:00 Tahsilat ({pendingDayEndCount})</span>
+                </button>
+              )}
+              <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600/70 bg-slate-950/90 px-2.5 py-1.5 text-xs font-bold text-amber-300 whitespace-nowrap">
+                <CalendarDays className="h-3.5 w-3.5" />
+                <span>{clock.label}</span>
+              </div>
             </div>
           </div>
         }
@@ -226,13 +267,13 @@ export function AccountingModal({
             <div className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
               <div className="text-xs text-slate-400">Brüt Gelir ({unit})</div>
               <div className="mt-1 font-mono-num text-base font-black text-emerald-400">
-                +{formatTL(totalRevenue, true)}
+                +{formatTL(summary.totalRevenue, true)}
               </div>
             </div>
             <div className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
               <div className="text-xs text-slate-400">Gider + Vergi ({unit})</div>
               <div className="mt-1 font-mono-num text-base font-black text-rose-400">
-                -{formatTL(totalExpenses, true)}
+                -{formatTL(summary.totalExpenses, true)}
               </div>
             </div>
           </div>
@@ -243,32 +284,120 @@ export function AccountingModal({
               <div
                 data-testid="accounting-net-profit"
                 className={`mt-1 font-mono-num text-base font-black ${
-                  netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  summary.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
-                {netProfit >= 0 ? '+' : ''}
-                {formatTL(netProfit, true)}
+                {summary.netProfit >= 0 ? '+' : ''}
+                {formatTL(summary.netProfit, true)}
               </div>
             </div>
             <div className="rounded-xl border border-slate-600/60 bg-slate-900/85 p-3">
               <div className="text-xs text-slate-400">Net Kâr Marjı</div>
               <div
                 className={`mt-1 flex items-center gap-1 font-mono-num text-base font-black ${
-                  report.profitMarginPct >= 0 ? 'text-amber-300' : 'text-rose-400'
+                  summary.profitMarginPct >= 0 ? 'text-amber-300' : 'text-rose-400'
                 }`}
               >
-                {report.profitMarginPct >= 0 ? (
+                {summary.profitMarginPct >= 0 ? (
                   <TrendingUp className="h-4 w-4" />
                 ) : (
                   <TrendingDown className="h-4 w-4" />
                 )}
-                <span>%{report.profitMarginPct.toFixed(1)}</span>
+                <span>%{summary.profitMarginPct.toFixed(1)}</span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Progressive Tax Regime & Accountant Automation Status */}
+        {/* Annual Balance Sheet Card (Shown prominently on Yıl Sonu Bilanço Raporu) */}
+        {period === 'annual' && (
+          <section
+            data-testid="annual-balance-sheet"
+            className="rounded-xl border border-sky-400/50 bg-sky-950/25 p-3.5 space-y-2.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Scale className="h-4 w-4 text-sky-300" />
+                <h3 className="text-sm font-black text-white">
+                  Yıl Sonu Bilanço Tablosu (Aktif / Pasif / Özkaynak)
+                </h3>
+              </div>
+              <span className="font-mono-num text-xs font-extrabold text-emerald-300">
+                Net Özkaynak: {formatTL(summary.netEquity, true)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div className="rounded-lg border border-emerald-500/35 bg-slate-950/75 p-2.5 space-y-1">
+                <div className="font-bold text-emerald-300">AKTİF VARLIKLAR</div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Kasa Nakit</span>
+                  <span className="font-mono-num font-bold text-white">
+                    {formatTL(summary.totalCashAssets, true)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Ticari İşletmeler</span>
+                  <span className="font-mono-num font-bold text-white">
+                    {formatTL(summary.totalRealEstateAssets, true)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">BIST & Banka</span>
+                  <span className="font-mono-num font-bold text-white">
+                    {formatTL(summary.totalStockAssets + summary.totalBankAssets, true)}
+                  </span>
+                </div>
+                <div className="border-t border-slate-800 pt-1 flex justify-between font-extrabold text-emerald-300">
+                  <span>Toplam Aktif</span>
+                  <span className="font-mono-num">{formatTL(summary.totalAssets, true)}</span>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-rose-500/35 bg-slate-950/75 p-2.5 space-y-1">
+                <div className="font-bold text-rose-300">PASİF YÜKÜMLÜLÜKLER</div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Banka Kredi Borçları</span>
+                  <span className="font-mono-num font-bold text-rose-300">
+                    {formatTL(summary.totalLoanLiabilities, true)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Ödenecek Vergiler</span>
+                  <span className="font-mono-num font-bold text-rose-300">
+                    {formatTL(summary.totalTaxLiabilities, true)}
+                  </span>
+                </div>
+                <div className="border-t border-slate-800 pt-1 flex justify-between font-extrabold text-rose-300">
+                  <span>Toplam Pasif</span>
+                  <span className="font-mono-num">{formatTL(summary.totalLiabilities, true)}</span>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-amber-500/40 bg-slate-950/75 p-2.5 space-y-1">
+                <div className="font-bold text-amber-300">YILLIK VERGİ & ÖZKAYNAK</div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Tahmini Yıllık Vergi</span>
+                  <span className="font-mono-num font-bold text-amber-200">
+                    {formatTL(summary.totalTaxes, true)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Tahmini Yıllık SGK</span>
+                  <span className="font-mono-num font-bold text-pink-200">
+                    {formatTL(summary.employerSgk, true)}
+                  </span>
+                </div>
+                <div className="border-t border-slate-800 pt-1 flex justify-between font-extrabold text-emerald-300">
+                  <span>Net Özkaynak</span>
+                  <span className="font-mono-num">{formatTL(summary.netEquity, true)}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Turkish 4-Tax Regime & Accountant Automation Status */}
         <section
           data-testid="tax-regime-panel"
           className="rounded-xl border border-amber-400/50 bg-slate-900/85 p-3 space-y-2.5"
@@ -277,11 +406,11 @@ export function AccountingModal({
             <div className="flex items-center gap-2">
               <Receipt className="h-4 w-4 text-amber-400" />
               <span className="text-sm font-black text-white">
-                Vergi Kademesi: {report.taxRates.stageLabel}
+                Türkiye Vergi Kademesi: {report.taxRates.stageLabel}
               </span>
             </div>
             <span className="font-mono-num text-xs font-bold text-rose-300">
-              Toplam Vergi ({unit}): -{formatTL(report.hourlyTotalTaxes * mult, true)}
+              Toplam Vergi ({unit}): -{formatTL(summary.totalTaxes, true)}
             </span>
           </div>
 
@@ -291,25 +420,28 @@ export function AccountingModal({
             <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
               <div className="text-[11px] text-slate-400">KDV</div>
               <div className="font-black text-amber-300">
-                %{Math.round(report.taxRates.kdvRate * 100)}
+                %{Math.round(report.taxRates.kdvRate * 100)} · {formatTL(summary.kdvTax, true)}
               </div>
             </div>
             <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
-              <div className="text-[11px] text-slate-400">SGK & Stopaj</div>
+              <div className="text-[11px] text-slate-400">Muhtasar / Stopaj</div>
               <div className="font-black text-pink-300">
-                %{Math.round(report.taxRates.sgkRate * 100)}
+                %{Math.round(report.taxRates.sgkRate * 100)} ·{' '}
+                {formatTL(summary.muhtasarStopajTax, true)}
               </div>
             </div>
             <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
-              <div className="text-[11px] text-slate-400">Kurumlar/Gelir</div>
+              <div className="text-[11px] text-slate-400">Kurumlar Vergisi</div>
               <div className="font-black text-fuchsia-300">
-                %{Math.round(report.taxRates.corporateRate * 100)}
+                %{Math.round(report.taxRates.corporateRate * 100)} ·{' '}
+                {formatTL(summary.corporateTax, true)}
               </div>
             </div>
             <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2">
-              <div className="text-[11px] text-slate-400">Belediye</div>
+              <div className="text-[11px] text-slate-400">Çevre Temizlik & İlan</div>
               <div className="font-black text-violet-300">
-                %{(report.taxRates.municipalRate * 100).toFixed(1)}
+                %{(report.taxRates.municipalRate * 100).toFixed(1)} ·{' '}
+                {formatTL(summary.municipalTax, true)}
               </div>
             </div>
           </div>
@@ -327,14 +459,15 @@ export function AccountingModal({
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-2 w-full">
                 <span className="text-amber-200">
-                  Muhasebeci atanmadı: Aylık vergi ve kredi taksitlerini manuel ödemelisiniz.
+                  Muhasebeci atanmadı: Aylık KDV, Muhtasar, Kurumlar ve ÇTV beyannamelerini manuel
+                  ödemelisiniz.
                 </span>
                 {onOpenHrAccounting && (
                   <button
                     type="button"
                     data-testid="goto-hire-accountant-btn"
                     onClick={onOpenHrAccounting}
-                    className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-amber-300/80 bg-amber-400 px-3 text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98] whitespace-nowrap"
+                    className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-amber-300/80 bg-amber-400 px-3 text-xs font-black text-slate-950 transition-all hover:bg-amber-300 whitespace-nowrap"
                   >
                     <Calculator className="h-3.5 w-3.5" />
                     <span>Muhasebeci İşe Al (Sv.1+)</span>
@@ -361,8 +494,9 @@ export function AccountingModal({
                     </div>
                     <div className="text-[11px] text-slate-300">
                       Son Ödeme: Gün {bill.dueGameDay} · KDV {formatTL(bill.breakdown.kdv, true)} ·
-                      SGK {formatTL(bill.breakdown.sgkStopaj, true)} · Kurumlar{' '}
-                      {formatTL(bill.breakdown.corporateTax, true)}
+                      Muhtasar {formatTL(bill.breakdown.sgkStopaj, true)} · Kurumlar{' '}
+                      {formatTL(bill.breakdown.corporateTax, true)} · ÇTV{' '}
+                      {formatTL(bill.breakdown.municipalTax, true)}
                     </div>
                   </div>
                   {onPayTaxBill && (
@@ -371,7 +505,7 @@ export function AccountingModal({
                       data-testid={`pay-tax-${bill.id}`}
                       disabled={state.cash < bill.amount}
                       onClick={() => onPayTaxBill(bill.id)}
-                      className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-emerald-300/80 bg-emerald-500 px-3 font-mono-num text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+                      className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-emerald-300/80 bg-emerald-500 px-3 font-mono-num text-xs font-black text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
                     >
                       <Coins className="h-3.5 w-3.5" />
                       <span>Öde ({formatTL(bill.amount)})</span>
@@ -405,10 +539,11 @@ export function AccountingModal({
         <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
           <section className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-3 space-y-2.5">
             <h3 className="text-sm font-bold text-emerald-300">
-              Gelir Kalemleri ({period === 'daily' ? 'Günlük' : 'Saatlik'})
+              Gelir Kalemleri ({summary.periodLabel})
             </h3>
             {revenueRows.map((row) => {
-              const pct = totalRevenue > 0 ? Math.round((row.value / totalRevenue) * 100) : 0;
+              const pct =
+                summary.totalRevenue > 0 ? Math.round((row.value / summary.totalRevenue) * 100) : 0;
               return (
                 <div key={row.label} className="text-xs">
                   <div className="flex items-center justify-between gap-2">
@@ -446,10 +581,13 @@ export function AccountingModal({
 
           <section className="rounded-xl border border-rose-500/40 bg-rose-950/20 p-3 space-y-2.5">
             <h3 className="text-sm font-bold text-rose-300">
-              Gider & Vergi Kalemleri ({period === 'daily' ? 'Günlük' : 'Saatlik'})
+              Gider & Vergi Kalemleri ({summary.periodLabel})
             </h3>
             {expenseRows.map((row) => {
-              const pct = totalExpenses > 0 ? Math.round((row.value / totalExpenses) * 100) : 0;
+              const pct =
+                summary.totalExpenses > 0
+                  ? Math.round((row.value / summary.totalExpenses) * 100)
+                  : 0;
               return (
                 <div key={row.label} className="text-xs">
                   <div className="flex items-center justify-between gap-2">
@@ -459,7 +597,7 @@ export function AccountingModal({
                     </span>
                   </div>
                   {row.note && (
-                    <div className="mt-0.5 text-xs font-semibold text-emerald-400">
+                    <div className="mt-0.5 text-[11px] font-semibold text-emerald-400">
                       <Sparkles className="mr-1 inline h-3 w-3" />
                       {row.note}
                     </div>
@@ -479,13 +617,13 @@ export function AccountingModal({
             <h3 className="text-sm font-bold text-white">
               Şube Bazlı Kârlılık ({report.branches.length} Şube)
             </h3>
-            <span className="text-xs text-slate-400">Net kâra göre sıralı</span>
+            <span className="text-xs text-slate-400">Net kâra göre sıralı ({unit})</span>
           </div>
 
           {report.branches.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-600 p-6 text-center text-xs text-slate-400">
-              Henüz aktif şubeniz yok. Haritada pin bırakarak ilk işletmenizi kurduğunuzda
-              şube bilançosu burada canlı güncellenir.
+              Henüz aktif şubeniz yok. Haritada pin bırakarak ilk işletmenizi kurduğunuzda şube
+              bilançosu burada canlı güncellenir.
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-2 min-[900px]:grid-cols-2">
@@ -498,13 +636,22 @@ export function AccountingModal({
                 return (
                   <div
                     key={b.businessId}
-                    className="rounded-xl border border-slate-600/60 bg-slate-950/80 p-3 space-y-1.5"
+                    className={`rounded-xl border p-3 space-y-1.5 ${
+                      isLoss
+                        ? 'border-rose-500/55 bg-rose-950/30'
+                        : 'border-slate-600/60 bg-slate-950/80'
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="truncate text-sm font-bold text-white">{b.name}</span>
-                          {b.autoCollectActive && (
+                          {b.underConstruction && (
+                            <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
+                              <Hammer className="h-3 w-3" /> {b.constructionDaysRemaining}g
+                            </span>
+                          )}
+                          {b.autoCollectActive && !b.underConstruction && (
                             <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-300">
                               <Zap className="h-3 w-3" /> Oto
                             </span>
@@ -515,7 +662,7 @@ export function AccountingModal({
                         </div>
                       </div>
                       {isLoss ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-500/20 px-2 py-1 text-xs font-bold text-rose-300">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-500/25 px-2 py-1 text-xs font-bold text-rose-200">
                           <AlertTriangle className="h-3.5 w-3.5" /> Zararda
                         </span>
                       ) : isTop ? (

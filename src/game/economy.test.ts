@@ -11,24 +11,30 @@ import {
   STARTING_GAME_MINUTES,
   calculateBusinessCapacity,
   calculateBusinessIncomePerSec,
+  calculateDailyRentAndUtilities,
+  calculateDoubleShiftCost,
   calculateNetWorth,
   calculateTakeoverPrice,
   checkMinDistance75m,
   claimMissionReward,
+  collectDayEndReport,
   createHeadquartersForCity,
   createInitialEmpireState,
+  evaluateDaySimAutoStop,
   formatGameClock,
   getCompanyTier,
   getEffectiveSimSeconds,
   hasAvmSynergyForBusiness,
   hasFactorySupplySynergy,
   hasParkingSynergyForBusiness,
+  hireDoubleShiftCrew,
+  isBusinessUnderConstruction,
   purchaseBusiness,
   resolveInitialFocusTarget,
   takeoverCompetitorBusiness,
   tickEconomy,
 } from './economy.ts';
-import { calculateAccountingReport } from './accountingEngine.ts';
+import { buildPeriodAccountingSummary, calculateAccountingReport } from './accountingEngine.ts';
 import { ACTIVE_MISSION_SLOTS, ensureDynamicMissions } from './missionEngine.ts';
 import {
   GEOGRAPHIC_REGIONS,
@@ -42,6 +48,11 @@ import {
   MAX_BRANCH_ASSISTANT_MANAGERS,
   MAX_BRANCH_MANAGERS,
   MAX_BRANCH_WORKERS,
+  ROLE_WAGE_MULTIPLIER,
+  TURKEY_EMPLOYER_SGK_RATE,
+  TURKEY_MIN_WAGE_MONTHLY_GROSS,
+  TURKEY_MIN_WAGE_MONTHLY_NET,
+  calculateRoleWageBreakdown,
   generateCandidatePool,
   getBranchStaffSlots,
   hireCandidateFromPool,
@@ -109,11 +120,16 @@ import {
 } from './strategyEngine.ts';
 import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
 import {
+  safeJsonParse,
+  safeReadStorageJson,
+  withSafeTimeout,
+} from '../lib/safeStartup.ts';
+import {
   generateEdgeToEdgeMainActivity,
   patchAndroidManifest,
   patchAndroidStyles,
 } from '../../scripts/patch-android.js';
-import type { PinLocationInfo, RemoteBusinessRecord } from '../types/game.ts';
+import type { EmpireState, PinLocationInfo, RemoteBusinessRecord } from '../types/game.ts';
 
 function landPin(lat: number, lng: number, plate = 34): PinLocationInfo {
   const base = resolvePinLocation(lat, lng, plate);
@@ -122,6 +138,17 @@ function landPin(lat: number, lng: number, plate = 34): PinLocationInfo {
     isWithinTurkey: true,
     landStatus: 'valid',
     resolvedAddress: 'Beşiktaş, İstanbul, Türkiye',
+  };
+}
+
+/** Test helper: marks all businesses as finished construction so post-opening operations can be tested directly. */
+function openAllBranches(state: EmpireState): EmpireState {
+  return {
+    ...state,
+    businesses: state.businesses.map((b) => ({
+      ...b,
+      constructionDaysRemaining: 0,
+    })),
   };
 }
 
@@ -200,9 +227,9 @@ test('5-tier HR candidate pool & automation (Çalışan -> Müdür Yrd -> Şube 
   state = b1.state;
   const b2 = purchaseBusiness(state, 'kafe', landPin(41.0522, 29.0067, 34), 'Şube 2', owner, [], now + 10);
   assert.equal(b2.ok, true);
-  state = b2.state;
+  state = openAllBranches(b2.state);
 
-  // Verify unmanaged stock decays during tick
+  // Verify unmanaged stock decays during tick (post-construction)
   const unmanagedTick = tickEconomy(state, 50, now + 50_000);
   assert.ok(unmanagedTick.state.businesses[0].stockLevel < 100);
 
@@ -256,26 +283,30 @@ test('Parking 250m (+15% cap), Factory (%35 supply), Supermarket Chain (3+), and
   // Establish Kafe + nearby Otopark within 120m (< 250m)
   const kafeRes = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Merkez Kafe', owner, [], now);
   assert.equal(kafeRes.ok, true);
-  const baseCap = calculateBusinessCapacity(kafeRes.business!, kafeRes.state.businesses);
-  const baseInc = calculateBusinessIncomePerSec(kafeRes.business!, null, now, kafeRes.state.businesses, kafeRes.state);
+  const openKafeState = openAllBranches(kafeRes.state);
+  const openKafe = openKafeState.businesses[0];
+  const baseCap = calculateBusinessCapacity(openKafe, openKafeState.businesses);
+  const baseInc = calculateBusinessIncomePerSec(openKafe, null, now, openKafeState.businesses, openKafeState);
 
   // ~130m north (0.0012 deg lat)
-  const parkRes = purchaseBusiness(kafeRes.state, 'otopark', landPin(41.0434, 29.0067, 34), 'Merkez Otopark', owner, [], now);
+  const parkRes = purchaseBusiness(openKafeState, 'otopark', landPin(41.0434, 29.0067, 34), 'Merkez Otopark', owner, [], now);
   assert.equal(parkRes.ok, true);
-  assert.equal(hasParkingSynergyForBusiness(kafeRes.business!, parkRes.state.businesses), true);
-  const capWithPark = calculateBusinessCapacity(kafeRes.business!, parkRes.state.businesses);
+  const openParkState = openAllBranches(parkRes.state);
+  assert.equal(hasParkingSynergyForBusiness(openKafe, openParkState.businesses), true);
+  const capWithPark = calculateBusinessCapacity(openKafe, openParkState.businesses);
   assert.ok(capWithPark > baseCap);
 
   // Add Gıda Fabrikası -> triggers 35% supply discount boost on Kafe
-  const facRes = purchaseBusiness(parkRes.state, 'gida_fabrikasi', landPin(41.06, 29.02, 34), 'Anadolu Gıda', owner, [], now);
+  const facRes = purchaseBusiness(openParkState, 'gida_fabrikasi', landPin(41.06, 29.02, 34), 'Anadolu Gıda', owner, [], now);
   assert.equal(facRes.ok, true);
-  assert.equal(hasFactorySupplySynergy(kafeRes.business!, facRes.state.businesses), true);
+  const openFacState = openAllBranches(facRes.state);
+  assert.equal(hasFactorySupplySynergy(openKafe, openFacState.businesses), true);
   const incWithParkAndFac = calculateBusinessIncomePerSec(
-    kafeRes.business!,
+    openKafe,
     null,
     now,
-    facRes.state.businesses,
-    facRes.state
+    openFacState.businesses,
+    openFacState
   );
   assert.ok(incWithParkAndFac > baseInc * 1.3);
 
@@ -478,10 +509,11 @@ test('Banking: 0-1900 Credit Score 5 tiers, Player Bank (>=25M), Loans, Repaymen
 test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   const now = 200_000;
   let state = createInitialEmpireState(now);
-  state.cash = 10_000_000;
+  state.cash = 35_000_000;
   const owner = { id: 'p1', name: 'Holding' };
   const kafe = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Kafe', owner, [], now);
   const avm = purchaseBusiness(kafe.state, 'avm', landPin(41.06, 29.02, 34), 'AVM', owner, [], now);
+  assert.equal(avm.ok, true);
   assert.equal(hasAvmSynergyForBusiness(kafe.business!, avm.state.businesses), true);
 
   const rival: RemoteBusinessRecord = {
@@ -503,9 +535,12 @@ test('AVM synergy, 1.5x takeover, and v1.2.0 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.3.2');
-  assert.equal(compareSemver('1.3.1', '1.3.2'), 1);
-  assert.equal(compareSemver('1.3.2', '1.3.2'), 0);
+  assert.equal(APP_VERSION, '1.4.0-fix');
+  assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
+  assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
+  assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
+  assert.equal(compareSemver('1.4.0-fix', '1.4.1'), 1);
+  assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix2'), 1);
   assert.ok(getCompanyTier(25_000_000).level >= 7);
 });
 
@@ -521,7 +556,7 @@ test('v1.3.0 Accelerated Time & Calendar controls: pause freezes clock/income, 1
   const owner = { id: 'p1', name: 'Patron' };
   const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Saat Kafe', owner, [], now);
   assert.equal(built.ok, true);
-  state = built.state;
+  state = openAllBranches(built.state);
 
   // Pause (elapsedSec = 0) completely freezes gameMinutes & pendingCash
   const pausedTick = tickEconomy(state, 0, now);
@@ -563,12 +598,12 @@ test('v1.2.6 Auto-Collect Revenue: Şube Müdürü, Bölge Sorumlusu & Genel Mü
   const b2 = purchaseBusiness(b1.state, 'kafe', landPin(41.0522, 29.0067, 34), 'İstanbul Kafe 2', owner, [], now + 10);
   const b3 = purchaseBusiness(b2.state, 'kafe', landPin(39.9208, 32.8541, 6), 'Ankara Kafe', owner, [], now + 20);
   const b4 = purchaseBusiness(b3.state, 'kafe', landPin(38.4237, 27.1428, 35), 'İzmir Kafe', owner, [], now + 25);
-  state = b4.state;
+  state = openAllBranches(b4.state);
 
   const pool = generateCandidatePool(54321, 'kafe');
   state = { ...state, candidatePool: pool };
 
-  // Hire Şube Müdürü on Ankara Kafe -> fullAutomation true AND autoCollectRevenue MUST be TRUE in v1.2.6
+  // Hire Şube Müdürü on Ankara Kafe -> fullAutomation true AND autoCollectRevenue MUST be TRUE
   const bm = pool.find((c) => c.role === 'sube_muduru')!;
   const hiredBm = hireCandidateFromPool(state, bm.id, b3.business!.id, 6, now + 30);
   assert.equal(hiredBm.ok, true);
@@ -597,20 +632,21 @@ test('v1.2.6 Auto-Collect Revenue: Şube Müdürü, Bölge Sorumlusu & Genel Mü
   const hiredRm = hireCandidateFromPool(hiredAm.state, rm.id, null, 34, now + 40);
   assert.equal(hiredRm.ok, true);
 
-  // Tick 2 seconds (= 72 game min -> 1 full in-game hour): Istanbul (Bölge Sorumlusu) AND Ankara (Şube Müdürü)
-  // both auto-transfer cash into state.cash, while İzmir (Müdür Yrd. only) stays in pendingCash!
+  // Tick 1 full day across midnight 00:00: Şube Müdürü & Bölge Sorumlusu auto-settle into cash,
+  // while İzmir (Müdür Yrd. only) awaits manual Day-End Report settlement!
   const cashBefore = hiredRm.state.cash;
-  const hourTick = tickEconomy(hiredRm.state, 2, now + 2040);
-  assert.equal(hourTick.hoursPassed, 1);
-  assert.ok(hourTick.autoCollectedHourlyAmount > 0);
-  assert.ok(hourTick.state.cash > cashBefore);
+  const fullDayTick = tickEconomy(hiredRm.state, 40, now + 40_040);
+  assert.equal(fullDayTick.daysPassed, 1);
+  assert.ok(fullDayTick.dayEndSummary);
+  assert.ok(fullDayTick.dayEndSummary.autoSettledNet !== 0);
+  assert.ok(fullDayTick.state.cash !== cashBefore);
 
-  const ist1After = hourTick.state.businesses.find((b) => b.id === b1.business!.id)!;
-  const ankaraAfter = hourTick.state.businesses.find((b) => b.id === b3.business!.id)!;
-  const izmirAfter = hourTick.state.businesses.find((b) => b.id === b4.business!.id)!;
-  assert.ok(ist1After.pendingCash < 1, 'Bölge Sorumlusu branch should auto-empty vault hourly');
-  assert.ok(ankaraAfter.pendingCash < 1, 'Şube Müdürü branch should auto-empty vault hourly in v1.2.6');
-  assert.ok(izmirAfter.pendingCash > 100, 'Müdür Yrd. branch should remain manual pendingCash');
+  const ist1After = fullDayTick.state.businesses.find((b) => b.id === b1.business!.id)!;
+  const ankaraAfter = fullDayTick.state.businesses.find((b) => b.id === b3.business!.id)!;
+  const izmirLine = fullDayTick.dayEndSummary.branchLines.find((l) => l.businessId === b4.business!.id)!;
+  assert.equal(ist1After.pendingCash, 0, 'Bölge Sorumlusu branch should auto-settle at 00:00');
+  assert.equal(ankaraAfter.pendingCash, 0, 'Şube Müdürü branch should auto-settle at 00:00');
+  assert.equal(izmirLine.autoSettled, false, 'Müdür Yrd. branch should remain manual in 00:00 Day-End Report');
 });
 
 test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply savings, net profit & margin', () => {
@@ -620,7 +656,8 @@ test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply 
   const owner = { id: 'p1', name: 'Holding' };
 
   const kafe = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Merkez Kafe', owner, [], now);
-  const reportBeforeFactory = calculateAccountingReport(kafe.state, [], now);
+  const openKafeState = openAllBranches(kafe.state);
+  const reportBeforeFactory = calculateAccountingReport(openKafeState, [], now);
   assert.ok(reportBeforeFactory.hourlyTotalRevenue > 0);
   assert.ok(reportBeforeFactory.hourlyTotalExpenses > 0);
   assert.equal(reportBeforeFactory.branches.length, 1);
@@ -628,7 +665,7 @@ test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply 
 
   // Adding a Gıda Fabrikası creates real supply discount savings in Accounting Report
   const withFac = purchaseBusiness(
-    kafe.state,
+    openKafeState,
     'gida_fabrikasi',
     landPin(41.06, 29.02, 34),
     'Anadolu Gıda',
@@ -636,7 +673,7 @@ test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply 
     [],
     now + 10
   );
-  const reportWithFactory = calculateAccountingReport(withFac.state, [], now + 10);
+  const reportWithFactory = calculateAccountingReport(openAllBranches(withFac.state), [], now + 10);
   assert.ok(reportWithFactory.hourlySupplyDiscountSaved > 0);
   assert.equal(reportWithFactory.branches.length, 2);
   assert.equal(
@@ -887,11 +924,11 @@ test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supp
     now
   );
   assert.equal(first.ok, true);
-  state = first.state;
-  const soloStatus = getChainStatusForBusiness(first.business!, state.businesses);
+  state = openAllBranches(first.state);
+  const soloStatus = getChainStatusForBusiness(state.businesses[0], state.businesses);
   assert.equal(soloStatus.isChain, false);
   const soloIncome = calculateBusinessIncomePerSec(
-    first.business!,
+    state.businesses[0],
     null,
     now,
     state.businesses,
@@ -899,7 +936,7 @@ test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supp
   );
 
   // Clone into a 2nd branch in Ankara (cross-province chain!)
-  const draft = prepareChainCloneDraft(first.business!, state.businesses);
+  const draft = prepareChainCloneDraft(state.businesses[0], state.businesses);
   assert.equal(draft.brandName, 'Boğaz Kahve');
   assert.equal(draft.nextBranchNumber, 2);
   assert.equal(draft.suggestedName, 'Boğaz Kahve - 2. Şube');
@@ -920,7 +957,7 @@ test('v1.2.8 Branch Cloning forms automatic Zincir Marka (2+ branches) with supp
     }
   );
   assert.equal(cloned.ok, true);
-  state = cloned.state;
+  state = openAllBranches(cloned.state);
 
   // Both branches now share Zincir Marka status (2 branches -> 12% supply discount, 10% revenue bonus)
   const chainStatus1 = getChainStatusForBusiness(state.businesses[0], state.businesses);
@@ -959,7 +996,7 @@ test('v1.2.8 3-Tier Ad Campaigns boost income/capacity & Genel Müdür Auto-Ads 
 
   const b1 = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Lezzet 1', owner, [], now);
   const b2 = purchaseBusiness(b1.state, 'restoran', landPin(41.0522, 29.0067, 34), 'Lezzet 2', owner, [], now + 10);
-  state = b2.state;
+  state = openAllBranches(b2.state);
 
   const baseCap = calculateBusinessCapacity(state.businesses[0], state.businesses);
   const baseInc = calculateBusinessIncomePerSec(state.businesses[0], null, now + 10, state.businesses, state);
@@ -1047,7 +1084,7 @@ test('v1.2.8 Rivals Strategy Center: National Directory, Dynamic 120%-150% Takeo
 
   const ownBiz = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Merkez Kafe', owner, [], now);
   assert.equal(ownBiz.ok, true);
-  state = ownBiz.state;
+  state = openAllBranches(ownBiz.state);
 
   const cityRivals = generateSeedCityRivals(34);
   const directory = buildNationalRivalDirectory(
@@ -1253,7 +1290,7 @@ test('v1.3.0 Realistic Progressive Tax Curve (KDV, SGK, Kurumlar, Belediye) scal
   let state = createInitialEmpireState(now, 34);
   const owner = { id: 'p1', name: 'Patron' };
   const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Vergi Kafe', owner, [], now);
-  state = b1.state;
+  state = openAllBranches(b1.state);
 
   const report = calculateAccountingReport(state, [], now);
   assert.equal(report.taxRates.stageIndex, 0);
@@ -1444,6 +1481,225 @@ test('v1.3.2 Supabase Local Backfill Sync, Dual Coordinate Normalization (lat/ln
   assert.ok(formatted.includes('42501'));
   assert.ok(formatted.includes('row-level security'));
 });
+
+test('v1.4.0 Construction Period (3-15d), Zero Revenue During Renovation, Daily Rent, and Double Shift (-35%) Crew', () => {
+  const now = 1_800_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 10_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  // All blueprints define a realistic 3-15 day construction window
+  for (const bp of BUSINESS_BLUEPRINTS) {
+    assert.ok(bp.constructionDays >= 3 && bp.constructionDays <= 15, `${bp.id} constructionDays out of 3..15 range`);
+    assert.ok(bp.dailyRentBase > 0, `${bp.id} dailyRentBase must be positive`);
+  }
+
+  // Establish a Restoran (starts under construction, generates 0 income while building)
+  const built = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Galata Lokanta', owner, [], now);
+  assert.equal(built.ok, true);
+  const biz = built.business!;
+  assert.equal(isBusinessUnderConstruction(biz), true);
+  assert.ok((biz.constructionDaysRemaining ?? 0) >= 3);
+  assert.equal(calculateBusinessIncomePerSec(biz, null, now, built.state.businesses, built.state), 0);
+  assert.ok(calculateDailyRentAndUtilities(biz) > 0);
+
+  // Double Shift Crew cuts remaining construction days by 35% and cannot be applied twice
+  const origDays = biz.constructionDaysRemaining!;
+  const shiftCost = calculateDoubleShiftCost(biz);
+  assert.ok(shiftCost > 0);
+  const shifted = hireDoubleShiftCrew(built.state, biz.id, now + 100);
+  assert.equal(shifted.ok, true);
+  assert.equal(shifted.state.businesses[0].doubleShiftApplied, true);
+  assert.ok((shifted.state.businesses[0].constructionDaysRemaining ?? 99) < origDays);
+  const doubleApply = hireDoubleShiftCrew(shifted.state, biz.id, now + 200);
+  assert.equal(doubleApply.ok, false);
+});
+
+test('v1.4.0 Day-by-Day Simulation Speed (Gün+) & Auto-Stop Guard (Construction Complete, Payment Due, Critical Cash)', () => {
+  const now = 1_900_000;
+  // 250ms tick at 'day' speed = 40 sim-sec = exactly 1 full 24h game day
+  assert.equal(getEffectiveSimSeconds(0.25, 'day'), 40);
+
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 1_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+  const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Hızlı Kafe', owner, [], now);
+  assert.equal(built.ok, true);
+
+  // Set 1 day remaining -> advancing 1 full day completes construction and triggers Auto-Stop Guard
+  state = {
+    ...built.state,
+    businesses: built.state.businesses.map((b) => ({ ...b, constructionDaysRemaining: 1 })),
+  };
+  const completedTick = tickEconomy(state, 40, now + 1000);
+  assert.equal(completedTick.completedConstructions.length, 1);
+  assert.equal(completedTick.daySimAutoStop?.reason, 'construction_completed');
+  assert.equal(isBusinessUnderConstruction(completedTick.state.businesses[0]), false);
+
+  // Payment due triggers Auto-Stop Guard
+  const taxBill = createMonthlyTaxObligation(
+    1,
+    1,
+    { kdv: 5_000, sgkStopaj: 2_000, corporateTax: 3_000, municipalTax: 1_000, totalTax: 11_000 },
+    now
+  )!;
+  const withTax = { ...completedTick.state, pendingTaxes: [{ ...taxBill, dueGameDay: 2 }] };
+  const paymentAlert = evaluateDaySimAutoStop(completedTick.state, withTax, [], 0);
+  assert.equal(paymentAlert?.reason, 'payment_due');
+
+  // Critical cash triggers Auto-Stop Guard
+  const lowCashState = { ...completedTick.state, cash: 5_000 };
+  const cashAlert = evaluateDaySimAutoStop(completedTick.state, lowCashState, [], 0);
+  assert.equal(cashAlert?.reason, 'critical_cash');
+});
+
+test('v1.4.0 Midnight 00:00 Day-End Report: Per-Branch P&L, Loss Flagging & Manual Settlement Into Cash', () => {
+  const now = 2_000_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 2_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+
+  // Active Kafe + Under-construction Restoran (which incurs rent with 0 revenue -> loss line!)
+  const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Açık Kafe', owner, [], now);
+  const b2 = purchaseBusiness(b1.state, 'restoran', landPin(41.0522, 29.0067, 34), 'Tadilattaki Restoran', owner, [], now + 5);
+  state = {
+    ...b2.state,
+    businesses: b2.state.businesses.map((b) =>
+      b.id === b1.business!.id ? { ...b, constructionDaysRemaining: 0 } : b
+    ),
+  };
+
+  // Intra-day tick (10s) must NOT stream directly into main cash
+  const cashBeforeDay = state.cash;
+  const midday = tickEconomy(state, 10, now + 10_000);
+  assert.equal(midday.daysPassed, 0);
+  assert.equal(midday.state.cash, cashBeforeDay);
+  const openMidday = midday.state.businesses.find((b) => b.id === b1.business!.id)!;
+  assert.ok((openMidday.dailyAccruedGross ?? 0) > 0);
+
+  // Cross 00:00 midnight -> Day-End Summary generated & queued in pendingDayEndReports
+  const midnight = tickEconomy(midday.state, 30, now + 40_000);
+  assert.equal(midnight.daysPassed, 1);
+  assert.ok(midnight.dayEndSummary);
+  assert.equal(midnight.dayEndSummary.branchLines.length, 2);
+
+  const openLine = midnight.dayEndSummary.branchLines.find((l) => l.businessId === b1.business!.id)!;
+  const buildLine = midnight.dayEndSummary.branchLines.find((l) => l.businessId === b2.business!.id)!;
+  assert.ok(openLine.grossRevenue > 0);
+  assert.ok(openLine.utilitiesAndRent > 0);
+  assert.equal(buildLine.underConstruction, true);
+  assert.equal(buildLine.grossRevenue, 0);
+  assert.equal(buildLine.isLoss, true, 'Under-construction branch paying rent with 0 revenue must be flagged as loss');
+  assert.ok((midnight.state.pendingDayEndReports?.length ?? 0) >= 1);
+
+  // Collect Day-End Report -> settles manualCollectibleNet into cash & archives to dayEndHistory
+  const preCollectCash = midnight.state.cash;
+  const settled = collectDayEndReport(midnight.state);
+  assert.equal(settled.ok, true);
+  assert.equal(settled.state.cash, preCollectCash + (settled.collectedAmount ?? 0));
+  assert.equal(settled.state.pendingDayEndReports?.length, 0);
+  assert.ok((settled.state.dayEndHistory?.length ?? 0) >= 1);
+});
+
+test('v1.4.0 Turkey Min-Wage Payroll (+22.5% Employer SGK) & Daily/Monthly/Annual Balance Sheet with 4 Turkish Taxes', () => {
+  assert.equal(TURKEY_MIN_WAGE_MONTHLY_NET, 22_104);
+  assert.equal(TURKEY_MIN_WAGE_MONTHLY_GROSS, 26_005);
+  assert.equal(TURKEY_EMPLOYER_SGK_RATE, 0.225);
+  assert.equal(ROLE_WAGE_MULTIPLIER.calisan, 1.0);
+  assert.equal(ROLE_WAGE_MULTIPLIER.mudur_yardimcisi, 1.4);
+  assert.equal(ROLE_WAGE_MULTIPLIER.sube_muduru, 1.9);
+
+  const workerWage = calculateRoleWageBreakdown('calisan', 1);
+  const asstWage = calculateRoleWageBreakdown('mudur_yardimcisi', 1);
+  const mgrWage = calculateRoleWageBreakdown('sube_muduru', 1);
+  assert.equal(workerWage.dailyEmployerSgk, Math.round(workerWage.dailyGrossWage * 0.225));
+  assert.equal(workerWage.dailyTotalCost, workerWage.dailyGrossWage + workerWage.dailyEmployerSgk);
+  assert.ok(asstWage.dailyGrossWage > workerWage.dailyGrossWage * 1.35);
+  assert.ok(mgrWage.dailyGrossWage > workerWage.dailyGrossWage * 1.85);
+
+  const now = 2_100_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 5_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+  const built = purchaseBusiness(state, 'restoran', landPin(41.0422, 29.0067, 34), 'Bilanço Restoran', owner, [], now);
+  state = openAllBranches(built.state);
+
+  const report = calculateAccountingReport(state, [], now);
+  const daily = buildPeriodAccountingSummary(report, 'daily', state, [], now);
+  const monthly = buildPeriodAccountingSummary(report, 'monthly', state, [], now);
+  const annual = buildPeriodAccountingSummary(report, 'annual', state, [], now);
+
+  assert.equal(daily.multiplierHours, 24);
+  assert.equal(monthly.multiplierHours, 24 * 30);
+  assert.equal(annual.multiplierHours, 24 * 360);
+  assert.ok(annual.kdvTax > monthly.kdvTax && monthly.kdvTax > daily.kdvTax);
+  assert.equal(
+    monthly.totalTaxes,
+    monthly.kdvTax + monthly.muhtasarStopajTax + monthly.corporateTax + monthly.municipalTax
+  );
+  assert.equal(
+    annual.totalAssets,
+    annual.totalCashAssets + annual.totalRealEstateAssets + annual.totalStockAssets + annual.totalBankAssets
+  );
+  assert.equal(annual.netEquity, annual.totalAssets - annual.totalLiabilities);
+});
+
+test('v1.4.0-fix Startup Resilience: corrupt localStorage recovery & non-blocking withSafeTimeout', async () => {
+  // Corrupt JSON strings & type mismatches return safe defaults without throwing
+  const defaultObj = { theme: 'light', soundEnabled: true };
+  assert.deepEqual(safeJsonParse('{bad-json', defaultObj), defaultObj);
+  assert.deepEqual(safeJsonParse('null', defaultObj), defaultObj);
+  assert.deepEqual(safeJsonParse('[1,2,3]', defaultObj), defaultObj);
+  assert.deepEqual(safeJsonParse('{"theme":"dark","soundEnabled":false}', defaultObj), {
+    theme: 'dark',
+    soundEnabled: false,
+  });
+
+  // Corrupt or throwing storage adapter never crashes safeReadStorageJson
+  const corruptStorage = {
+    getItem: (key: string) => {
+      if (key === 'throws') throw new Error('WebView storage quota error');
+      if (key === 'corrupt') return '{"cash": NaN_BROKEN';
+      if (key === 'wrong_shape') return '{"cash":"not-a-number"}';
+      return '{"cash":500000}';
+    },
+  };
+  const isCashObj = (v: unknown): v is { cash: number } =>
+    typeof v === 'object' &&
+    v !== null &&
+    typeof (v as { cash?: unknown }).cash === 'number' &&
+    Number.isFinite((v as { cash: number }).cash);
+
+  assert.deepEqual(safeReadStorageJson('throws', { cash: 250_000 }, isCashObj, corruptStorage), {
+    cash: 250_000,
+  });
+  assert.deepEqual(safeReadStorageJson('corrupt', { cash: 250_000 }, isCashObj, corruptStorage), {
+    cash: 250_000,
+  });
+  assert.deepEqual(
+    safeReadStorageJson('wrong_shape', { cash: 250_000 }, isCashObj, corruptStorage),
+    { cash: 250_000 }
+  );
+  assert.deepEqual(safeReadStorageJson('valid', { cash: 250_000 }, isCashObj, corruptStorage), {
+    cash: 500_000,
+  });
+
+  // Slow hanging Supabase promise resolves cleanly to fallback after timeout
+  const hanging = new Promise<string>(() => {});
+  const timedOut = await withSafeTimeout(hanging, 120, 'local-fallback', 'hanging-test');
+  assert.equal(timedOut, 'local-fallback');
+
+  // Rejected promise resolves cleanly to fallback without throwing
+  const failing = Promise.reject(new Error('Network offline'));
+  const recovered = await withSafeTimeout(failing, 500, 'offline-ok', 'failing-test');
+  assert.equal(recovered, 'offline-ok');
+
+  // Fast successful promise returns actual value
+  const okVal = await withSafeTimeout(Promise.resolve('live-data'), 500, 'fallback', 'ok-test');
+  assert.equal(okVal, 'live-data');
+});
+
+
 
 
 

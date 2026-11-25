@@ -18,6 +18,9 @@ import {
   Store,
   CopyPlus,
   Link2,
+  Hammer,
+  Zap,
+  Clock,
 } from 'lucide-react';
 import type { AdCampaignTierId, EmpireState, OwnedBusiness } from '../types/game';
 import { getBlueprintById } from '../game/catalog';
@@ -26,12 +29,15 @@ import {
   calculateBusinessHourlyIncome,
   calculateBusinessIncomePerSec,
   calculateBusinessValuation,
+  calculateDailyRentAndUtilities,
+  calculateDoubleShiftCost,
   calculateUpgradeCost,
   calculateVaultCapacity,
   formatTL,
   hasAvmSynergyForBusiness,
   hasFactorySupplySynergy,
   hasParkingSynergyForBusiness,
+  isBusinessUnderConstruction,
 } from '../game/economy';
 import { getBranchStaffSlots, resolveBusinessAutomation } from '../game/hrEngine';
 import {
@@ -50,6 +56,8 @@ interface BusinessInspectorProps {
   onOpenHrModal: (businessId: string) => void;
   onCloneBusiness?: (businessId: string) => void;
   onLaunchAdCampaign?: (businessId: string, tierId: AdCampaignTierId) => void;
+  onHireDoubleShift?: (businessId: string) => void;
+  onOpenDayEndReport?: () => void;
   onRestock: (businessId: string) => void;
   onCollect: (businessId: string) => void;
   onUpgrade: (businessId: string) => void;
@@ -66,6 +74,8 @@ export function BusinessInspector({
   onOpenHrModal,
   onCloneBusiness,
   onLaunchAdCampaign,
+  onHireDoubleShift,
+  onOpenDayEndReport,
   onRestock,
   onCollect,
   onUpgrade,
@@ -113,6 +123,14 @@ export function BusinessInspector({
   const pendingWhole = Math.floor(business.pendingCash);
   const stockPct = Math.round(business.stockLevel ?? 100);
   const maintPct = Math.round(business.maintenanceLevel ?? 100);
+  const underConstruction = isBusinessUnderConstruction(business);
+  const remDays = business.constructionDaysRemaining ?? 0;
+  const totalConstDays = Math.max(remDays, business.constructionTotalDays ?? bp?.constructionDays ?? 3);
+  const constProgressPct =
+    totalConstDays > 0 ? Math.min(100, Math.round(((totalConstDays - remDays) / totalConstDays) * 100)) : 100;
+  const doubleShiftCost = calculateDoubleShiftCost(business);
+  const dailyRentEstimate = calculateDailyRentAndUtilities(business);
+  const dailyAccruedWhole = Math.floor(business.dailyAccruedGross ?? 0);
 
   return (
     <aside
@@ -231,6 +249,59 @@ export function BusinessInspector({
           </div>
         )}
 
+        {/* Construction / Renovation Progress Banner (v1.4.0) */}
+        {underConstruction && (
+          <div
+            data-testid="construction-banner"
+            className="rounded-xl border border-amber-400/75 bg-amber-50/90 p-3 space-y-2 dark:border-amber-500/60 dark:bg-amber-950/40"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-800 dark:text-amber-300">
+                <Hammer className="h-4 w-4 shrink-0" />
+                <span>İnşaat & Tadilat Süreci</span>
+              </div>
+              <span
+                data-testid="construction-days-remaining"
+                className="rounded-lg bg-amber-500 px-2 py-0.5 font-mono-num text-[11px] font-black text-slate-950"
+              >
+                {remDays} Gün Kaldı
+              </span>
+            </div>
+
+            <div className="h-2 w-full overflow-hidden rounded-full bg-amber-200/80 dark:bg-amber-950">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all duration-300"
+                style={{ width: `${Math.max(8, constProgressPct)}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] text-amber-900/90 dark:text-amber-200/90">
+              <span>Gelir: ₺0 (Açılış bekleniyor)</span>
+              <span className="font-mono-num font-bold text-rose-700 dark:text-rose-300">
+                Kira+Tadilat: -{formatTL(dailyRentEstimate)}/gün
+              </span>
+            </div>
+
+            {onHireDoubleShift && !business.doubleShiftApplied && remDays >= 2 ? (
+              <button
+                type="button"
+                data-testid="double-shift-btn"
+                disabled={state.cash < doubleShiftCost}
+                onClick={() => onHireDoubleShift(business.id)}
+                className="flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-sm hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
+              >
+                <Zap className="h-3.5 w-3.5 shrink-0" />
+                <span>Çift Vardiya Ekip Tut (-%35 Süre · {formatTL(doubleShiftCost, true)})</span>
+              </button>
+            ) : business.doubleShiftApplied ? (
+              <div className="rounded-lg bg-emerald-500/15 border border-emerald-500/35 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5 shrink-0" />
+                <span>Çift Vardiya Ekibi Aktif — Tadilat %35 hızlandırıldı!</span>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {/* Primary CTA: Enter Interior & AI Customer Simulation */}
         <button
           type="button"
@@ -238,18 +309,18 @@ export function BusinessInspector({
           className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700"
         >
           <DoorOpen className="h-4 w-4" />
-          <span>İçeri Gir / Yönet (Canlı İç Mekan)</span>
+          <span>{underConstruction ? 'Şantiyeyi İncele (İç Mekan)' : 'İçeri Gir / Yönet (Canlı İç Mekan)'}</span>
         </button>
 
         {/* Live Metrics */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950/60">
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">Saatlik / Anlık</div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">Saatlik / Günlük Kira</div>
             <div className="mt-0.5 font-mono-num text-xs font-bold text-emerald-700 dark:text-emerald-400">
-              {formatTL(hourlyIncome)}/sa
+              {underConstruction ? 'İnşaatta (₺0/sa)' : `${formatTL(hourlyIncome)}/sa`}
             </div>
-            <div className="font-mono-num text-[10px] text-slate-500 dark:text-slate-400">
-              +{formatTL(incomePerSec)}/sn
+            <div className="font-mono-num text-[10px] text-rose-600 dark:text-rose-400">
+              Kira: -{formatTL(dailyRentEstimate, true)}/gün
             </div>
           </div>
           <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950/60">
@@ -258,39 +329,60 @@ export function BusinessInspector({
               {formatTL(valuation)}
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400">
-              {business.pledgedLoanId ? 'Kredi Teminatında' : '75m koruma aktif'}
+              {business.pledgedLoanId ? 'Kredi Teminatında' : `+${formatTL(incomePerSec)}/sn`}
             </div>
           </div>
         </div>
 
-        {/* Vault Cash Collection */}
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 dark:border-emerald-900/60 dark:bg-emerald-950/30">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-emerald-900 dark:text-emerald-200">
-              İşletme Kasası
-            </span>
-            <span className="font-mono-num font-bold text-emerald-800 dark:text-emerald-300">
-              {formatTL(pendingWhole)} / {formatTL(vaultCap, true)}
-            </span>
+        {/* Daily Register & 00:00 Settlement Info */}
+        {!underConstruction && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-emerald-900 dark:text-emerald-200 flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                Gün İçi Satış Kasası
+              </span>
+              <span className="font-mono-num font-bold text-emerald-800 dark:text-emerald-300">
+                {formatTL(Math.max(dailyAccruedWhole, pendingWhole))}
+              </span>
+            </div>
+            <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-emerald-200/80 dark:bg-emerald-950">
+              <div
+                className="h-full rounded-full bg-emerald-600 transition-all duration-300 dark:bg-emerald-400"
+                style={{ width: `${vaultPct}%` }}
+              />
+            </div>
+            <div className="mt-1.5 text-[10.5px] text-emerald-800/90 dark:text-emerald-300/90">
+              {automation.autoCollectRevenue
+                ? 'Şube yöneticisi gece 00:00 kapanışında net kârı otomatik kasaya aktarır.'
+                : 'Gün içi satışlar gece 00:00 Gün Sonu Raporu ile kasaya aktarılır.'}
+            </div>
+            {onOpenDayEndReport && (state.pendingDayEndReports ?? []).length > 0 ? (
+              <button
+                type="button"
+                onClick={onOpenDayEndReport}
+                className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 whitespace-nowrap"
+              >
+                <Coins className="h-4 w-4" />
+                <span>00:00 Gün Sonu Raporunu Aç ({state.pendingDayEndReports?.length})</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={pendingWhole <= 0}
+                onClick={() => onCollect(business.id)}
+                className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600/90 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
+              >
+                <Coins className="h-4 w-4" />
+                <span>
+                  {pendingWhole > 0
+                    ? `Erken Avans Topla (${formatTL(pendingWhole)})`
+                    : '00:00 Gün Sonu Kapanışı Bekleniyor'}
+                </span>
+              </button>
+            )}
           </div>
-          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-emerald-200/80 dark:bg-emerald-950">
-            <div
-              className="h-full rounded-full bg-emerald-600 transition-all duration-300 dark:bg-emerald-400"
-              style={{ width: `${vaultPct}%` }}
-            />
-          </div>
-          <button
-            type="button"
-            disabled={pendingWhole <= 0}
-            onClick={() => onCollect(business.id)}
-            className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
-          >
-            <Coins className="h-4 w-4" />
-            <span>
-              {pendingWhole > 0 ? `Kasayı Topla (${formatTL(pendingWhole)})` : 'Gelir Birikiyor...'}
-            </span>
-          </button>
-        </div>
+        )}
 
         {/* Management Actions */}
         <div className="space-y-1.5">

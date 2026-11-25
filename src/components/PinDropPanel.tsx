@@ -163,7 +163,6 @@ export function PinDropPanel({
   const franchiseBonus = selectedFranchise ? 1.35 * (1 - selectedFranchise.royaltyRate) : 1.0;
   const estHourly =
     Math.round((selectedBlueprint.baseHourlyIncome * affinity * franchiseBonus) / 50) * 50;
-  const estPerSec = Math.round(selectedBlueprint.baseIncomePerSec * affinity * franchiseBonus);
 
   const isChecking = location.landStatus === 'checking';
   const isWaterOrInvalid =
@@ -435,7 +434,7 @@ export function PinDropPanel({
                               </span>
                             ) : (
                               <span className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
-                                {formatTL(bpHourly, true)}/sa
+                                {formatTL(bpHourly, true)}/sa · {bp.constructionDays}g
                               </span>
                             )}
                           </span>
@@ -521,8 +520,9 @@ export function PinDropPanel({
                 <div className="font-mono-num text-[10.5px] font-extrabold text-emerald-700 dark:text-emerald-400">
                   {formatTL(estHourly, true)}/sa
                 </div>
-                <div className="font-mono-num text-[9.5px] text-slate-500 dark:text-slate-400">
-                  +{formatTL(estPerSec, true)}/sn
+                <div className="font-mono-num text-[9.5px] text-amber-700 dark:text-amber-400">
+                  🏗️ {selectedBlueprint.constructionDays}g tadilat · Kira{' '}
+                  {formatTL(Math.round(selectedBlueprint.dailyRentBase * location.landMultiplier), true)}/g
                 </div>
               </div>
             </div>

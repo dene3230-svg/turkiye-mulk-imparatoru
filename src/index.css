@@ -242,10 +242,26 @@ button:not(:disabled):active {
   animation: rotatePhone 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+@keyframes slideUpSheet {
+  0% {
+    transform: translateY(24px) scale(0.98);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-bottom-sheet {
+  animation: slideUpSheet 210ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pin-pulse-ring,
   .animate-rotate-phone,
-  .animate-float-cash {
+  .animate-float-cash,
+  .animate-bottom-sheet {
     animation: none;
   }
 }

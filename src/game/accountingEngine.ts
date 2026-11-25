@@ -13,17 +13,63 @@ import {
 } from './catalog';
 import {
   calculateBusinessHourlyIncome,
+  calculateBusinessValuation,
+  calculateDailyRentAndUtilities,
   calculateNetWorth,
   hasFactorySupplySynergy,
+  isBusinessUnderConstruction,
 } from './economy';
-import { resolveBusinessAutomation } from './hrEngine';
+import {
+  TURKEY_EMPLOYER_SGK_RATE,
+  calculateTotalDailyPayrollBreakdown,
+  resolveBusinessAutomation,
+} from './hrEngine';
 import { getChainStatusForBusiness } from './strategyEngine';
 import { calculateHourlyTaxBreakdown } from './corporateEngine';
+import { calculatePortfolioMarketValue } from './stockMarket';
+
+export type AccountingPeriod = 'daily' | 'monthly' | 'annual';
+
+export interface PeriodAccountingSummary {
+  period: AccountingPeriod;
+  periodLabel: string;
+  multiplierHours: number;
+  totalRevenue: number;
+  branchGross: number;
+  passiveIncome: number;
+  staffGrossPayroll: number;
+  employerSgk: number;
+  supplyNet: number;
+  supplyDiscountSaved: number;
+  rentAndUtilities: number;
+  maintenanceCost: number;
+  franchiseRoyaltyPaid: number;
+  loanInstallments: number;
+  kdvTax: number;
+  muhtasarStopajTax: number;
+  corporateTax: number;
+  municipalTax: number;
+  totalTaxes: number;
+  totalExpenses: number;
+  netProfit: number;
+  profitMarginPct: number;
+  // Annual Balance Sheet snapshot (Aktif / Pasif / Özkaynak)
+  totalCashAssets: number;
+  totalRealEstateAssets: number;
+  totalStockAssets: number;
+  totalBankAssets: number;
+  totalAssets: number;
+  totalLoanLiabilities: number;
+  totalTaxLiabilities: number;
+  totalLiabilities: number;
+  netEquity: number;
+}
 
 /**
- * Pure P&L Accounting & Balance Sheet calculator.
- * Produces itemized hourly revenue, expenses (with Factory/Chain/Manager discounts applied),
- * net profit, margin %, and per-branch profitability ranking.
+ * Pure P&L Accounting & Balance Sheet calculator (v1.4.0).
+ * Computes realistic Turkish payroll + 22.5% employer SGK, commercial rent/utilities,
+ * under-construction costs, supply discounts, and the 4 Turkish tax categories
+ * (KDV, Muhtasar/Stopaj, Kurumlar Vergisi, Çevre Temizlik & İlan Reklam).
  */
 export function calculateAccountingReport(
   state: EmpireState,
@@ -39,8 +85,8 @@ export function calculateAccountingReport(
   let hourlySupplyDiscountSaved = 0;
   let hourlyFranchiseRoyaltyPaid = 0;
   let hourlyMaintenanceCost = 0;
+  let hourlyRentAndUtilities = 0;
 
-  // Allocate city manager payroll across the branches they oversee for accurate per-branch P&L
   const cityManagers = state.cityManagers ?? [];
   const cityPayrollByPlate = new Map<number, number>();
   for (const m of cityManagers) {
@@ -60,8 +106,8 @@ export function calculateAccountingReport(
     const bp = getBlueprintById(biz.blueprintId);
     const sectorName = bp?.shortName ?? biz.blueprintId;
     const automation = resolveBusinessAutomation(biz, cityManagers, state.businesses);
+    const underConstruction = isBusinessUnderConstruction(biz);
 
-    // Net operating revenue computed by economy engine (already reflects royalty deduction)
     const netOpHourly = calculateBusinessHourlyIncome(
       biz,
       state.activeEvent,
@@ -70,16 +116,16 @@ export function calculateAccountingReport(
       state
     );
 
-    // Recover gross revenue before franchise royalty deduction so ledger separates Revenue vs Royalty Expense
     const royaltyRate = biz.franchiseId ? biz.franchiseRoyaltyRate ?? 0.15 : 0;
     const grossHourly =
-      royaltyRate > 0 && royaltyRate < 0.9 ? Math.round(netOpHourly / (1 - royaltyRate)) : netOpHourly;
+      royaltyRate > 0 && royaltyRate < 0.9
+        ? Math.round(netOpHourly / (1 - royaltyRate))
+        : netOpHourly;
     const royaltyPaid = Math.max(0, grossHourly - netOpHourly);
 
     hourlyBranchGross += grossHourly;
     hourlyFranchiseRoyaltyPaid += royaltyPaid;
 
-    // Sector aggregation
     const prevSector = sectorMap.get(biz.blueprintId);
     if (prevSector) {
       prevSector.branchCount += 1;
@@ -93,14 +139,16 @@ export function calculateAccountingReport(
       });
     }
 
-    // Staff payroll for this branch
     const branchStaffPayroll = (biz.employees ?? []).reduce((s, e) => s + e.hourlySalary, 0);
     const sharedCityPayroll =
       (cityPayrollByPlate.get(biz.cityPlate) ?? 0) /
       Math.max(1, cityBranchCountByPlate.get(biz.cityPlate) ?? 1);
     hourlyBranchPayroll += branchStaffPayroll;
 
-    // Supply / COGS cost (baseline ~22% of gross revenue for retail/food/cafe, ~14% for factories, ~6% for parking)
+    const branchHourlySgk = Math.round((branchStaffPayroll + sharedCityPayroll) * TURKEY_EMPLOYER_SGK_RATE);
+    const branchHourlyRent = Math.round(calculateDailyRentAndUtilities(biz) / 24);
+    hourlyRentAndUtilities += branchHourlyRent;
+
     const supplyRatio =
       bp?.category === 'parking'
         ? 0.05
@@ -109,9 +157,8 @@ export function calculateAccountingReport(
         : bp?.category === 'mall' || bp?.category === 'tourism'
         ? 0.14
         : 0.22;
-    const supplyGross = Math.round(grossHourly * supplyRatio);
+    const supplyGross = underConstruction ? 0 : Math.round(grossHourly * supplyRatio);
 
-    // Combine discounts: Factory 35%, Supermarket Chain 20%, Cloned Zincir Marka (12-18%), Manager Bulk Supply Discount
     const chainStatus = getChainStatusForBusiness(biz, state.businesses);
     let discountPct = automation.bulkSupplyDiscount + chainStatus.supplyDiscount;
     if (hasFactorySupplySynergy(biz, state.businesses)) {
@@ -127,15 +174,23 @@ export function calculateAccountingReport(
     hourlySupplyGross += supplyGross;
     hourlySupplyDiscountSaved += discountSaved;
 
-    // Maintenance & utilities (~7% of gross, reduced to 5.5% under full automation)
-    const maintCost = Math.round(grossHourly * (automation.fullAutomation ? 0.055 : 0.075));
+    const maintCost = underConstruction
+      ? 0
+      : Math.round(grossHourly * (automation.fullAutomation ? 0.035 : 0.05));
     hourlyMaintenanceCost += maintCost;
 
     const totalBranchExpenses = Math.round(
-      branchStaffPayroll + sharedCityPayroll + supplyNet + royaltyPaid + maintCost
+      branchStaffPayroll +
+        sharedCityPayroll +
+        branchHourlySgk +
+        branchHourlyRent +
+        supplyNet +
+        royaltyPaid +
+        maintCost
     );
     const branchNet = grossHourly - totalBranchExpenses;
-    const branchMargin = grossHourly > 0 ? Number(((branchNet / grossHourly) * 100).toFixed(1)) : 0;
+    const branchMargin =
+      grossHourly > 0 ? Number(((branchNet / grossHourly) * 100).toFixed(1)) : underConstruction ? -100 : 0;
 
     branches.push({
       businessId: biz.id,
@@ -148,6 +203,9 @@ export function calculateAccountingReport(
       hourlyNet: branchNet,
       marginPct: branchMargin,
       autoCollectActive: automation.autoCollectRevenue,
+      underConstruction,
+      constructionDaysRemaining: biz.constructionDaysRemaining ?? 0,
+      hourlyRentAndUtilities: branchHourlyRent,
     });
   }
 
@@ -155,14 +213,16 @@ export function calculateAccountingReport(
   const corporatePayroll =
     (state.accountant?.hourlySalary ?? 0) + (state.ceo?.hourlySalary ?? 0);
   const hourlyStaffPayroll = hourlyBranchPayroll + cityManagerTotalPayroll + corporatePayroll;
+
+  // Employer SGK premium (22.5%) computed from Turkey payroll breakdown
+  const dailyPayrollInfo = calculateTotalDailyPayrollBreakdown(state);
+  const hourlyEmployerSgk = Math.round(dailyPayrollInfo.dailyEmployerSgk / 24);
   const hourlySupplyNet = Math.max(0, hourlySupplyGross - hourlySupplyDiscountSaved);
 
-  // Franchise royalty income from player-owned franchise brands
   const hourlyFranchiseRoyaltyIncome = Math.round(
     (state.ownFranchises ?? []).reduce((sum, f) => sum + f.branchCount * 420 * f.royaltyRate * 6, 0)
   );
 
-  // Bank interest earnings (estimated hourly yield from player's own bank capital + issued loans)
   const hourlyBankInterestIncome = state.ownBank
     ? Math.round(
         (state.ownBank.poolCapital * state.ownBank.baseInterestRate) / 720 +
@@ -170,7 +230,6 @@ export function calculateAccountingReport(
       )
     : 0;
 
-  // Stock dividend income
   const quoteByTicker = new Map(stockQuotes.map((q) => [q.ticker, q]));
   const hourlyStockDividendIncome = Math.round(
     (state.stockPortfolio ?? []).reduce((sum, holding) => {
@@ -180,7 +239,6 @@ export function calculateAccountingReport(
     }, 0)
   );
 
-  // Active loan monthly installment amortized to hourly view
   const hourlyLoanInstallments = Math.round(
     (state.activeLoans ?? [])
       .filter((l) => l.status === 'active' || l.status === 'garnishing')
@@ -198,31 +256,31 @@ export function calculateAccountingReport(
 
   const operatingExpensesBeforeTax =
     hourlyStaffPayroll +
+    hourlyEmployerSgk +
     hourlySupplyNet +
+    hourlyRentAndUtilities +
     hourlyFranchiseRoyaltyPaid +
     hourlyLoanInstallments +
     hourlyMaintenanceCost;
 
-  // v1.3.0 Realistic Progressive Taxes (KDV, SGK & Stopaj, Kurumlar/Gelir, Belediye)
   const estimatedNetWorth = calculateNetWorth(state, now, stockQuotes);
   const { rates: taxRates, breakdown: taxBreakdown } = calculateHourlyTaxBreakdown({
     hourlyGrossRevenue: hourlyTotalRevenue,
     hourlyPayroll: hourlyStaffPayroll,
     hourlyOperatingExpensesBeforeTax: operatingExpensesBeforeTax,
+    hourlyRentAndUtilities,
     branchCount: state.businesses.length,
     netWorth: estimatedNetWorth,
     accountant: state.accountant,
   });
 
   const hourlyTotalExpenses = operatingExpensesBeforeTax + taxBreakdown.totalTax;
-
   const hourlyNetProfit = hourlyTotalRevenue - hourlyTotalExpenses;
   const profitMarginPct =
     hourlyTotalRevenue > 0
       ? Number(((hourlyNetProfit / hourlyTotalRevenue) * 100).toFixed(1))
       : 0;
 
-  // Sort branches: highest net profit first
   branches.sort((a, b) => b.hourlyNet - a.hourlyNet);
 
   const hourlySectorBreakdown = Array.from(sectorMap.values()).sort(
@@ -237,9 +295,11 @@ export function calculateAccountingReport(
     hourlyStockDividendIncome,
     hourlyTotalRevenue,
     hourlyStaffPayroll,
+    hourlyEmployerSgk,
     hourlySupplyGross,
     hourlySupplyDiscountSaved,
     hourlySupplyNet,
+    hourlyRentAndUtilities,
     hourlyFranchiseRoyaltyPaid,
     hourlyLoanInstallments,
     hourlyMaintenanceCost,
@@ -253,5 +313,117 @@ export function calculateAccountingReport(
     hourlyNetProfit,
     profitMarginPct,
     branches,
+  };
+}
+
+/**
+ * Scales the AccountingReport into Daily (24h), Monthly (30d = 720h), or Annual (360d = 8640h)
+ * Turkish financial statements + Balance Sheet snapshot.
+ */
+export function buildPeriodAccountingSummary(
+  report: AccountingReport,
+  period: AccountingPeriod,
+  state: EmpireState,
+  stockQuotes: StockQuote[] = [],
+  now = Date.now()
+): PeriodAccountingSummary {
+  const multiplierHours = period === 'daily' ? 24 : period === 'monthly' ? 720 : 8640;
+  const periodLabel =
+    period === 'daily'
+      ? 'Gün Sonu Raporu (24 Saat)'
+      : period === 'monthly'
+      ? 'Ay Sonu Raporu (30 Gün)'
+      : 'Yıl Sonu Bilanço Raporu (360 Gün)';
+
+  const totalRevenue = Math.round(report.hourlyTotalRevenue * multiplierHours);
+  const branchGross = Math.round(report.hourlyBranchGross * multiplierHours);
+  const passiveIncome = Math.round(
+    (report.hourlyFranchiseRoyaltyIncome +
+      report.hourlyBankInterestIncome +
+      report.hourlyStockDividendIncome) *
+      multiplierHours
+  );
+  const staffGrossPayroll = Math.round(report.hourlyStaffPayroll * multiplierHours);
+  const employerSgk = Math.round(report.hourlyEmployerSgk * multiplierHours);
+  const supplyNet = Math.round(report.hourlySupplyNet * multiplierHours);
+  const supplyDiscountSaved = Math.round(report.hourlySupplyDiscountSaved * multiplierHours);
+  const rentAndUtilities = Math.round(report.hourlyRentAndUtilities * multiplierHours);
+  const maintenanceCost = Math.round(report.hourlyMaintenanceCost * multiplierHours);
+  const franchiseRoyaltyPaid = Math.round(report.hourlyFranchiseRoyaltyPaid * multiplierHours);
+  const loanInstallments = Math.round(report.hourlyLoanInstallments * multiplierHours);
+
+  const kdvTax = Math.round(report.hourlyKdvTax * multiplierHours);
+  const muhtasarStopajTax = Math.round(report.hourlySgkTax * multiplierHours);
+  const corporateTax = Math.round(report.hourlyCorporateTax * multiplierHours);
+  const municipalTax = Math.round(report.hourlyMunicipalTax * multiplierHours);
+  const totalTaxes = kdvTax + muhtasarStopajTax + corporateTax + municipalTax;
+
+  const totalExpenses =
+    staffGrossPayroll +
+    employerSgk +
+    supplyNet +
+    rentAndUtilities +
+    maintenanceCost +
+    franchiseRoyaltyPaid +
+    loanInstallments +
+    totalTaxes;
+  const netProfit = totalRevenue - totalExpenses;
+  const profitMarginPct =
+    totalRevenue > 0 ? Number(((netProfit / totalRevenue) * 100).toFixed(1)) : 0;
+
+  // Balance Sheet Assets & Liabilities
+  const totalCashAssets = Math.round(state.cash);
+  const totalRealEstateAssets = state.businesses.reduce(
+    (s, b) => s + calculateBusinessValuation(b, state.activeEvent, now),
+    0
+  );
+  const totalStockAssets = stockQuotes.length
+    ? calculatePortfolioMarketValue(state, stockQuotes)
+    : (state.stockPortfolio ?? []).reduce((s, h) => s + Math.round(h.shares * h.avgCost), 0);
+  const totalBankAssets = state.ownBank ? Math.round(state.ownBank.poolCapital + 2_000_000) : 0;
+  const totalAssets =
+    totalCashAssets + totalRealEstateAssets + totalStockAssets + totalBankAssets;
+
+  const totalLoanLiabilities = (state.activeLoans ?? [])
+    .filter((l) => l.status === 'active' || l.status === 'garnishing')
+    .reduce((s, l) => s + l.remainingAmount, 0);
+  const totalTaxLiabilities = (state.pendingTaxes ?? [])
+    .filter((t) => t.status !== 'paid')
+    .reduce((s, t) => s + t.amount, 0);
+  const totalLiabilities = totalLoanLiabilities + totalTaxLiabilities;
+  const netEquity = totalAssets - totalLiabilities;
+
+  return {
+    period,
+    periodLabel,
+    multiplierHours,
+    totalRevenue,
+    branchGross,
+    passiveIncome,
+    staffGrossPayroll,
+    employerSgk,
+    supplyNet,
+    supplyDiscountSaved,
+    rentAndUtilities,
+    maintenanceCost,
+    franchiseRoyaltyPaid,
+    loanInstallments,
+    kdvTax,
+    muhtasarStopajTax,
+    corporateTax,
+    municipalTax,
+    totalTaxes,
+    totalExpenses,
+    netProfit,
+    profitMarginPct,
+    totalCashAssets,
+    totalRealEstateAssets,
+    totalStockAssets,
+    totalBankAssets,
+    totalAssets,
+    totalLoanLiabilities,
+    totalTaxLiabilities,
+    totalLiabilities,
+    netEquity,
   };
 }

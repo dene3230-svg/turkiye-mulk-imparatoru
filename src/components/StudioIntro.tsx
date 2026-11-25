@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { APP_VERSION } from '../services/otaUpdate';
 
 interface StudioIntroProps {
@@ -8,16 +8,28 @@ interface StudioIntroProps {
 export function StudioIntro({ onComplete }: StudioIntroProps) {
   const [progress, setProgress] = useState(12);
   const [fading, setFading] = useState(false);
+  const onCompleteRef = useRef(onComplete);
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  const finishIntro = useCallback(() => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    onCompleteRef.current();
+  }, []);
 
   useEffect(() => {
     const t1 = setTimeout(() => setProgress(58), 220);
-    const t2 = setTimeout(() => setProgress(100), 950);
-    const t3 = setTimeout(() => setFading(true), 1550);
-    const t4 = setTimeout(() => onComplete(), 1900);
+    const t2 = setTimeout(() => setProgress(100), 900);
+    const t3 = setTimeout(() => setFading(true), 1450);
+    const t4 = setTimeout(() => finishIntro(), 1800);
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
-        onComplete();
+        finishIntro();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -29,12 +41,12 @@ export function StudioIntro({ onComplete }: StudioIntroProps) {
       clearTimeout(t4);
       window.removeEventListener('keydown', onKey);
     };
-  }, [onComplete]);
+  }, [finishIntro]);
 
   return (
     <div
       data-testid="studio-intro"
-      onClick={onComplete}
+      onClick={finishIntro}
       className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#080E1C] text-white transition-opacity duration-300 safe-inset cursor-pointer ${
         fading ? 'opacity-0' : 'opacity-100'
       }`}

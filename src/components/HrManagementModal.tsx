@@ -22,8 +22,11 @@ import {
 import type { EmpireState, OwnedBusiness, StaffRole } from '../types/game';
 import {
   ROLE_META,
+  TURKEY_MIN_WAGE_MONTHLY_NET,
+  calculateTotalDailyPayrollBreakdown,
   calculateTotalHourlyPayroll,
   getBranchStaffSlots,
+  getStaffDailyCost,
   resolveBusinessAutomation,
 } from '../game/hrEngine';
 import {
@@ -121,6 +124,7 @@ export function HrManagementModal({
     calculateTotalHourlyPayroll(state) +
     (state.accountant?.hourlySalary ?? 0) +
     (state.ceo?.hourlySalary ?? 0);
+  const dailyPayrollTotals = calculateTotalDailyPayrollBreakdown(state);
   const pendingAppsCount = (state.franchiseApplications ?? []).filter(
     (a) => a.status === 'pending'
   ).length;
@@ -245,7 +249,11 @@ export function HrManagementModal({
               </button>
             </div>
             <span className="font-mono-num text-xs font-bold text-slate-300">
-              Toplam Bordro: <strong className="text-amber-300">{formatTL(totalPayroll)}/sa</strong>
+              Günlük Bordro (SGK %22.5 dahil):{' '}
+              <strong className="text-amber-300">
+                {formatTL(dailyPayrollTotals.dailyTotalCost)}/gün
+              </strong>{' '}
+              <span className="text-slate-400">({formatTL(totalPayroll)}/sa)</span>
             </span>
           </div>
         }
@@ -972,7 +980,8 @@ export function HrManagementModal({
             <section className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-white">
-                  1–5 Yıldız Aday Havuzu ({candidates.length} Aday)
+                  1–5 Yıldız Aday Havuzu ({candidates.length} Aday · Asgari Ücret Bazlı{' '}
+                  {formatTL(TURKEY_MIN_WAGE_MONTHLY_NET)}/ay + %22.5 SGK)
                 </h3>
                 <span className="text-xs text-slate-400">
                   Nakit:{' '}
@@ -1077,7 +1086,10 @@ export function HrManagementModal({
                             <span>Lider: {cand.leadership}</span>
                           </div>
                           <span className="font-bold text-amber-300">
-                            Maaş: {formatTL(cand.hourlySalary)}/sa
+                            {(() => {
+                              const d = getStaffDailyCost(cand);
+                              return `Günlük+SGK: ${formatTL(d.dailyTotalCost)}/g · Aylık Brüt: ${formatTL(d.monthlyGrossSalary, true)}`;
+                            })()}
                           </span>
                         </div>
                       </div>

@@ -1,28 +1,44 @@
 import type { OtaCheckResult, OtaVersionManifest } from '../types/game';
 
-export const APP_VERSION = '1.3.2';
+export const APP_VERSION = '1.4.0-fix';
 export const APP_BUILD_DATE = '2026-11-25';
 
-export function compareSemver(current: string, remote: string): number {
-  const parse = (v: string) =>
-    v
-      .replace(/^v/i, '')
-      .split('.')
-      .map((part) => {
-        const n = parseInt(part, 10);
-        return Number.isNaN(n) ? 0 : n;
-      });
+function parseSemverParts(v: string): { nums: number[]; fixRank: number } {
+  const cleaned = v.trim().replace(/^v/i, '');
+  const [corePart, ...suffixParts] = cleaned.split('-');
+  const suffix = suffixParts.join('-').toLowerCase();
 
-  const a = parse(current);
-  const b = parse(remote);
-  const len = Math.max(a.length, b.length, 3);
+  const nums = corePart.split('.').map((part) => {
+    const n = parseInt(part, 10);
+    return Number.isNaN(n) ? 0 : n;
+  });
+
+  // Treat -fix / -hotfix / -patch suffixes as newer than the bare base version (e.g., 1.4.0-fix > 1.4.0)
+  let fixRank = 0;
+  if (suffix) {
+    const fixMatch = suffix.match(/^(?:fix|hotfix|patch)(\d*)$/);
+    if (fixMatch) {
+      fixRank = Math.max(1, fixMatch[1] ? parseInt(fixMatch[1], 10) : 1);
+    }
+  }
+
+  return { nums, fixRank };
+}
+
+export function compareSemver(current: string, remote: string): number {
+  const a = parseSemverParts(current);
+  const b = parseSemverParts(remote);
+  const len = Math.max(a.nums.length, b.nums.length, 3);
 
   for (let i = 0; i < len; i += 1) {
-    const av = a[i] ?? 0;
-    const bv = b[i] ?? 0;
+    const av = a.nums[i] ?? 0;
+    const bv = b.nums[i] ?? 0;
     if (bv > av) return 1; // remote is newer
     if (bv < av) return -1; // current is newer
   }
+
+  if (b.fixRank > a.fixRank) return 1;
+  if (b.fixRank < a.fixRank) return -1;
   return 0;
 }
 
@@ -31,10 +47,13 @@ export async function checkForOtaUpdate(
   manifestUrl = './version.json'
 ): Promise<OtaCheckResult> {
   const checkedAt = Date.now();
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
   try {
     const separator = manifestUrl.includes('?') ? '&' : '?';
     const res = await fetch(`${manifestUrl}${separator}t=${checkedAt}`, {
       cache: 'no-store',
+      signal: controller?.signal,
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         Pragma: 'no-cache',
@@ -84,6 +103,10 @@ export async function checkForOtaUpdate(
       checkedAt,
       error: 'Bağlantı sağlanamadı. Çevrimdışı yedek modda çalışıyorsunuz.',
     };
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 

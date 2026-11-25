@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   Building2,
+  CalendarCheck2,
   Clock,
+  FastForward,
   Home,
   MapPin,
   Pause,
@@ -28,6 +30,7 @@ import type {
   BusinessTypeId,
   ChainCloneDraft,
   ChatMessage,
+  DaySimAutoStopAlert,
   EmpireState,
   FranchiseBrand,
   GameSettings,
@@ -58,6 +61,7 @@ import {
   claimMissionReward,
   collectAllCash,
   collectBusinessCash,
+  collectDayEndReport,
   createHeadquartersForCity,
   createInitialEmpireState,
   formatGameClock,
@@ -65,7 +69,9 @@ import {
   getCompanyTier,
   getEffectiveSimSeconds,
   getMissionProgress,
+  hireDoubleShiftCrew,
   hireStaff,
+  isBusinessUnderConstruction,
   purchaseBusiness,
   resolveInitialFocusTarget,
   sellBusiness,
@@ -137,6 +143,13 @@ import {
   supabase,
 } from './lib/supabase';
 import {
+  runInBackground,
+  safeReadStorageJson,
+  safeStorageGetItem,
+  safeStorageSetItem,
+  withSafeTimeout,
+} from './lib/safeStartup';
+import {
   applyRealtimeBusinessDelete,
   applyRealtimeBusinessPatch,
   applyRealtimeBusinessUpsert,
@@ -195,6 +208,13 @@ import { PatronChatPanel } from './components/PatronChatPanel';
 import { GameHubMenuModal } from './components/GameHubMenuModal';
 import { AccountingModal } from './components/AccountingModal';
 import { GameTutorialOverlay } from './components/GameTutorialOverlay';
+import {
+  BottomSheetLauncher,
+  type BottomSheetActionId,
+  type BottomSheetGroup,
+} from './components/BottomSheetLauncher';
+import { DayEndReportModal } from './components/DayEndReportModal';
+import { DaySimAutoStopModal } from './components/DaySimAutoStopModal';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
 const TUTORIAL_STORAGE_KEY = 'tmi_tutorial_done_v122';
@@ -202,78 +222,150 @@ const HQ_CITY_STORAGE_KEY = 'tmi_hq_city_v1';
 
 function loadSavedStartingCity(): number {
   try {
-    const raw = Number(localStorage.getItem(HQ_CITY_STORAGE_KEY));
-    if (Number.isInteger(raw) && raw >= 1 && raw <= 81) return raw;
-  } catch {
-    // ignore storage errors
+    const rawStr = safeStorageGetItem(HQ_CITY_STORAGE_KEY);
+    if (rawStr !== null) {
+      const raw = Number(rawStr);
+      if (Number.isInteger(raw) && raw >= 1 && raw <= 81) return raw;
+    }
+  } catch (err) {
+    console.warn('[Startup] Kayıtlı başlangıç şehri okunamadı, varsayılan kullanılıyor:', err);
   }
   return DEFAULT_PROVINCE_PLATE;
 }
 
 function isTutorialCompleted(): boolean {
   try {
-    return localStorage.getItem(TUTORIAL_STORAGE_KEY) === '1';
+    return safeStorageGetItem(TUTORIAL_STORAGE_KEY) === '1';
   } catch {
     return false;
   }
 }
 
+const DEFAULT_GAME_SETTINGS: GameSettings = {
+  theme: 'light',
+  notificationsEnabled: true,
+  soundEnabled: true,
+  mapStyle: 'osm',
+};
+
 function loadSettings(): GameSettings {
   try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<GameSettings>;
+    const parsed = safeReadStorageJson<Partial<GameSettings> | null>(
+      SETTINGS_STORAGE_KEY,
+      null,
+      (val): val is Partial<GameSettings> =>
+        typeof val === 'object' && val !== null && !Array.isArray(val)
+    );
+    if (parsed) {
       return {
         theme: parsed.theme === 'dark' ? 'dark' : 'light',
-        notificationsEnabled: parsed.notificationsEnabled ?? true,
-        soundEnabled: parsed.soundEnabled ?? true,
+        notificationsEnabled:
+          typeof parsed.notificationsEnabled === 'boolean' ? parsed.notificationsEnabled : true,
+        soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : true,
         mapStyle: parsed.mapStyle === 'carto' ? 'carto' : 'osm',
       };
     }
-  } catch {
-    // ignore storage errors
+  } catch (err) {
+    console.warn('[Startup] Ayarlar okunamadı, varsayılan ayarlar yükleniyor:', err);
   }
-  return {
-    theme: 'light',
-    notificationsEnabled: true,
-    soundEnabled: true,
-    mapStyle: 'osm',
-  };
+  return { ...DEFAULT_GAME_SETTINGS };
 }
 
-// Backward-compatible migration for v1.0/v1.1 saved games -> v1.2.0 holding state
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+// Backward-compatible & crash-proof migration for saved games -> v1.4.0-fix state
 function migrateSavedEmpire(
   saved: EmpireState | null,
   owner: UserProfile,
   fallbackCityPlate = DEFAULT_PROVINCE_PLATE
 ): EmpireState {
-  if (!saved) return createInitialEmpireState(Date.now(), fallbackCityPlate);
-  const migratedBusinesses = saved.businesses.map((raw) => {
-    const legacy = raw as unknown as Record<string, unknown>;
-    const rawType = String(legacy.blueprintId ?? 'kafe');
-    const blueprintId: BusinessTypeId = isValidBusinessType(rawType) ? rawType : 'kafe';
-    const plate =
-      typeof legacy.cityPlate === 'number' && legacy.cityPlate >= 1 && legacy.cityPlate <= 81
-        ? legacy.cityPlate
-        : DEFAULT_PROVINCE_PLATE;
-    const prov = getProvinceByPlate(plate);
-    return {
-      ...raw,
-      ownerId: (legacy.ownerId as string) || owner.id,
-      ownerName: (legacy.ownerName as string) || owner.name,
-      blueprintId,
-      cityPlate: plate,
-      cityName: (legacy.cityName as string) || prov.name,
-      districtName: (legacy.districtName as string) || prov.districts[0] || prov.name,
-      employees: Array.isArray(legacy.employees) ? raw.employees : [],
-      stockLevel: typeof legacy.stockLevel === 'number' ? raw.stockLevel : 100,
-      maintenanceLevel: typeof legacy.maintenanceLevel === 'number' ? raw.maintenanceLevel : 100,
-    };
-  });
+  const safePlate =
+    Number.isInteger(fallbackCityPlate) && fallbackCityPlate >= 1 && fallbackCityPlate <= 81
+      ? fallbackCityPlate
+      : DEFAULT_PROVINCE_PLATE;
+  if (!saved || typeof saved !== 'object') {
+    return createInitialEmpireState(Date.now(), safePlate);
+  }
+  try {
+    const nowTs = Date.now();
+    const rawBusinesses = Array.isArray(saved.businesses) ? saved.businesses : [];
+    const migratedBusinesses = rawBusinesses
+      .filter((raw): raw is EmpireState['businesses'][number] => Boolean(raw && typeof raw === 'object'))
+      .map((raw, idx) => {
+        const legacy = raw as unknown as Record<string, unknown>;
+        const rawType = String(legacy.blueprintId ?? 'kafe');
+        const blueprintId: BusinessTypeId = isValidBusinessType(rawType) ? rawType : 'kafe';
+        const plate =
+          typeof legacy.cityPlate === 'number' &&
+          Number.isInteger(legacy.cityPlate) &&
+          legacy.cityPlate >= 1 &&
+          legacy.cityPlate <= 81
+            ? legacy.cityPlate
+            : safePlate;
+        const prov = getProvinceByPlate(plate);
+        const lat = finiteOr(legacy.lat, prov.lat);
+        const lng = finiteOr(legacy.lng, prov.lng);
+        return {
+          ...raw,
+          id: typeof legacy.id === 'string' && legacy.id.trim() ? legacy.id : `biz-recovered-${idx}-${nowTs}`,
+          customName:
+            typeof legacy.customName === 'string' && legacy.customName.trim()
+              ? legacy.customName
+              : `${prov.name} Şubesi`,
+          ownerId: (typeof legacy.ownerId === 'string' && legacy.ownerId) || owner.id,
+          ownerName: (typeof legacy.ownerName === 'string' && legacy.ownerName) || owner.name,
+          blueprintId,
+          cityPlate: plate,
+          cityName: (typeof legacy.cityName === 'string' && legacy.cityName) || prov.name,
+          districtName:
+            (typeof legacy.districtName === 'string' && legacy.districtName) ||
+            prov.districts[0] ||
+            prov.name,
+          lat,
+          lng,
+          level: Math.max(1, Math.floor(finiteOr(legacy.level, 1))),
+          purchaseCost: Math.max(0, finiteOr(legacy.purchaseCost, 50_000)),
+          pendingCash: Math.max(0, finiteOr(legacy.pendingCash, 0)),
+          totalEarned: Math.max(0, finiteOr(legacy.totalEarned, 0)),
+          createdAt: finiteOr(legacy.createdAt, nowTs),
+          employees: Array.isArray(legacy.employees) ? raw.employees : [],
+          stockLevel: Math.min(100, Math.max(0, finiteOr(legacy.stockLevel, 100))),
+          maintenanceLevel: Math.min(100, Math.max(0, finiteOr(legacy.maintenanceLevel, 100))),
+          constructionTotalDays: Math.max(0, finiteOr(legacy.constructionTotalDays, 0)),
+          constructionDaysRemaining: Math.max(0, finiteOr(legacy.constructionDaysRemaining, 0)),
+          constructionDailyInstallment: Math.max(0, finiteOr(legacy.constructionDailyInstallment, 0)),
+          doubleShiftApplied: Boolean(legacy.doubleShiftApplied),
+          dailyAccruedGross: Math.max(0, finiteOr(legacy.dailyAccruedGross, 0)),
+        };
+      });
 
-  const derivedHq =
-    saved.hq ??
-    (migratedBusinesses.length > 0
+    const rawHq = saved.hq as unknown as Record<string, unknown> | undefined;
+    const hasValidHq =
+      Boolean(rawHq && typeof rawHq === 'object') &&
+      typeof rawHq?.cityPlate === 'number' &&
+      Number.isInteger(rawHq.cityPlate) &&
+      rawHq.cityPlate >= 1 &&
+      rawHq.cityPlate <= 81 &&
+      typeof rawHq.lat === 'number' &&
+      Number.isFinite(rawHq.lat) &&
+      typeof rawHq.lng === 'number' &&
+      Number.isFinite(rawHq.lng);
+
+    const derivedHq = hasValidHq
+      ? {
+          cityPlate: rawHq!.cityPlate as number,
+          cityName:
+            typeof rawHq!.cityName === 'string' && rawHq!.cityName
+              ? (rawHq!.cityName as string)
+              : getProvinceByPlate(rawHq!.cityPlate as number).name,
+          lat: rawHq!.lat as number,
+          lng: rawHq!.lng as number,
+          zoom: finiteOr(rawHq!.zoom, 13),
+          businessId: typeof rawHq!.businessId === 'string' ? rawHq!.businessId : undefined,
+        }
+      : migratedBusinesses.length > 0
       ? (() => {
           const first = [...migratedBusinesses].sort((a, b) => a.createdAt - b.createdAt)[0];
           return {
@@ -285,59 +377,72 @@ function migrateSavedEmpire(
             businessId: first.id,
           };
         })()
-      : createHeadquartersForCity(fallbackCityPlate));
+      : createHeadquartersForCity(safePlate);
 
-  const baseMigrated: EmpireState = {
-    ...saved,
-    hq: derivedHq,
-    businesses: migratedBusinesses,
-    cityManagers: Array.isArray(saved.cityManagers) ? saved.cityManagers : [],
-    candidatePool:
-      Array.isArray(saved.candidatePool) && saved.candidatePool.length > 0
-        ? saved.candidatePool
-        : generateCandidatePool(Date.now(), 'kafe'),
-    supermarketChain: saved.supermarketChain ?? null,
-    ownFranchises: Array.isArray(saved.ownFranchises) ? saved.ownFranchises : [],
-    franchiseApplications: Array.isArray(saved.franchiseApplications)
-      ? saved.franchiseApplications
-      : [],
-    autoApproveFranchiseApps: saved.autoApproveFranchiseApps ?? true,
-    franchiseRoyaltiesEarned: saved.franchiseRoyaltiesEarned ?? 0,
-    competitiveBlitzes: Array.isArray(saved.competitiveBlitzes) ? saved.competitiveBlitzes : [],
-    acquiredRivalIds: Array.isArray(saved.acquiredRivalIds) ? saved.acquiredRivalIds : [],
-    stockPortfolio: Array.isArray(saved.stockPortfolio) ? saved.stockPortfolio : [],
-    playerIpo: saved.playerIpo ?? null,
-    creditScore: typeof saved.creditScore === 'number' ? saved.creditScore : STARTING_CREDIT_SCORE,
-    ownBank: saved.ownBank ?? null,
-    activeLoans: Array.isArray(saved.activeLoans) ? saved.activeLoans : [],
-    accountant: saved.accountant ?? null,
-    accountantPool:
-      Array.isArray(saved.accountantPool) && saved.accountantPool.length > 0
-        ? saved.accountantPool
-        : generateAccountantPool(Date.now()),
-    ceo: saved.ceo ?? null,
-    ceoPool:
-      Array.isArray(saved.ceoPool) && saved.ceoPool.length > 0
-        ? saved.ceoPool
-        : generateCeoPool(Date.now()),
-    pendingTaxes: Array.isArray(saved.pendingTaxes) ? saved.pendingTaxes : [],
-    totalTaxesPaid: typeof saved.totalTaxesPaid === 'number' ? saved.totalTaxesPaid : 0,
-    lastCeoActionGameDay:
-      typeof saved.lastCeoActionGameDay === 'number' ? saved.lastCeoActionGameDay : 0,
-    companyXp: typeof saved.companyXp === 'number' ? saved.companyXp : 0,
-    gameMinutes:
-      typeof saved.gameMinutes === 'number' ? saved.gameMinutes : STARTING_GAME_MINUTES,
-    completedMissionsCount:
-      typeof saved.completedMissionsCount === 'number'
-        ? saved.completedMissionsCount
-        : saved.claimedMissionIds?.length ?? 0,
-    activeMissions: Array.isArray(saved.activeMissions) ? saved.activeMissions : [],
-  };
+    const baseMigrated: EmpireState = {
+      ...saved,
+      cash: finiteOr(saved.cash, 250_000),
+      totalEarnedLifetime: Math.max(0, finiteOr(saved.totalEarnedLifetime, 0)),
+      hq: derivedHq,
+      businesses: migratedBusinesses,
+      cityManagers: Array.isArray(saved.cityManagers) ? saved.cityManagers : [],
+      candidatePool:
+        Array.isArray(saved.candidatePool) && saved.candidatePool.length > 0
+          ? saved.candidatePool
+          : generateCandidatePool(nowTs, 'kafe'),
+      supermarketChain: saved.supermarketChain ?? null,
+      ownFranchises: Array.isArray(saved.ownFranchises) ? saved.ownFranchises : [],
+      franchiseApplications: Array.isArray(saved.franchiseApplications)
+        ? saved.franchiseApplications
+        : [],
+      autoApproveFranchiseApps: saved.autoApproveFranchiseApps ?? true,
+      franchiseRoyaltiesEarned: Math.max(0, finiteOr(saved.franchiseRoyaltiesEarned, 0)),
+      competitiveBlitzes: Array.isArray(saved.competitiveBlitzes) ? saved.competitiveBlitzes : [],
+      acquiredRivalIds: Array.isArray(saved.acquiredRivalIds) ? saved.acquiredRivalIds : [],
+      stockPortfolio: Array.isArray(saved.stockPortfolio) ? saved.stockPortfolio : [],
+      playerIpo: saved.playerIpo ?? null,
+      creditScore: finiteOr(saved.creditScore, STARTING_CREDIT_SCORE),
+      ownBank: saved.ownBank ?? null,
+      activeLoans: Array.isArray(saved.activeLoans) ? saved.activeLoans : [],
+      accountant: saved.accountant ?? null,
+      accountantPool:
+        Array.isArray(saved.accountantPool) && saved.accountantPool.length > 0
+          ? saved.accountantPool
+          : generateAccountantPool(nowTs),
+      ceo: saved.ceo ?? null,
+      ceoPool:
+        Array.isArray(saved.ceoPool) && saved.ceoPool.length > 0
+          ? saved.ceoPool
+          : generateCeoPool(nowTs),
+      pendingTaxes: Array.isArray(saved.pendingTaxes) ? saved.pendingTaxes : [],
+      totalTaxesPaid: Math.max(0, finiteOr(saved.totalTaxesPaid, 0)),
+      lastCeoActionGameDay: Math.max(0, finiteOr(saved.lastCeoActionGameDay, 0)),
+      companyXp: Math.max(0, finiteOr(saved.companyXp, 0)),
+      gameMinutes: Math.max(0, finiteOr(saved.gameMinutes, STARTING_GAME_MINUTES)),
+      completedMissionsCount: Math.max(
+        0,
+        finiteOr(
+          saved.completedMissionsCount,
+          Array.isArray(saved.claimedMissionIds) ? saved.claimedMissionIds.length : 0
+        )
+      ),
+      claimedMissionIds: Array.isArray(saved.claimedMissionIds) ? saved.claimedMissionIds : [],
+      activeMissions: Array.isArray(saved.activeMissions) ? saved.activeMissions : [],
+      pendingDayEndReports: Array.isArray(saved.pendingDayEndReports)
+        ? saved.pendingDayEndReports
+        : [],
+      dayEndHistory: Array.isArray(saved.dayEndHistory) ? saved.dayEndHistory : [],
+      lastSavedAt: finiteOr(saved.lastSavedAt, nowTs),
+    };
 
-  return {
-    ...baseMigrated,
-    activeMissions: ensureDynamicMissions(baseMigrated, Date.now()),
-  };
+    return {
+      ...baseMigrated,
+      activeMissions: ensureDynamicMissions(baseMigrated, nowTs),
+    };
+  } catch (err) {
+    console.warn('[Startup] Kayıtlı oyun verisi bozuk, varsayılan oyun durumuyla devam ediliyor:', err);
+    return createInitialEmpireState(Date.now(), safePlate);
+  }
 }
 
 interface FloatingCashPopup {
@@ -426,6 +531,9 @@ export default function App() {
   const [accountingModalOpen, setAccountingModalOpen] = useState(false);
   const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
   const [hubMenuOpen, setHubMenuOpen] = useState(false);
+  const [bottomSheetGroup, setBottomSheetGroup] = useState<BottomSheetGroup | null>(null);
+  const [dayEndModalOpen, setDayEndModalOpen] = useState(false);
+  const [daySimAutoStopAlert, setDaySimAutoStopAlert] = useState<DaySimAutoStopAlert | null>(null);
   const [patronChatOpen, setPatronChatOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => !isTutorialCompleted());
 
@@ -440,9 +548,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v132',
-      title: 'Türkiye Mülk İmparatoru v1.3.2',
-      body: 'Mevcut yerel işletmelerin Supabase ortak haritasına otomatik aktarımı, çift koordinat desteği ve canlı rakip pin senkronizasyonu aktif!',
+      id: 'welcome-v140-fix',
+      title: 'Türkiye Mülk İmparatoru v1.4.0-fix',
+      body: 'Mobil cihazlarda açılış ekranı donma ve çökme sorunu giderildi. Güvenli yerel veri kurtarma ve arka plan senkronizasyonu aktif!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -485,11 +593,7 @@ export default function App() {
       root.classList.remove('dark');
     }
     soundEngine.setEnabled(settings.soundEnabled);
-    try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-    } catch {
-      // ignore storage errors
-    }
+    safeStorageSetItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   }, [settings]);
 
   const pushNotification = useCallback(
@@ -530,135 +634,264 @@ export default function App() {
     }, 1200);
   }, []);
 
-  // Request notification permissions & check OTA updates on startup
+  // Request notification permissions & check OTA updates in background so splash screen never blocks
   useEffect(() => {
-    if (settingsRef.current.notificationsEnabled) {
-      requestNotificationPermission().catch(() => {});
-    }
+    let active = true;
+    const cancelBg = runInBackground(
+      async () => {
+        try {
+          if (settingsRef.current.notificationsEnabled) {
+            await withSafeTimeout(
+              requestNotificationPermission(),
+              3000,
+              'unsupported' as const,
+              'requestNotificationPermission'
+            );
+          }
+        } catch (err) {
+          console.warn('[Startup] Bildirim izni kontrolü atlandı:', err);
+        }
 
-    checkForOtaUpdate().then((res) => {
-      setOtaResult(res);
-      if (res.hasUpdate && res.remoteManifest) {
-        setOtaModalOpen(true);
-        pushNotification(
-          `Yeni Güncelleme v${res.remoteManifest.version}`,
-          res.remoteManifest.notes[0] || 'Yeni içerik ve iyileştirmeler hazır.',
-          'update',
-          true
-        );
-      }
-    });
+        try {
+          const res = await withSafeTimeout(
+            checkForOtaUpdate(),
+            5500,
+            null,
+            'checkForOtaUpdate'
+          );
+          if (!active || !res) return;
+          setOtaResult(res);
+          if (res.hasUpdate && res.remoteManifest) {
+            setOtaModalOpen(true);
+            pushNotification(
+              `Yeni Güncelleme v${res.remoteManifest.version}`,
+              res.remoteManifest.notes[0] || 'Yeni içerik ve iyileştirmeler hazır.',
+              'update',
+              true
+            );
+          }
+        } catch (err) {
+          console.warn('[Startup] OTA kontrolü sessizce atlandı:', err);
+        }
+      },
+      'startup-ota-and-permissions',
+      450
+    );
+
+    return () => {
+      active = false;
+      cancelBg();
+    };
   }, [pushNotification]);
 
-  // Listen to Supabase Auth session & Capacitor OAuth deep link callback
+  // Listen to Supabase Auth session & Capacitor OAuth deep link callback in non-blocking background
   useEffect(() => {
     let mounted = true;
-
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
-        if (!mounted || !data.session) return;
-        const profile = sessionToUserProfile(data.session);
-        const loaded = migrateSavedEmpire(
-          loadEmpireStateLocal(profile.id),
-          profile,
-          loadSavedStartingCity()
-        );
-        const focus = resolveInitialFocusTarget(loaded);
-        setUser(profile);
-        setEmpire(loaded);
-        setActivePlate(focus.cityPlate);
-        setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
-      })
-      .catch(() => {});
-
-    const { data: authSub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      if (session) {
-        const profile = sessionToUserProfile(session);
-        const loaded = migrateSavedEmpire(
-          loadEmpireStateLocal(profile.id),
-          profile,
-          loadSavedStartingCity()
-        );
-        const focus = resolveInitialFocusTarget(loaded);
-        setUser(profile);
-        setEmpire(loaded);
-        setActivePlate(focus.cityPlate);
-        setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
-        setScreen('playing');
-      }
-    });
-
+    let authUnsub: (() => void) | null = null;
     let capHandle: { remove: () => Promise<void> } | null = null;
-    if (Capacitor.isNativePlatform()) {
-      CapacitorApp.addListener('appUrlOpen', async (event) => {
-        if (event.url?.includes('login-callback')) {
-          const url = new URL(event.url);
-          const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
-          const accessToken = hashParams.get('access_token');
-          const refreshToken = hashParams.get('refresh_token');
-          if (accessToken && refreshToken) {
-            await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
+
+    const cancelBg = runInBackground(
+      async () => {
+        try {
+          const sessionRes = await withSafeTimeout(
+            supabase.auth.getSession(),
+            3500,
+            { data: { session: null }, error: null },
+            'supabase.auth.getSession'
+          );
+          if (mounted && sessionRes?.data?.session) {
+            const profile = sessionToUserProfile(sessionRes.data.session);
+            const loaded = migrateSavedEmpire(
+              loadEmpireStateLocal(profile.id),
+              profile,
+              loadSavedStartingCity()
+            );
+            const focus = resolveInitialFocusTarget(loaded);
+            setUser(profile);
+            setEmpire(loaded);
+            setActivePlate(focus.cityPlate);
+            setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
           }
+        } catch (err) {
+          console.warn('[Startup] Supabase oturum kontrolü başarısız, yerel modda devam ediliyor:', err);
         }
-      }).then((h) => {
-        capHandle = h;
-      });
-    }
+
+        try {
+          const { data: authSub } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (!mounted) return;
+            try {
+              if (session) {
+                const profile = sessionToUserProfile(session);
+                const loaded = migrateSavedEmpire(
+                  loadEmpireStateLocal(profile.id),
+                  profile,
+                  loadSavedStartingCity()
+                );
+                const focus = resolveInitialFocusTarget(loaded);
+                setUser(profile);
+                setEmpire(loaded);
+                setActivePlate(focus.cityPlate);
+                setFlyTarget({
+                  lat: focus.lat,
+                  lng: focus.lng,
+                  zoom: focus.zoom,
+                  nonce: Date.now(),
+                });
+                setScreen('playing');
+              }
+            } catch (err) {
+              console.warn('[Startup] Auth durum değişikliği işlenemedi:', err);
+            }
+          });
+          authUnsub = () => {
+            try {
+              authSub.subscription.unsubscribe();
+            } catch {
+              // ignore
+            }
+          };
+        } catch (err) {
+          console.warn('[Startup] Supabase Auth dinleyicisi kurulamadı:', err);
+        }
+
+        try {
+          if (Capacitor.isNativePlatform()) {
+            const handle = await withSafeTimeout(
+              CapacitorApp.addListener('appUrlOpen', async (event) => {
+                try {
+                  if (event.url?.includes('login-callback')) {
+                    const url = new URL(event.url);
+                    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+                    const accessToken = hashParams.get('access_token');
+                    const refreshToken = hashParams.get('refresh_token');
+                    if (accessToken && refreshToken) {
+                      await withSafeTimeout(
+                        supabase.auth.setSession({
+                          access_token: accessToken,
+                          refresh_token: refreshToken,
+                        }),
+                        5000,
+                        null,
+                        'supabase.auth.setSession'
+                      );
+                    }
+                  }
+                } catch (err) {
+                  console.warn('[Startup] OAuth deep-link callback işlenemedi:', err);
+                }
+              }),
+              3000,
+              null,
+              'CapacitorApp.addListener'
+            );
+            if (mounted) {
+              capHandle = handle;
+            } else {
+              handle?.remove().catch(() => {});
+            }
+          }
+        } catch (err) {
+          console.warn('[Startup] Native deep-link dinleyicisi atlandı:', err);
+        }
+      },
+      'startup-supabase-auth',
+      150
+    );
 
     return () => {
       mounted = false;
-      authSub.subscription.unsubscribe();
+      cancelBg();
+      authUnsub?.();
       capHandle?.remove().catch(() => {});
     };
   }, []);
 
-  // Fetch global Supabase corporate tables (franchises, banks, player IPOs) on play
+  // Fetch global Supabase corporate tables (franchises, banks, player IPOs) in non-blocking background
   useEffect(() => {
     if (screen !== 'playing') return;
     let active = true;
 
-    fetchAllFranchises().then((list) => {
-      if (active) setRemoteFranchises(list);
-    });
-    fetchAllBanks().then((list) => {
-      if (active) setRemoteBanks(list);
-    });
-    fetchPlayerIpoListings().then((ipos) => {
-      if (!active) return;
-      setStockQuotes((prev) => {
-        const bist = prev.filter((q) => !q.isPlayerIpo);
-        const existingTickers = new Set(bist.map((b) => b.ticker));
-        const mergedIpos = ipos.filter((i) => !existingTickers.has(i.ticker));
-        return [...bist, ...mergedIpos];
-      });
-    });
+    const cancelBg = runInBackground(
+      async () => {
+        try {
+          const [franchises, banks, ipos] = await Promise.all([
+            fetchAllFranchises().catch((err) => {
+              console.warn('[BackgroundSync] Franchise verileri alınamadı, yerel liste kullanılıyor:', err);
+              return SEED_FRANCHISE_BRANDS;
+            }),
+            fetchAllBanks().catch((err) => {
+              console.warn('[BackgroundSync] Banka verileri alınamadı, yerel liste kullanılıyor:', err);
+              return DEFAULT_SYSTEM_BANKS;
+            }),
+            fetchPlayerIpoListings().catch((err) => {
+              console.warn('[BackgroundSync] IPO verileri alınamadı, yerel borsa kullanılıyor:', err);
+              return [];
+            }),
+          ]);
+          if (!active) return;
+          setRemoteFranchises(franchises);
+          setRemoteBanks(banks);
+          if (ipos.length > 0) {
+            setStockQuotes((prev) => {
+              const bist = prev.filter((q) => !q.isPlayerIpo);
+              const existingTickers = new Set(bist.map((b) => b.ticker));
+              const mergedIpos = ipos.filter((i) => !existingTickers.has(i.ticker));
+              return [...bist, ...mergedIpos];
+            });
+          }
+        } catch (err) {
+          console.warn('[BackgroundSync] Kurumsal veriler yüklenemedi, yerel mod aktif:', err);
+        }
+      },
+      'corporate-world-fetch',
+      250
+    );
 
     return () => {
       active = false;
+      cancelBg();
     };
   }, [screen]);
 
-  // Subscribe to Patron Chat (global + active city channel)
+  // Subscribe to Patron Chat (global + active city channel) safely in background
   useEffect(() => {
     if (screen !== 'playing') return;
+    let disposed = false;
+    let globalSub: { send: (msg: ChatMessage) => Promise<void>; unsubscribe: () => void } | null =
+      null;
+    let citySub: { send: (msg: ChatMessage) => Promise<void>; unsubscribe: () => void } | null =
+      null;
+
     const onIncoming = (msg: ChatMessage) => {
       setChatMessages((prev) =>
         prev.some((m) => m.id === msg.id) ? prev : [...prev.slice(-60), msg]
       );
     };
 
-    const globalSub = subscribePatronChat('global', onIncoming);
-    const citySub = subscribePatronChat(`city-${activePlate}`, onIncoming);
-    chatSendersRef.current = { global: globalSub.send, city: citySub.send };
+    const cancelBg = runInBackground(
+      () => {
+        if (disposed) return;
+        try {
+          globalSub = subscribePatronChat('global', onIncoming);
+          citySub = subscribePatronChat(`city-${activePlate}`, onIncoming);
+          chatSendersRef.current = { global: globalSub.send, city: citySub.send };
+        } catch (err) {
+          console.warn('[BackgroundSync] Patron sohbet kanalı açılamadı, yerel modda devam:', err);
+        }
+      },
+      'patron-chat-subscribe',
+      350
+    );
 
     return () => {
-      globalSub.unsubscribe();
-      citySub.unsubscribe();
+      disposed = true;
+      cancelBg();
+      try {
+        globalSub?.unsubscribe();
+        citySub?.unsubscribe();
+      } catch {
+        // ignore cleanup errors
+      }
     };
   }, [screen, activePlate]);
 
@@ -669,9 +902,10 @@ export default function App() {
   const serverWorldRecordsRef = useRef<RemoteBusinessRecord[]>([]);
 
   const reportSupabaseSyncError = useCallback(
-    (context: string, errorMsg?: string) => {
+    (context: string, errorMsg?: string, silent = false) => {
       const msg = (errorMsg ?? 'Bilinmeyen bağlantı hatası').trim();
-      console.error(`[Supabase Sync] ${context}:`, msg);
+      console.warn(`[Supabase Sync] ${context}:`, msg);
+      if (silent) return;
       const key = `${context}:${msg}`;
       const nowTs = Date.now();
       if (lastSyncErrorRef.current.key === key && nowTs - lastSyncErrorRef.current.at < 15_000) {
@@ -684,53 +918,63 @@ export default function App() {
   );
 
   const buildLocalRemoteRecords = useCallback((): RemoteBusinessRecord[] => {
-    const currentEmpire = empireRef.current;
-    const currentUser = userRef.current;
-    if (!currentUser || currentEmpire.businesses.length === 0) return [];
-    const holdingName =
-      currentEmpire.playerIpo?.holdingName ||
-      currentEmpire.supermarketChain?.name ||
-      getCompanyTier(calculateNetWorth(currentEmpire, Date.now(), stockQuotesRef.current)).title;
+    try {
+      const currentEmpire = empireRef.current;
+      const currentUser = userRef.current;
+      if (!currentUser || currentEmpire.businesses.length === 0) return [];
+      const holdingName =
+        currentEmpire.playerIpo?.holdingName ||
+        currentEmpire.supermarketChain?.name ||
+        getCompanyTier(calculateNetWorth(currentEmpire, Date.now(), stockQuotesRef.current)).title;
 
-    return currentEmpire.businesses.map((biz) => {
-      const hourly = calculateBusinessHourlyIncome(
-        biz,
-        currentEmpire.activeEvent,
-        Date.now(),
-        currentEmpire.businesses,
-        currentEmpire
-      );
-      const valuation = calculateBusinessValuation(biz, currentEmpire.activeEvent, Date.now());
-      return ownedToRemoteRecord(biz, hourly, valuation, holdingName, {
-        id: currentUser.id,
-        name: currentUser.name,
+      return currentEmpire.businesses.map((biz) => {
+        const hourly = calculateBusinessHourlyIncome(
+          biz,
+          currentEmpire.activeEvent,
+          Date.now(),
+          currentEmpire.businesses,
+          currentEmpire
+        );
+        const valuation = calculateBusinessValuation(biz, currentEmpire.activeEvent, Date.now());
+        return ownedToRemoteRecord(biz, hourly, valuation, holdingName, {
+          id: currentUser.id,
+          name: currentUser.name,
+        });
       });
-    });
+    } catch (err) {
+      console.warn('[BackgroundSync] Yerel işletme kayıtları hazırlanamadı:', err);
+      return [];
+    }
   }, []);
 
   const syncMissingLocalBusinesses = useCallback(
-    async (remoteBaseline?: RemoteBusinessRecord[]) => {
-      const localRecords = buildLocalRemoteRecords();
-      if (localRecords.length === 0) return;
-      const baseline = remoteBaseline ?? serverWorldRecordsRef.current;
-      const missingOrOutdated = findUnsyncedLocalBusinesses(localRecords, baseline);
-      if (missingOrOutdated.length === 0) return;
+    async (remoteBaseline?: RemoteBusinessRecord[], silent = true) => {
+      try {
+        const localRecords = buildLocalRemoteRecords();
+        if (localRecords.length === 0) return;
+        const baseline = remoteBaseline ?? serverWorldRecordsRef.current;
+        const missingOrOutdated = findUnsyncedLocalBusinesses(localRecords, baseline);
+        if (missingOrOutdated.length === 0) return;
 
-      const res = await syncPlayerBusinessesToWorld(missingOrOutdated);
-      if (!res.ok) {
-        reportSupabaseSyncError(
-          `${missingOrOutdated.length} yerel işletme Supabase'e aktarılamadı`,
-          res.error
+        const res = await syncPlayerBusinessesToWorld(missingOrOutdated);
+        if (!res.ok) {
+          reportSupabaseSyncError(
+            `${missingOrOutdated.length} yerel işletme Supabase'e aktarılamadı`,
+            res.error,
+            silent
+          );
+          return;
+        }
+        serverWorldRecordsRef.current = missingOrOutdated.reduce(
+          (acc, rec) => applyRealtimeBusinessUpsert(acc, rec),
+          baseline
         );
-        return;
+        setRoomRecords((prev) =>
+          missingOrOutdated.reduce((acc, rec) => applyRealtimeBusinessUpsert(acc, rec), prev)
+        );
+      } catch (err) {
+        console.warn('[BackgroundSync] Yerel işletme senkronizasyonu sessizce atlandı:', err);
       }
-      serverWorldRecordsRef.current = missingOrOutdated.reduce(
-        (acc, rec) => applyRealtimeBusinessUpsert(acc, rec),
-        baseline
-      );
-      setRoomRecords((prev) =>
-        missingOrOutdated.reduce((acc, rec) => applyRealtimeBusinessUpsert(acc, rec), prev)
-      );
     },
     [buildLocalRemoteRecords, reportSupabaseSyncError]
   );
@@ -738,118 +982,138 @@ export default function App() {
   useEffect(() => {
     if (screen !== 'playing') return;
     let active = true;
+    let unsubscribe: (() => void) | null = null;
     setRoomStatus('connecting');
 
     const loadAllWorldAndSync = async () => {
-      const { records, connected, error } = await fetchAllWorldBusinesses();
-      if (!active) return;
+      try {
+        const { records, connected, error } = await fetchAllWorldBusinesses();
+        if (!active) return;
 
-      if (error) {
-        setRoomStatus('offline');
-        reportSupabaseSyncError('Ortak harita verileri okunamadı', error);
-      } else {
-        serverWorldRecordsRef.current = records;
-        setRoomRecords((prev) => {
-          // Merge fetched server truth (`select('*')`) with any pending local real records idempotently
-          let next = [...records];
-          for (const existing of prev) {
-            if (!next.some((r) => r.id === existing.id) && isRealPlayerBusiness(existing)) {
-              next = applyRealtimeBusinessUpsert(next, existing);
-            }
-          }
-          return next;
-        });
-        if (!connected) {
+        if (error) {
           setRoomStatus('offline');
+          // Non-blocking startup: log silently to console and continue with local data
+          console.warn('[StartupSync] Ortak harita verileri okunamadı, yerel modda devam ediliyor:', error);
+        } else {
+          serverWorldRecordsRef.current = records;
+          setRoomRecords((prev) => {
+            // Merge fetched server truth (`select('*')`) with any pending local real records idempotently
+            let next = [...records];
+            for (const existing of prev) {
+              if (!next.some((r) => r.id === existing.id) && isRealPlayerBusiness(existing)) {
+                next = applyRealtimeBusinessUpsert(next, existing);
+              }
+            }
+            return next;
+          });
+          if (!connected) {
+            setRoomStatus('offline');
+          }
         }
-      }
 
-      // Always verify & upsert any local businesses missing from `public.businesses`
-      await syncMissingLocalBusinesses(records);
+        // Background backfill upsert for any local businesses missing from `public.businesses`
+        await syncMissingLocalBusinesses(records, true);
+      } catch (err) {
+        if (!active) return;
+        setRoomStatus('offline');
+        console.warn('[StartupSync] Dünya haritası senkronizasyonu başarısız, yerel veriyle devam:', err);
+      }
     };
 
-    loadAllWorldAndSync();
-
-    const unsubscribe = subscribeToGlobalBusinesses({
-      onUpsert: (rec) => {
-        if (!active) return;
-        serverWorldRecordsRef.current = applyRealtimeBusinessUpsert(
-          serverWorldRecordsRef.current,
-          rec
-        );
-        setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, rec));
-      },
-      onPatch: (id, patch) => {
-        if (!active) return;
-        serverWorldRecordsRef.current = applyRealtimeBusinessPatch(
-          serverWorldRecordsRef.current,
-          id,
-          patch
-        );
-        setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, id, patch));
-      },
-      onInsert: (rec) => {
-        if (!active) return;
-        const currentUserId = userRef.current?.id;
-        if (rec.owner_id !== currentUserId && isRealPlayerBusiness(rec)) {
-          const nowTs = Date.now();
-          if (nowTs - lastLiveAlertAtRef.current > 4000) {
-            lastLiveAlertAtRef.current = nowTs;
-            pushNotification(
-              'Canlı Harita · Yeni Rakip Şube!',
-              `${rec.owner_name}, ${String(rec.city_plate).padStart(2, '0')} ${rec.city_name} ilinde "${rec.business_name}" açtı.`,
-              'event',
-              false
-            );
-          }
-        }
-      },
-      onUpdate: (rec) => {
-        if (!active) return;
-        const currentUserId = userRef.current?.id;
-        if (!currentUserId || rec.owner_id === currentUserId) return;
-        // If another player acquired one of our own branches via buyout, reconcile portfolio & credit proceeds
-        const ownBranch = empireRef.current.businesses.find((b) => b.id === rec.id);
-        if (ownBranch) {
-          const buyoutProceeds = Math.round(rec.valuation * 1.35);
-          setEmpire((prev) => ({
-            ...prev,
-            cash: prev.cash + buyoutProceeds,
-            businesses: prev.businesses.filter((b) => b.id !== rec.id),
-            lastSavedAt: Date.now(),
-          }));
-          pushNotification(
-            'Şubeniz Devralındı!',
-            `${rec.owner_name}, "${ownBranch.customName}" şubenizi satın aldı (+${formatTL(
-              buyoutProceeds
-            )}).`,
-            'finance',
-            true
-          );
-        }
-      },
-      onDelete: (id) => {
-        if (!active) return;
-        serverWorldRecordsRef.current = applyRealtimeBusinessDelete(
-          serverWorldRecordsRef.current,
-          id
-        );
-        setRoomRecords((prev) => applyRealtimeBusinessDelete(prev, id));
-        setSelectedCompetitorId((cur) => (cur === id ? null : cur));
-      },
-      onStatus: (status) => {
-        if (!active) return;
-        setRoomStatus(status);
-      },
-      onError: (errMsg) => {
-        if (!active) return;
-        reportSupabaseSyncError('Canlı harita bağlantısı', errMsg);
-      },
-      onReconnect: () => {
+    const cancelBg = runInBackground(
+      () => {
         if (!active) return;
         loadAllWorldAndSync();
+
+        try {
+          unsubscribe = subscribeToGlobalBusinesses({
+            onUpsert: (rec) => {
+              if (!active) return;
+              serverWorldRecordsRef.current = applyRealtimeBusinessUpsert(
+                serverWorldRecordsRef.current,
+                rec
+              );
+              setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, rec));
+            },
+            onPatch: (id, patch) => {
+              if (!active) return;
+              serverWorldRecordsRef.current = applyRealtimeBusinessPatch(
+                serverWorldRecordsRef.current,
+                id,
+                patch
+              );
+              setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, id, patch));
+            },
+            onInsert: (rec) => {
+              if (!active) return;
+              const currentUserId = userRef.current?.id;
+              if (rec.owner_id !== currentUserId && isRealPlayerBusiness(rec)) {
+                const nowTs = Date.now();
+                if (nowTs - lastLiveAlertAtRef.current > 4000) {
+                  lastLiveAlertAtRef.current = nowTs;
+                  pushNotification(
+                    'Canlı Harita · Yeni Rakip Şube!',
+                    `${rec.owner_name}, ${String(rec.city_plate).padStart(2, '0')} ${rec.city_name} ilinde "${rec.business_name}" açtı.`,
+                    'event',
+                    false
+                  );
+                }
+              }
+            },
+            onUpdate: (rec) => {
+              if (!active) return;
+              const currentUserId = userRef.current?.id;
+              if (!currentUserId || rec.owner_id === currentUserId) return;
+              // If another player acquired one of our own branches via buyout, reconcile portfolio & credit proceeds
+              const ownBranch = empireRef.current.businesses.find((b) => b.id === rec.id);
+              if (ownBranch) {
+                const buyoutProceeds = Math.round(rec.valuation * 1.35);
+                setEmpire((prev) => ({
+                  ...prev,
+                  cash: prev.cash + buyoutProceeds,
+                  businesses: prev.businesses.filter((b) => b.id !== rec.id),
+                  lastSavedAt: Date.now(),
+                }));
+                pushNotification(
+                  'Şubeniz Devralındı!',
+                  `${rec.owner_name}, "${ownBranch.customName}" şubenizi satın aldı (+${formatTL(
+                    buyoutProceeds
+                  )}).`,
+                  'finance',
+                  true
+                );
+              }
+            },
+            onDelete: (id) => {
+              if (!active) return;
+              serverWorldRecordsRef.current = applyRealtimeBusinessDelete(
+                serverWorldRecordsRef.current,
+                id
+              );
+              setRoomRecords((prev) => applyRealtimeBusinessDelete(prev, id));
+              setSelectedCompetitorId((cur) => (cur === id ? null : cur));
+            },
+            onStatus: (status) => {
+              if (!active) return;
+              setRoomStatus(status);
+            },
+            onError: (errMsg) => {
+              if (!active) return;
+              console.warn('[StartupSync] Canlı harita bağlantısı çevrimdışı:', errMsg);
+            },
+            onReconnect: () => {
+              if (!active) return;
+              loadAllWorldAndSync();
+            },
+          });
+        } catch (err) {
+          setRoomStatus('offline');
+          console.warn('[StartupSync] Realtime kanal kurulamadı, çevrimdışı modda devam:', err);
+        }
       },
-    });
+      'world-businesses-startup-sync',
+      200
+    );
 
     const handleOnline = () => {
       if (!active) return;
@@ -859,18 +1123,27 @@ export default function App() {
 
     return () => {
       active = false;
+      cancelBg();
       window.removeEventListener('online', handleOnline);
-      unsubscribe();
+      try {
+        unsubscribe?.();
+      } catch {
+        // ignore unsubscribe errors
+      }
     };
-  }, [screen, pushNotification, reportSupabaseSyncError, syncMissingLocalBusinesses]);
+  }, [screen, pushNotification, syncMissingLocalBusinesses]);
 
-  // Also ensure pre-existing local businesses sync automatically once `user` or `empire` finishes hydrating
+  // Also ensure pre-existing local businesses sync automatically in background once `user` or `empire` finishes hydrating
   useEffect(() => {
     if (screen !== 'playing' || !user || empire.businesses.length === 0) return;
     const sig = `${user.id}:${empire.businesses.map((b) => `${b.id}@${b.level}`).join(',')}`;
     if (lastPortfolioSyncSigRef.current === sig) return;
     lastPortfolioSyncSigRef.current = sig;
-    syncMissingLocalBusinesses();
+    return runInBackground(
+      () => syncMissingLocalBusinesses(undefined, true),
+      'portfolio-hydration-sync',
+      300
+    );
   }, [screen, user, empire.businesses, syncMissingLocalBusinesses]);
 
   // Persist empire state automatically
@@ -941,6 +1214,24 @@ export default function App() {
           );
         }
 
+        if (result.completedConstructions.length > 0) {
+          soundEngine.playUpgrade();
+          for (const doneBiz of result.completedConstructions) {
+            pushNotification(
+              'İnşaat Tamamlandı — Açıldı!',
+              `"${doneBiz.customName}" tadilatı bitti ve müşteri kabul etmeye başladı!`,
+              'milestone',
+              true
+            );
+          }
+        }
+
+        if (gameSpeed === 'day' && result.daySimAutoStop) {
+          setGameSpeed(1);
+          setDaySimAutoStopAlert(result.daySimAutoStop);
+          soundEngine.playNotification();
+        }
+
         if (result.dayEndSummary) {
           const summary = result.dayEndSummary;
           const netLabel = `${summary.dailyNetCashFlow >= 0 ? '+' : ''}${formatTL(
@@ -952,15 +1243,17 @@ export default function App() {
               ? `+${summary.creditScoreDelta}`
               : `${summary.creditScoreDelta}`;
 
-          pushNotification(
-            `Gün Sonu Özeti · Gün ${summary.completedDay} (${summary.month}. Ay)`,
-            `Günlük Net: ${netLabel} · Maaşlar: ${formatTL(
-              summary.dailySalariesPaid,
-              true
-            )} · Kredi Puanı: ${scoreDeltaLabel}`,
-            'finance',
-            false
-          );
+          if (gameSpeed !== 'day') {
+            pushNotification(
+              `00:00 Gün Sonu Raporu · Gün ${summary.completedDay} (${summary.month}. Ay)`,
+              `Net Kâr: ${netLabel} · Kira/Tedarik/SGK düşüldü · Kredi Puanı: ${scoreDeltaLabel}`,
+              'finance',
+              false
+            );
+            if (!summary.collected && summary.branchLines.length > 0) {
+              setDayEndModalOpen(true);
+            }
+          }
 
           if (summary.weeklyDividendPaid > 0) {
             spawnCashPopup(summary.weeklyDividendPaid);
@@ -1160,10 +1453,11 @@ export default function App() {
     return () => clearInterval(timer);
   }, [screen, gameSpeed, pushNotification, spawnCashPopup]);
 
-  // Live Borsa Ticker Loop (freezes on Pause, flows 2x/4x faster on high speed)
+  // Live Borsa Ticker Loop (freezes on Pause, flows faster on 2x/4x/day-skip)
   useEffect(() => {
     if (screen !== 'playing' || gameSpeed === 0) return;
-    const intervalMs = Math.max(750, Math.round(3000 / gameSpeed));
+    const numericSpeed = gameSpeed === 'day' ? 6 : gameSpeed;
+    const intervalMs = Math.max(600, Math.round(3000 / numericSpeed));
     const tickerTimer = setInterval(() => {
       setStockQuotes((prev) => {
         const currentEmpire = empireRef.current;
@@ -1306,11 +1600,7 @@ export default function App() {
 
   const handleSelectStartingCity = (plate: number) => {
     setStartingCityPlate(plate);
-    try {
-      localStorage.setItem(HQ_CITY_STORAGE_KEY, String(plate));
-    } catch {
-      // ignore storage errors
-    }
+    safeStorageSetItem(HQ_CITY_STORAGE_KEY, String(plate));
   };
 
   const focusHeadquarters = useCallback((targetState: EmpireState) => {
@@ -1443,6 +1733,7 @@ export default function App() {
       setBankingModalOpen(false);
       setAccountingModalOpen(false);
       setHubMenuOpen(false);
+      setBottomSheetGroup(null);
       setActiveDrawer(tab === 'portfolio' ? 'portfolio' : null);
       setHrModalOpen(tab === 'hr');
       setHoldingModalOpen(tab === 'franchise');
@@ -1452,6 +1743,78 @@ export default function App() {
       }
     },
     [hrTargetBusinessId, empire.businesses]
+  );
+
+  const handleBottomSheetSelect = useCallback(
+    (actionId: BottomSheetActionId) => {
+      soundEngine.playClick();
+      setBottomSheetGroup(null);
+      setDroppedPin(null);
+      setSelectedBusinessId(null);
+      setSelectedCompetitorId(null);
+      setActiveDrawer(null);
+      setHrModalOpen(false);
+      setHoldingModalOpen(false);
+      setRivalsModalOpen(false);
+      setBorsaModalOpen(false);
+      setBankingModalOpen(false);
+      setAccountingModalOpen(false);
+      setHubMenuOpen(false);
+      setLeaderboardModalOpen(false);
+
+      switch (actionId) {
+        case 'mgmt_businesses':
+          handleSelectManagementTab('portfolio');
+          break;
+        case 'mgmt_hr':
+          setHrInitialSubView('branches');
+          handleSelectManagementTab('hr');
+          break;
+        case 'mgmt_hq':
+          setHrInitialSubView('hq');
+          handleSelectManagementTab('hr');
+          break;
+        case 'mgmt_rivals':
+          handleSelectManagementTab('rivals');
+          break;
+        case 'mgmt_franchise':
+          handleSelectManagementTab('franchise');
+          break;
+        case 'fin_accounting':
+          setAccountingModalOpen(true);
+          break;
+        case 'fin_banking':
+          setBankingModalOpen(true);
+          break;
+        case 'fin_stocks':
+          setBorsaMode('market');
+          setBorsaModalOpen(true);
+          break;
+        case 'fin_portfolio':
+          setBorsaMode('portfolio');
+          setBorsaModalOpen(true);
+          break;
+        case 'office_dayend':
+          setDayEndModalOpen(true);
+          break;
+        case 'office_missions':
+          setActiveDrawer('missions');
+          break;
+        case 'office_news':
+          setActiveDrawer('market');
+          break;
+        case 'office_leaderboard':
+          setLeaderboardModalOpen(true);
+          break;
+        case 'office_guide':
+          setTutorialOpen(true);
+          break;
+        case 'office_settings':
+          setSettingsOpen(true);
+          break;
+      }
+    },
+    [handleSelectManagementTab]
   );
 
   const handleStartCloneBusiness = useCallback(
@@ -1729,6 +2092,57 @@ export default function App() {
     soundEngine.playCashCollect();
     setEmpire(res.state);
     spawnCashPopup(res.collectedAmount);
+  };
+
+  const handleHireDoubleShift = (businessId: string) => {
+    const res = hireDoubleShiftCrew(empire, businessId, Date.now());
+    if (!res.ok || !res.business) {
+      if (res.error) pushNotification('Çift Vardiya Başlatılamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Çift Vardiya Ekibi İş Başında!',
+      `${res.business.customName} inşaat süresi %35 kısaltıldı! Kalan süre: ${res.business.constructionDaysRemaining} gün.`,
+      'milestone',
+      false
+    );
+  };
+
+  const handleCollectDayEndAll = () => {
+    const res = collectDayEndReport(empire, undefined, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Gün Sonu Tahsilatı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playCashCollect();
+    setEmpire(res.state);
+    if ((res.collectedAmount ?? 0) > 0) {
+      spawnCashPopup(res.collectedAmount!);
+    }
+    pushNotification(
+      'Gün Sonu Hasılatı Kasaya Aktarıldı',
+      `Net ${res.collectedAmount && res.collectedAmount >= 0 ? '+' : ''}${formatTL(
+        res.collectedAmount ?? 0
+      )} ana şirket kasasına işlendi.`,
+      'revenue',
+      false
+    );
+    setDayEndModalOpen(false);
+  };
+
+  const handleCollectDayEndSingle = (reportId: string) => {
+    const res = collectDayEndReport(empire, reportId, Date.now());
+    if (!res.ok) return;
+    soundEngine.playCashCollect();
+    setEmpire(res.state);
+    if ((res.collectedAmount ?? 0) > 0) {
+      spawnCashPopup(res.collectedAmount!);
+    }
+    if ((res.state.pendingDayEndReports ?? []).length === 0) {
+      setDayEndModalOpen(false);
+    }
   };
 
   const handleUpgradeBusiness = (businessId: string) => {
@@ -2348,21 +2762,13 @@ export default function App() {
 
   const handleCompleteTutorial = () => {
     soundEngine.playUpgrade();
-    try {
-      localStorage.setItem(TUTORIAL_STORAGE_KEY, '1');
-    } catch {
-      // ignore storage errors
-    }
+    safeStorageSetItem(TUTORIAL_STORAGE_KEY, '1');
     setTutorialOpen(false);
   };
 
   const handleSkipTutorial = () => {
     soundEngine.playClick();
-    try {
-      localStorage.setItem(TUTORIAL_STORAGE_KEY, '1');
-    } catch {
-      // ignore storage errors
-    }
+    safeStorageSetItem(TUTORIAL_STORAGE_KEY, '1');
     setTutorialOpen(false);
   };
 
@@ -2427,16 +2833,24 @@ export default function App() {
   );
 
   const menuSavedCount = useMemo(() => {
-    if (empire.businesses.length > 0) return empire.businesses.length;
-    const guest = createOrLoadGuestProfile();
-    return loadEmpireStateLocal(guest.id)?.businesses.length ?? 0;
+    try {
+      if (empire.businesses.length > 0) return empire.businesses.length;
+      const guest = createOrLoadGuestProfile();
+      return loadEmpireStateLocal(guest.id)?.businesses.length ?? 0;
+    } catch {
+      return 0;
+    }
   }, [empire.businesses.length]);
+
+  const handleIntroComplete = useCallback(() => {
+    setScreen('menu');
+  }, []);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-slate-100 text-slate-900 dark:bg-[#0B1221] dark:text-slate-100">
       <OrientationGuard />
 
-      {screen === 'intro' && <StudioIntro onComplete={() => setScreen('menu')} />}
+      {screen === 'intro' && <StudioIntro onComplete={handleIntroComplete} />}
 
       {screen === 'menu' && (
         <MainMenu
@@ -2515,7 +2929,8 @@ export default function App() {
                     {formatTL(empire.cash)}
                   </span>
                   <span className="font-mono-num text-[clamp(9.5px,1.1vw,11px)] font-semibold leading-none text-slate-500 dark:text-slate-400">
-                    Şube {empire.businesses.length}/{companyTier.maxBranches} · Puan {empire.creditScore}
+                    Şube {empire.businesses.length}/{companyTier.maxBranches}
+                    <span className="hidden min-[960px]:inline"> · Puan {empire.creditScore}</span>
                   </span>
                   <span
                     data-testid="hud-income"
@@ -2536,63 +2951,97 @@ export default function App() {
               </div>
             </div>
 
-            {/* Center Compact Game Calendar & Time Speed Capsule (Durdur / 1x / 2x / 4x) */}
-            <div
-              data-testid="time-speed-capsule"
-              className={`pointer-events-auto flex shrink-0 items-center gap-1 rounded-2xl border px-1.5 py-1 shadow-lg transition-colors ${
-                gameSpeed === 0
-                  ? 'border-amber-400/90 bg-amber-50/95 dark:border-amber-500/70 dark:bg-amber-950/90'
-                  : 'border-slate-200/95 bg-white/95 dark:border-slate-700/90 dark:bg-slate-900/95'
-              }`}
-            >
+            {/* Center Compact Game Calendar & Time Speed Capsule (Durdur / 1x / 2x / 4x / Gün+) */}
+            <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
               <div
-                data-testid="hud-game-clock"
-                title={gameClock.totalDaysLabel}
-                className="flex items-center gap-1 pl-1 pr-0.5 whitespace-nowrap"
+                data-testid="time-speed-capsule"
+                className={`flex shrink-0 items-center gap-1 rounded-2xl border px-1.5 py-1 shadow-lg transition-colors ${
+                  gameSpeed === 0
+                    ? 'border-amber-400/90 bg-amber-50/95 dark:border-amber-500/70 dark:bg-amber-950/90'
+                    : gameSpeed === 'day'
+                    ? 'border-emerald-400/95 bg-emerald-50/95 dark:border-emerald-500/80 dark:bg-emerald-950/90'
+                    : 'border-slate-200/95 bg-white/95 dark:border-slate-700/90 dark:bg-slate-900/95'
+                }`}
               >
-                <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                <span className="hidden font-mono-num text-[clamp(10.5px,1.2vw,12px)] font-extrabold text-slate-900 dark:text-white min-[780px]:inline">
-                  {gameClock.label}
-                </span>
-                <span className="font-mono-num text-[10px] font-extrabold text-slate-900 dark:text-white min-[780px]:hidden">
-                  {gameClock.compactLabel}
-                </span>
+                <div
+                  data-testid="hud-game-clock"
+                  title={gameClock.totalDaysLabel}
+                  className="flex items-center gap-1 pl-1 pr-0.5 whitespace-nowrap"
+                >
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span className="hidden font-mono-num text-[clamp(10.5px,1.2vw,12px)] font-extrabold text-slate-900 dark:text-white min-[960px]:inline">
+                    {gameClock.label}
+                  </span>
+                  <span className="font-mono-num text-[10.5px] font-extrabold text-slate-900 dark:text-white min-[960px]:hidden">
+                    {gameClock.compactLabel}
+                  </span>
+                </div>
+
+                <div className="h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
+
+                <div role="group" aria-label="Oyun Zaman Hızı" className="flex items-center gap-0.5">
+                  {(
+                    [
+                      { speed: 0 as GameSpeed, label: 'Durdur', short: '⏸' },
+                      { speed: 1 as GameSpeed, label: 'Normal 1x', short: '1x' },
+                      { speed: 2 as GameSpeed, label: 'Hızlı 2x', short: '2x' },
+                      { speed: 4 as GameSpeed, label: 'Çok Hızlı 4x', short: '4x' },
+                      { speed: 'day' as GameSpeed, label: 'Gün Gün Hızlı İlerleme (Oto-Korumalı)', short: 'Gün+' },
+                    ] as const
+                  ).map((item) => {
+                    const active = gameSpeed === item.speed;
+                    return (
+                      <button
+                        key={String(item.speed)}
+                        type="button"
+                        data-testid={`speed-btn-${item.speed}`}
+                        aria-label={item.label}
+                        aria-pressed={active}
+                        title={item.label}
+                        onClick={() => handleSetGameSpeed(item.speed)}
+                        className={`flex h-7 min-w-[24px] items-center justify-center gap-0.5 rounded-lg px-1.5 font-mono-num text-[10.5px] font-extrabold transition-colors sm:h-8 sm:min-w-[28px] sm:text-[11px] whitespace-nowrap ${
+                          active
+                            ? item.speed === 0
+                              ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
+                              : item.speed === 'day'
+                              ? 'bg-emerald-500 text-slate-950 font-black shadow-xs'
+                              : 'bg-slate-900 text-white shadow-xs dark:bg-amber-400 dark:text-slate-950 dark:font-bold'
+                            : item.speed === 'day'
+                            ? 'text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/50'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+                        }`}
+                      >
+                        {item.speed === 0 ? (
+                          <Pause className="h-3 w-3" />
+                        ) : item.speed === 'day' ? (
+                          <>
+                            <FastForward className="h-3 w-3 shrink-0" />
+                            <span>{item.short}</span>
+                          </>
+                        ) : (
+                          item.short
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
-
-              <div role="group" aria-label="Oyun Zaman Hızı" className="flex items-center gap-0.5">
-                {(
-                  [
-                    { speed: 0 as GameSpeed, label: 'Durdur', short: '⏸' },
-                    { speed: 1 as GameSpeed, label: 'Normal 1x', short: '1x' },
-                    { speed: 2 as GameSpeed, label: 'Hızlı 2x', short: '2x' },
-                    { speed: 4 as GameSpeed, label: 'Çok Hızlı 4x', short: '4x' },
-                  ] as const
-                ).map((item) => {
-                  const active = gameSpeed === item.speed;
-                  return (
-                    <button
-                      key={item.speed}
-                      type="button"
-                      data-testid={`speed-btn-${item.speed}`}
-                      aria-label={item.label}
-                      aria-pressed={active}
-                      title={item.label}
-                      onClick={() => handleSetGameSpeed(item.speed)}
-                      className={`flex h-7 min-w-[24px] items-center justify-center rounded-lg px-1.5 font-mono-num text-[10.5px] font-extrabold transition-colors sm:h-8 sm:min-w-[28px] sm:text-[11px] whitespace-nowrap ${
-                        active
-                          ? item.speed === 0
-                            ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
-                            : 'bg-slate-900 text-white shadow-xs dark:bg-amber-400 dark:text-slate-950 dark:font-bold'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
-                      }`}
-                    >
-                      {item.speed === 0 ? <Pause className="h-3 w-3" /> : item.short}
-                    </button>
-                  );
-                })}
-              </div>
+              {(empire.pendingDayEndReports ?? []).length > 0 && (
+                <button
+                  type="button"
+                  data-testid="day-end-report-pill"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setDayEndModalOpen(true);
+                  }}
+                  title="00:00 Gün Sonu Raporu & Hasılat Tahsilatı"
+                  className="flex h-9 items-center gap-1 rounded-2xl border border-emerald-400/90 bg-emerald-500 px-2.5 text-[11px] font-black text-slate-950 shadow-lg hover:bg-emerald-400 whitespace-nowrap"
+                >
+                  <CalendarCheck2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>00:00 ({empire.pendingDayEndReports?.length})</span>
+                </button>
+              )}
             </div>
 
             {/* Right City Room Switcher & Utility Cluster */}
@@ -2693,6 +3142,7 @@ export default function App() {
               onClick={() => {
                 soundEngine.playClick();
                 setPinDropMode(true);
+                setBottomSheetGroup(null);
                 setActiveDrawer(null);
                 setHrModalOpen(false);
                 setRivalsModalOpen(false);
@@ -2709,6 +3159,7 @@ export default function App() {
                 }
               }}
               className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                !bottomSheetGroup &&
                 !activeDrawer &&
                 !hrModalOpen &&
                 !holdingModalOpen &&
@@ -2725,28 +3176,20 @@ export default function App() {
               <span>Harita</span>
             </button>
 
-            {/* 2) Yönetim (İşletmelerim · İK & Çalışanlar · Franchise & Bayilik · Rakip İşletmeler) */}
+            {/* 2) Yönetim — Opens Bottom Sheet Quick-Access Popup */}
             <button
               type="button"
               data-testid="dock-management-btn"
               onClick={() => {
-                const isMgmtOpen =
-                  activeDrawer === 'portfolio' ||
-                  hrModalOpen ||
-                  holdingModalOpen ||
-                  rivalsModalOpen;
-                if (isMgmtOpen) {
-                  soundEngine.playClick();
-                  setActiveDrawer(null);
-                  setHrModalOpen(false);
-                  setHoldingModalOpen(false);
-                  setRivalsModalOpen(false);
-                } else {
-                  handleSelectManagementTab('portfolio');
-                }
+                soundEngine.playClick();
+                setBottomSheetGroup((prev) => (prev === 'management' ? null : 'management'));
               }}
               className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                activeDrawer === 'portfolio' || hrModalOpen || holdingModalOpen || rivalsModalOpen
+                bottomSheetGroup === 'management' ||
+                activeDrawer === 'portfolio' ||
+                hrModalOpen ||
+                holdingModalOpen ||
+                rivalsModalOpen
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
@@ -2755,23 +3198,19 @@ export default function App() {
               <span>Yönetim</span>
             </button>
 
-            {/* 3) Finans (Muhasebe · Banka & Kredi · Borsa & Yatırım · Yatırımlarım) */}
+            {/* 3) Finans — Opens Bottom Sheet Quick-Access Popup */}
             <button
               type="button"
               data-testid="dock-finance-btn"
               onClick={() => {
                 soundEngine.playClick();
-                setActiveDrawer(null);
-                setHrModalOpen(false);
-                setHoldingModalOpen(false);
-                setRivalsModalOpen(false);
-                setHubMenuOpen(false);
-                setBankingModalOpen(false);
-                setBorsaModalOpen(false);
-                setAccountingModalOpen(true);
+                setBottomSheetGroup((prev) => (prev === 'finance' ? null : 'finance'));
               }}
               className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                accountingModalOpen || bankingModalOpen || borsaModalOpen
+                bottomSheetGroup === 'finance' ||
+                accountingModalOpen ||
+                bankingModalOpen ||
+                borsaModalOpen
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
@@ -2786,6 +3225,7 @@ export default function App() {
               data-testid="dock-news-btn"
               onClick={() => {
                 soundEngine.playClick();
+                setBottomSheetGroup(null);
                 setDroppedPin(null);
                 setSelectedBusinessId(null);
                 setSelectedCompetitorId(null);
@@ -2814,6 +3254,7 @@ export default function App() {
               data-testid="dock-missions-btn"
               onClick={() => {
                 soundEngine.playClick();
+                setBottomSheetGroup(null);
                 setDroppedPin(null);
                 setSelectedBusinessId(null);
                 setSelectedCompetitorId(null);
@@ -2841,29 +3282,27 @@ export default function App() {
               )}
             </button>
 
-            {/* 6) Menü (Liderlik Tablosu, Holding & Franchise, Patron Sohbeti, Oyun Rehberi, Ayarlar) */}
+            {/* 6) Ofisim — Opens Office & Tools Bottom Sheet Popup */}
             <button
               type="button"
               data-testid="dock-menu-btn"
               onClick={() => {
                 soundEngine.playClick();
-                setActiveDrawer(null);
-                setHrModalOpen(false);
-                setHoldingModalOpen(false);
-                setRivalsModalOpen(false);
-                setBorsaModalOpen(false);
-                setBankingModalOpen(false);
-                setAccountingModalOpen(false);
-                setHubMenuOpen(true);
+                setBottomSheetGroup((prev) => (prev === 'office' ? null : 'office'));
               }}
-              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                hubMenuOpen
+              className={`compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
+                bottomSheetGroup === 'office' || hubMenuOpen || dayEndModalOpen
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               <LayoutGrid className="h-4 w-4 shrink-0" />
-              <span>Menü</span>
+              <span>Ofisim</span>
+              {(empire.pendingDayEndReports ?? []).length > 0 && (
+                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 font-mono-num text-[10px] font-black text-slate-950">
+                  {empire.pendingDayEndReports?.length}
+                </span>
+              )}
             </button>
           </nav>
 
@@ -2975,6 +3414,8 @@ export default function App() {
                   }}
                   onCloneBusiness={handleStartCloneBusiness}
                   onLaunchAdCampaign={handleLaunchAdCampaign}
+                  onHireDoubleShift={handleHireDoubleShift}
+                  onOpenDayEndReport={() => setDayEndModalOpen(true)}
                   onRestock={handleRestockBusiness}
                   onCollect={handleCollectBusiness}
                   onUpgrade={handleUpgradeBusiness}
@@ -3028,6 +3469,11 @@ export default function App() {
               }}
               onCloneBusiness={handleStartCloneBusiness}
               onLaunchAdCampaign={handleLaunchAdCampaign}
+              onHireDoubleShift={handleHireDoubleShift}
+              onOpenDayEndReport={() => {
+                setActiveDrawer(null);
+                setDayEndModalOpen(true);
+              }}
               onCollectBusiness={handleCollectBusiness}
               onCollectAll={handleCollectAll}
               onUpgradeBusiness={handleUpgradeBusiness}
@@ -3191,6 +3637,11 @@ export default function App() {
           setHrInitialSubView('hq');
           handleSelectManagementTab('hr');
         }}
+        onOpenDayEndReport={() => {
+          soundEngine.playClick();
+          setAccountingModalOpen(false);
+          setDayEndModalOpen(true);
+        }}
         onSwitchToBanking={() => {
           soundEngine.playClick();
           setAccountingModalOpen(false);
@@ -3209,6 +3660,62 @@ export default function App() {
           setBorsaModalOpen(true);
         }}
         onClose={() => setAccountingModalOpen(false)}
+      />
+
+      <BottomSheetLauncher
+        group={bottomSheetGroup}
+        onClose={() => setBottomSheetGroup(null)}
+        onSelect={handleBottomSheetSelect}
+        stats={{
+          branchCount: empire.businesses.length,
+          underConstructionCount: empire.businesses.filter((b) => isBusinessUnderConstruction(b))
+            .length,
+          staffCount:
+            empire.businesses.reduce((s, b) => s + (b.employees?.length ?? 0), 0) +
+            (empire.cityManagers?.length ?? 0),
+          rivalCount: competitorBusinesses.length,
+          franchiseCount: allFranchises.length,
+          hasCeoOrAccountant: Boolean(empire.accountant || empire.ceo),
+          activeLoansCount: (empire.activeLoans ?? []).filter(
+            (l) => l.status === 'active' || l.status === 'garnishing'
+          ).length,
+          unpaidTaxesCount: (empire.pendingTaxes ?? []).filter((t) => t.status !== 'paid').length,
+          portfolioHoldingsCount: (empire.stockPortfolio ?? []).filter((h) => h.shares > 0).length,
+          pendingDayEndCount: (empire.pendingDayEndReports ?? []).length,
+          pendingDayEndNet: (empire.pendingDayEndReports ?? []).reduce(
+            (s, r) => s + r.manualCollectibleNet,
+            0
+          ),
+          claimableMissionsCount: claimableMissionCount,
+        }}
+      />
+
+      <DayEndReportModal
+        open={dayEndModalOpen}
+        onClose={() => setDayEndModalOpen(false)}
+        pendingReports={empire.pendingDayEndReports ?? []}
+        historyReports={empire.dayEndHistory ?? []}
+        onCollectAll={handleCollectDayEndAll}
+        onCollectSingle={handleCollectDayEndSingle}
+      />
+
+      <DaySimAutoStopModal
+        alert={daySimAutoStopAlert}
+        onClose={() => setDaySimAutoStopAlert(null)}
+        onPrimaryAction={(alert) => {
+          setDaySimAutoStopAlert(null);
+          if (alert.reason === 'construction_completed') {
+            if (alert.businessId) {
+              handleSelectOwnBusiness(alert.businessId);
+            } else {
+              handleSelectManagementTab('portfolio');
+            }
+          } else if (alert.reason === 'payment_due') {
+            setAccountingModalOpen(true);
+          } else {
+            setAccountingModalOpen(true);
+          }
+        }}
       />
 
       <GameHubMenuModal

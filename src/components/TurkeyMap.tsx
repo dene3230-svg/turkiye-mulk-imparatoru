@@ -78,6 +78,7 @@ interface MapPinItem {
   isOwn: boolean;
   isRealPlayer: boolean;
   readyRing: boolean;
+  constructionDaysRemaining?: number;
   own?: OwnedBusiness;
   competitor?: RemoteBusinessRecord;
 }
@@ -261,6 +262,7 @@ export function TurkeyMap({
       ...ownBusinesses.map((biz) => {
         const cap = calculateVaultCapacity(biz);
         const ratio = cap > 0 ? biz.pendingCash / cap : 0;
+        const remDays = biz.constructionDaysRemaining ?? 0;
         return {
           id: biz.id,
           lat: biz.lat,
@@ -269,7 +271,8 @@ export function TurkeyMap({
           type: biz.blueprintId,
           isOwn: true,
           isRealPlayer: false,
-          readyRing: ratio >= 0.35,
+          readyRing: remDays === 0 && ratio >= 0.35,
+          constructionDaysRemaining: remDays,
           own: biz,
         };
       }),
@@ -383,8 +386,11 @@ export function TurkeyMap({
         : item.id === selectedCompetitorId;
 
       const markerSize = isSelected ? 44 : 38;
+      const isUnderConstruction = item.isOwn && (item.constructionDaysRemaining ?? 0) > 0;
       const borderStyle = isSelected
         ? '3px solid #FEF08A'
+        : isUnderConstruction
+        ? '2.5px dashed #FEF08A'
         : item.isOwn
         ? '2.5px solid #ECFDF5'
         : item.isRealPlayer
@@ -399,23 +405,47 @@ export function TurkeyMap({
       const innerContent =
         !item.isOwn && item.competitor
           ? getBrandLogoSvgString(parsedOwner?.holdingName || item.competitor.owner_name, markerSize - 8)
+          : isUnderConstruction
+          ? '<span>🏗️</span>'
           : `<span>${glyph}</span>`;
 
-      // Own = Gold / Emerald | Real Player = Crimson / Turquoise | AI Holding = Deep Crimson / Slate
-      const bgStyle = item.isOwn
+      // Own Active = Gold/Emerald | Own Construction = Amber/Bronze | Real Player = Crimson/Turquoise | AI = Deep Crimson
+      const bgStyle = isUnderConstruction
+        ? 'linear-gradient(135deg,#F59E0B,#92400E)'
+        : item.isOwn
         ? 'linear-gradient(135deg,#D97706,#059669)'
         : item.isRealPlayer
         ? 'linear-gradient(135deg,#E11D48,#06B6D4)'
         : 'linear-gradient(135deg,#7F1D1D,#0F172A)';
 
-      const badgeBg = item.isOwn ? '#064E3B' : item.isRealPlayer ? '#0E7490' : '#991B1B';
+      const badgeBg = isUnderConstruction
+        ? '#78350F'
+        : item.isOwn
+        ? '#064E3B'
+        : item.isRealPlayer
+        ? '#0E7490'
+        : '#991B1B';
       const glowShadow = item.isRealPlayer
         ? '0 0 0 3px rgba(34,211,238,0.28), 0 6px 18px rgba(15,23,42,0.55)'
         : `0 6px 18px rgba(15,23,42,${isSelected ? '0.52' : '0.4'})`;
 
-      const ownerTagHtml =
-        !item.isOwn && parsedOwner
-          ? `<div style="
+      const ownerTagHtml = isUnderConstruction
+        ? `<div style="
+              margin-top:4px;
+              padding:1.5px 6px;
+              border-radius:9999px;
+              background:rgba(120,53,15,0.95);
+              border:1px solid rgba(251,191,36,0.9);
+              color:#FEF3C7;
+              font-size:9px;
+              font-weight:800;
+              line-height:1.2;
+              white-space:nowrap;
+              box-shadow:0 2px 6px rgba(0,0,0,0.45);
+              pointer-events:none;
+            ">🏗️ ${item.constructionDaysRemaining}g Kaldı</div>`
+        : !item.isOwn && parsedOwner
+        ? `<div style="
               margin-top:4px;
               max-width:124px;
               padding:1.5px 6px;
@@ -432,12 +462,14 @@ export function TurkeyMap({
               box-shadow:0 2px 6px rgba(0,0,0,0.45);
               pointer-events:none;
             ">${item.isRealPlayer ? '● ' : ''}${escapeHtml(
-              truncateLabel(parsedOwner.holdingName || parsedOwner.playerName, 16)
-            )}</div>`
-          : '';
+            truncateLabel(parsedOwner.holdingName || parsedOwner.playerName, 16)
+          )}</div>`
+        : '';
 
       const pinTitle = item.isOwn
-        ? `${item.own?.customName ?? 'Şubem'} (S${item.level})`
+        ? isUnderConstruction
+          ? `${item.own?.customName ?? 'Şubem'} (İnşaat: ${item.constructionDaysRemaining} gün kaldı)`
+          : `${item.own?.customName ?? 'Şubem'} (S${item.level})`
         : `${item.competitor?.business_name ?? 'Rakip'} · ${parsedOwner?.playerName ?? ''} (${parsedOwner?.holdingName ?? ''})`;
 
       const icon = L.divIcon({
@@ -450,6 +482,7 @@ export function TurkeyMap({
           <div
             data-player-type="${item.isOwn ? 'own' : item.isRealPlayer ? 'real' : 'ai'}"
             data-business-id="${escapeHtml(item.id)}"
+            data-under-construction="${isUnderConstruction ? 'true' : 'false'}"
             style="position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;"
           >
             <div style="
@@ -472,7 +505,7 @@ export function TurkeyMap({
                 padding:1px 4px;border-radius:5px;
                 border:1px solid rgba(255,255,255,0.85);
                 line-height:1.1;
-              ">S${item.level}</span>
+              ">${isUnderConstruction ? `${item.constructionDaysRemaining}g` : `S${item.level}`}</span>
               ${
                 item.readyRing
                   ? `<span style="position:absolute;top:-5px;left:-5px;width:11px;height:11px;border-radius:9999px;background:#10B981;border:2px solid #FFFFFF;"></span>`

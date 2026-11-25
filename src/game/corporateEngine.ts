@@ -46,49 +46,52 @@ export function getProgressiveTaxRates(
     return {
       stageIndex: 0,
       stageLabel: 'Genç Girişimci Teşviki (1–2 Şube)',
-      kdvRate: 0.04,
-      sgkRate: 0.06,
-      corporateRate: 0.05,
-      municipalRate: 0.01,
-      incentiveNote: 'İlk 1–2 şubede devlet girişimci vergi teşviki uygulanır.',
+      kdvRate: 0.08,
+      sgkRate: 0.12, // Muhtasar / Stopaj (Maaş & Kira Stopajı)
+      corporateRate: 0.15, // Kurumlar / Gelir Vergisi teşvikli
+      municipalRate: 0.012, // Çevre Temizlik & İlan Reklam
+      incentiveNote:
+        'İlk 1–2 şubede Genç Girişimci KDV, Muhtasar/Stopaj ve Kurumlar Vergisi teşviki uygulanır.',
     };
   }
   if (branchCount <= 5 && netWorth < 3_500_000) {
     return {
       stageIndex: 1,
       stageLabel: 'Büyüyen KOBİ Kademesi (3–5 Şube)',
-      kdvRate: 0.07,
-      sgkRate: 0.1,
-      corporateRate: 0.09,
+      kdvRate: 0.1,
+      sgkRate: 0.15,
+      corporateRate: 0.2,
       municipalRate: 0.015,
-      incentiveNote: 'KOBİ destekli kademeli vergi dilimi aktif.',
+      incentiveNote: 'KOBİ vergi dilimi aktif (KDV, Muhtasar/Stopaj, %20 Kurumlar, Çevre & İlan).',
     };
   }
   if (branchCount <= 9 && netWorth < HOLDING_MIN_NET_WORTH) {
     return {
       stageIndex: 2,
       stageLabel: 'Kurumsal Şirket Dilimi (6–9 Şube)',
-      kdvRate: 0.1,
-      sgkRate: 0.13,
-      corporateRate: 0.13,
+      kdvRate: 0.14,
+      sgkRate: 0.18,
+      corporateRate: 0.22,
       municipalRate: 0.02,
-      incentiveNote: 'Standart kurumsal vergilendirme devrede.',
+      incentiveNote: 'Standart Türkiye ticari vergi tarifesi devrede.',
     };
   }
   return {
     stageIndex: 3,
     stageLabel: 'Holding Tam Vergi Kademesi (10+ Şube / Holding)',
-    kdvRate: 0.14,
-    sgkRate: 0.16,
-    corporateRate: 0.18,
+    kdvRate: 0.18,
+    sgkRate: 0.2,
+    corporateRate: 0.25,
     municipalRate: 0.025,
-    incentiveNote: 'Tam kurumsal oranlar aktif (5★ YMM ile yasal %12 optimizasyon sağlanabilir).',
+    incentiveNote:
+      'Tam Türkiye Kurumlar (%25), KDV, Muhtasar/Stopaj ve Çevre/İlan Reklam tarifesi aktif (5★ YMM ile %12 yasal optimizasyon).',
   };
 }
 
 export function calculateHourlyTaxBreakdown(params: {
   hourlyGrossRevenue: number;
   hourlyPayroll: number;
+  hourlyRentAndUtilities?: number;
   hourlyOperatingExpensesBeforeTax: number;
   branchCount: number;
   netWorth?: number;
@@ -105,15 +108,20 @@ export function calculateHourlyTaxBreakdown(params: {
   // Legal tax optimization from hired Muhasebeci / Mali Müşavir (up to 12% savings)
   const optFactor = 1 - Math.min(0.14, Math.max(0, params.accountant?.taxOptimizationRate ?? 0));
 
-  const kdv = Math.round(params.hourlyGrossRevenue * rates.kdvRate * optFactor);
-  const sgkStopaj = Math.round(params.hourlyPayroll * rates.sgkRate);
+  // Net KDV payable (after input VAT credit on supplies ~45% offset -> effective net VAT burden)
+  const kdv = Math.round(params.hourlyGrossRevenue * rates.kdvRate * 0.55 * optFactor);
+  // Muhtasar / Stopaj: applies to staff payroll + commercial rent withholding (kira stopajı)
+  const stopajBase = params.hourlyPayroll + Math.round((params.hourlyRentAndUtilities ?? 0) * 0.5);
+  const sgkStopaj = Math.round(stopajBase * rates.sgkRate);
+  // Kurumlar Vergisi: applies strictly to pre-tax net operating profit
   const preTaxProfit = Math.max(
     0,
     params.hourlyGrossRevenue - params.hourlyOperatingExpensesBeforeTax
   );
   const corporateTax = Math.round(preTaxProfit * rates.corporateRate * optFactor);
+  // Çevre Temizlik & İlan Reklam Vergisi (per branch fixed tariff + turnover bracket)
   const municipalTax = Math.round(
-    (params.branchCount * 85 + params.hourlyGrossRevenue * rates.municipalRate) * optFactor
+    (params.branchCount * 35 + params.hourlyGrossRevenue * rates.municipalRate) * optFactor
   );
   const totalTax = kdv + sgkStopaj + corporateTax + municipalTax;
 
@@ -209,11 +217,11 @@ const ACCOUNTANT_NAMES = [
 ];
 
 const ACCOUNTANT_TITLES: Record<1 | 2 | 3 | 4 | 5, { title: string; hire: number; salary: number; opt: number }> = {
-  1: { title: 'Ön Muhasebe Uzmanı', hire: 12_000, salary: 180, opt: 0.02 },
-  2: { title: 'Muhasebe Sorumlusu', hire: 26_000, salary: 340, opt: 0.04 },
-  3: { title: 'Serbest Muhasebeci (SMMM)', hire: 55_000, salary: 620, opt: 0.07 },
-  4: { title: 'Kıdemli Mali Müşavir', hire: 110_000, salary: 1_050, opt: 0.1 },
-  5: { title: 'Yeminli Mali Müşavir (YMM)', hire: 210_000, salary: 1_750, opt: 0.12 },
+  1: { title: 'Ön Muhasebe Uzmanı', hire: 12_000, salary: 62, opt: 0.02 }, // ~₺1.488/gün (SGK dahil)
+  2: { title: 'Muhasebe Sorumlusu', hire: 26_000, salary: 92, opt: 0.04 },
+  3: { title: 'Serbest Muhasebeci (SMMM)', hire: 55_000, salary: 145, opt: 0.07 },
+  4: { title: 'Kıdemli Mali Müşavir', hire: 110_000, salary: 215, opt: 0.1 },
+  5: { title: 'Yeminli Mali Müşavir (YMM)', hire: 210_000, salary: 310, opt: 0.12 },
 };
 
 export function generateAccountantPool(seed = Date.now()): AccountantStaff[] {
@@ -380,7 +388,7 @@ const CEO_CANDIDATES_TEMPLATE: Array<{
     leadership: 82,
     strategy: 80,
     hireCost: 450_000,
-    hourlySalary: 4_200,
+    hourlySalary: 320, // ~₺7.680/gün (SGK dahil)
   },
   {
     name: 'Aylin Karahan',
@@ -389,7 +397,7 @@ const CEO_CANDIDATES_TEMPLATE: Array<{
     leadership: 90,
     strategy: 91,
     hireCost: 950_000,
-    hourlySalary: 7_800,
+    hourlySalary: 520,
   },
   {
     name: 'Levent Albayrak',
@@ -398,7 +406,7 @@ const CEO_CANDIDATES_TEMPLATE: Array<{
     leadership: 98,
     strategy: 99,
     hireCost: 1_850_000,
-    hourlySalary: 12_500,
+    hourlySalary: 780,
   },
 ];
 
