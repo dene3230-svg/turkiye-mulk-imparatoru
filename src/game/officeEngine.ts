@@ -1,6 +1,8 @@
 import type {
   EmpireState,
   OfficeBenefits,
+  OfficeEquipmentDef,
+  OfficeEquipmentId,
   OfficeTierDef,
   OfficeTierId,
   OfficeUpgradeDef,
@@ -64,13 +66,74 @@ export const OFFICE_TIERS: OfficeTierDef[] = [
     subtitle: 'Türkiye Genel Merkezi',
     description:
       'Finans merkezinde kendi holding kuleniz. Toptancılarda maksimum ıskonto, en düşük banka faizi ve CEO atama prestiji sağlar.',
-    cost: 240_000_000,
+    cost: 2_500_000_000,
     minBrandRecognition: 62,
     basePrestige: 76,
     supplyDiscountRate: 0.11,
     loanInterestDiscount: 0.035,
     maxHireableExecutive: 'ceo',
     accentColor: '#7C3AED',
+  },
+];
+
+export const OFFICE_EQUIPMENT_MAX_LEVEL = 10;
+
+export const OFFICE_EQUIPMENT_ITEMS: OfficeEquipmentDef[] = [
+  {
+    id: 'exec_desk',
+    name: 'Yönetici Masası',
+    shortBenefit: 'Prestij & yönetici kapasitesi',
+    description:
+      'Ceviz kaplama makam masası ve akıllı yönetim ekranları; ofis prestijini ve yönetici verimliliğini artırır.',
+    baseCost: 350_000,
+    costGrowth: 1.62,
+    prestigePerLevel: 2.2,
+    supplyDiscountPerLevel: 0.002,
+    loanInterestDiscountPerLevel: 0.0008,
+    loanLimitBonusPerLevel: 0.015,
+    brandBonusPerLevel: 0.6,
+  },
+  {
+    id: 'meeting_room',
+    name: 'Toplantı Salonu',
+    shortBenefit: 'Banka kredi onayı & limit artışı',
+    description:
+      'Banka genel müdürleri ve yatırımcılar için kurumsal toplantı salonu; faiz indirimi ve kredi limiti kazandırır.',
+    baseCost: 550_000,
+    costGrowth: 1.65,
+    prestigePerLevel: 1.8,
+    supplyDiscountPerLevel: 0.002,
+    loanInterestDiscountPerLevel: 0.0022,
+    loanLimitBonusPerLevel: 0.045,
+    brandBonusPerLevel: 0.5,
+  },
+  {
+    id: 'guest_hospitality',
+    name: 'Misafir Ağırlama',
+    shortBenefit: 'Toptancı & tedarikçi indirimi',
+    description:
+      'VIP tedarikçi ağırlama ve anlaşma salonu; şubelerinizin hammadde ve mal tedarik maliyetlerini düşürür.',
+    baseCost: 480_000,
+    costGrowth: 1.64,
+    prestigePerLevel: 1.6,
+    supplyDiscountPerLevel: 0.0075,
+    loanInterestDiscountPerLevel: 0.0006,
+    loanLimitBonusPerLevel: 0.015,
+    brandBonusPerLevel: 0.5,
+  },
+  {
+    id: 'security_secretariat',
+    name: 'Güvenlik & Sekreterya',
+    shortBenefit: 'Firma tanınırlığı & operasyon',
+    description:
+      'Kurumsal karşılama, özel güvenlik ve sekreterya ekibi; firma tanınırlığını ve operasyon hızını güçlendirir.',
+    baseCost: 420_000,
+    costGrowth: 1.63,
+    prestigePerLevel: 1.6,
+    supplyDiscountPerLevel: 0.003,
+    loanInterestDiscountPerLevel: 0.0008,
+    loanLimitBonusPerLevel: 0.02,
+    brandBonusPerLevel: 1.4,
   },
 ];
 
@@ -202,13 +265,42 @@ export function getOfficeTierById(id?: OfficeTierId | null): OfficeTierDef {
   return OFFICE_TIERS.find((t) => t.id === id) ?? OFFICE_TIERS[0];
 }
 
+export function getNextOfficeTier(id?: OfficeTierId | null): OfficeTierDef | null {
+  const current = getOfficeTierById(id);
+  return OFFICE_TIERS.find((t) => t.level === current.level + 1) ?? null;
+}
+
+export function getOfficeEquipmentLevel(
+  state: Pick<EmpireState, 'officeEquipmentLevels'>,
+  id: OfficeEquipmentId
+): number {
+  const raw = state.officeEquipmentLevels?.[id];
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 1;
+  return Math.max(1, Math.min(OFFICE_EQUIPMENT_MAX_LEVEL, Math.round(raw)));
+}
+
+export function getOfficeEquipmentUpgradeCost(
+  id: OfficeEquipmentId,
+  currentLevel: number
+): number {
+  const def = OFFICE_EQUIPMENT_ITEMS.find((item) => item.id === id);
+  if (!def) return 0;
+  const clamped = Math.max(1, Math.min(OFFICE_EQUIPMENT_MAX_LEVEL, Math.round(currentLevel)));
+  if (clamped >= OFFICE_EQUIPMENT_MAX_LEVEL) return 0;
+  const raw = def.baseCost * Math.pow(def.costGrowth, clamped - 1);
+  return Math.round(raw / 5_000) * 5_000;
+}
+
 export function calculatePersonalAssetsValuation(state: Pick<EmpireState, 'personalAssetIds'>): number {
   const owned = new Set(state.personalAssetIds ?? []);
   return PERSONAL_ASSETS.filter((a) => owned.has(a.id)).reduce((s, a) => s + a.cost, 0);
 }
 
 export function calculateOfficeBenefits(
-  state: Pick<EmpireState, 'officeTierId' | 'officeUpgradeIds' | 'personalAssetIds'>
+  state: Pick<
+    EmpireState,
+    'officeTierId' | 'officeUpgradeIds' | 'officeEquipmentLevels' | 'personalAssetIds'
+  >
 ): OfficeBenefits {
   const tier = getOfficeTierById(state.officeTierId);
   const ownedUpgrades = new Set(state.officeUpgradeIds ?? []);
@@ -217,12 +309,24 @@ export function calculateOfficeBenefits(
   let prestige = tier.basePrestige;
   let supplyDiscount = tier.supplyDiscountRate;
   let interestDiscount = tier.loanInterestDiscount;
+  let extraLoanLimitMult = 0;
 
   for (const upg of OFFICE_UPGRADES) {
     if (ownedUpgrades.has(upg.id)) {
       prestige += upg.prestigeBonus;
       supplyDiscount += upg.supplyDiscountBonus;
       interestDiscount += upg.loanInterestDiscountBonus;
+    }
+  }
+
+  for (const equip of OFFICE_EQUIPMENT_ITEMS) {
+    const lv = getOfficeEquipmentLevel(state, equip.id);
+    const steps = Math.max(0, lv - 1);
+    if (steps > 0) {
+      prestige += steps * equip.prestigePerLevel;
+      supplyDiscount += steps * equip.supplyDiscountPerLevel;
+      interestDiscount += steps * equip.loanInterestDiscountPerLevel;
+      extraLoanLimitMult += steps * equip.loanLimitBonusPerLevel;
     }
   }
 
@@ -233,9 +337,11 @@ export function calculateOfficeBenefits(
   }
 
   const officePrestige = Math.max(0, Math.min(100, Math.round(prestige)));
-  const supplyDiscountRate = Number(Math.min(0.15, Math.max(0, supplyDiscount)).toFixed(4));
-  const loanInterestDiscount = Number(Math.min(0.05, Math.max(0, interestDiscount)).toFixed(4));
-  const loanLimitMultiplier = Number((1 + officePrestige * 0.008).toFixed(3)); // up to 1.8x loan limit at 100 prestige
+  const supplyDiscountRate = Number(Math.min(0.2, Math.max(0, supplyDiscount)).toFixed(4));
+  const loanInterestDiscount = Number(Math.min(0.06, Math.max(0, interestDiscount)).toFixed(4));
+  const loanLimitMultiplier = Number(
+    Math.min(2.4, 1 + officePrestige * 0.008 + extraLoanLimitMult).toFixed(3)
+  );
 
   return {
     tier,
@@ -356,6 +462,62 @@ export function buyOfficeUpgrade(
       cash: state.cash - upg.cost,
       officeUpgradeIds: [...owned, upgradeId],
       brandRecognition: Number(Math.min(100, (state.brandRecognition ?? 5) + upg.brandBonus).toFixed(1)),
+      lastSavedAt: now,
+    },
+  };
+}
+
+export function upgradeOfficeEquipment(
+  state: EmpireState,
+  equipmentId: OfficeEquipmentId,
+  now = Date.now()
+): {
+  state: EmpireState;
+  ok: boolean;
+  error?: string;
+  item?: OfficeEquipmentDef;
+  newLevel?: number;
+  cost?: number;
+} {
+  const item = OFFICE_EQUIPMENT_ITEMS.find((e) => e.id === equipmentId);
+  if (!item) return { state, ok: false, error: 'Ofis donanımı bulunamadı.' };
+
+  const currentLevel = getOfficeEquipmentLevel(state, equipmentId);
+  if (currentLevel >= OFFICE_EQUIPMENT_MAX_LEVEL) {
+    return {
+      state,
+      ok: false,
+      error: `${item.name} zaten maksimum seviyede (Sv. ${OFFICE_EQUIPMENT_MAX_LEVEL}).`,
+    };
+  }
+
+  const cost = getOfficeEquipmentUpgradeCost(equipmentId, currentLevel);
+  if (state.cash < cost) {
+    return {
+      state,
+      ok: false,
+      error: `${item.name} Sv. ${currentLevel + 1} yükseltmesi için ₺${cost.toLocaleString('tr-TR')} nakit gerekiyor.`,
+    };
+  }
+
+  const newLevel = currentLevel + 1;
+  const nextLevels: Partial<Record<OfficeEquipmentId, number>> = {
+    ...(state.officeEquipmentLevels ?? {}),
+    [equipmentId]: newLevel,
+  };
+
+  return {
+    ok: true,
+    item,
+    newLevel,
+    cost,
+    state: {
+      ...state,
+      cash: state.cash - cost,
+      officeEquipmentLevels: nextLevels,
+      brandRecognition: Number(
+        Math.min(100, (state.brandRecognition ?? 5) + item.brandBonusPerLevel).toFixed(1)
+      ),
       lastSavedAt: now,
     },
   };

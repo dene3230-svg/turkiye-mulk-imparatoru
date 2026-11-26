@@ -34,6 +34,7 @@ import type {
   GameSpeed,
   MissionDef,
   NotificationItem,
+  OfficeEquipmentId,
   OfficeTierId,
   OtaCheckResult,
   PinLocationInfo,
@@ -132,6 +133,7 @@ import {
   buyPersonalAsset,
   calculateOfficeBenefits,
   investInBranchQuality,
+  upgradeOfficeEquipment,
   upgradeOfficeTier,
 } from './game/officeEngine';
 import {
@@ -472,6 +474,12 @@ function migrateSavedEmpire(
           ? saved.officeTierId
           : 'home_office',
       officeUpgradeIds: Array.isArray(saved.officeUpgradeIds) ? saved.officeUpgradeIds : [],
+      officeEquipmentLevels:
+        saved.officeEquipmentLevels &&
+        typeof saved.officeEquipmentLevels === 'object' &&
+        !Array.isArray(saved.officeEquipmentLevels)
+          ? saved.officeEquipmentLevels
+          : {},
       personalAssetIds: Array.isArray(saved.personalAssetIds) ? saved.personalAssetIds : [],
       lastSavedAt: finiteOr(saved.lastSavedAt, nowTs),
     };
@@ -2707,6 +2715,23 @@ export default function App() {
     );
   };
 
+  const handleUpgradeOfficeEquipment = (equipmentId: OfficeEquipmentId) => {
+    const res = upgradeOfficeEquipment(empire, equipmentId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Donanım Yükseltilemedi', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    const benefits = calculateOfficeBenefits(res.state);
+    pushNotification(
+      'Ofis Donanımı Yükseltildi',
+      `${res.item?.name ?? 'Donanım'} Sv. ${res.newLevel ?? 2} oldu! Yeni Prestij: ${benefits.officePrestige}/100.`,
+      'milestone',
+      false
+    );
+  };
+
   const handleBuyPersonalAsset = (assetId: string) => {
     const res = buyPersonalAsset(empire, assetId, Date.now());
     if (!res.ok) {
@@ -2769,7 +2794,12 @@ export default function App() {
 
   const officeBenefits = useMemo(
     () => calculateOfficeBenefits(empire),
-    [empire.officeTierId, empire.officeUpgradeIds, empire.personalAssetIds]
+    [
+      empire.officeTierId,
+      empire.officeUpgradeIds,
+      empire.officeEquipmentLevels,
+      empire.personalAssetIds,
+    ]
   );
 
   const dashboardMetrics = useMemo(
@@ -2812,7 +2842,7 @@ export default function App() {
     map: `CANLI TÜRKİYE HARİTASI · ${activeProvince.code} ${activeProvince.name.toLocaleUpperCase('tr-TR')}`,
     finance: 'FİNANS, BANKALAR & BORSA',
     businesses: 'İŞLETMELER & ŞUBE OPERASYONLARI',
-    office: 'OFİSİM, PRESTİJ & AKILLI TELEFON',
+    office: 'OFİSİM & PRESTİJ YÖNETİMİ',
   };
 
   const selectedBusiness = useMemo(
@@ -3488,13 +3518,16 @@ export default function App() {
                 />
               )}
 
-              {/* VIEW 5: Ofisim Workspace */}
+              {/* VIEW 5: Ofisim & Prestij Yönetimi 3-Column Workspace */}
               {activeNav === 'office' && (
                 <OfficeWorkspace
+                  state={empire}
                   metrics={dashboardMetrics}
                   unreadNotifCount={unreadNotifCount}
                   claimableMissionCount={claimableMissionCount}
                   chatCount={chatMessages.length}
+                  onUpgradeEquipment={handleUpgradeOfficeEquipment}
+                  onUpgradeOfficeTier={handleUpgradeOfficeTier}
                   onOpenOfficeModal={(tab) => {
                     soundEngine.playClick();
                     closeAllInGameOverlays();

@@ -112,6 +112,8 @@ import {
   takeLoanFromBank,
 } from './bankingEngine.ts';
 import {
+  OFFICE_EQUIPMENT_ITEMS,
+  OFFICE_EQUIPMENT_MAX_LEVEL,
   OFFICE_TIERS,
   OFFICE_UPGRADES,
   PERSONAL_ASSETS,
@@ -120,7 +122,11 @@ import {
   calculateBranchServiceQuality,
   calculateOfficeBenefits,
   canOfficeHireRole,
+  getNextOfficeTier,
+  getOfficeEquipmentLevel,
+  getOfficeEquipmentUpgradeCost,
   investInBranchQuality,
+  upgradeOfficeEquipment,
   upgradeOfficeTier,
 } from './officeEngine.ts';
 import {
@@ -609,7 +615,7 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.5.0');
+  assert.equal(APP_VERSION, '1.5.1');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2237,6 +2243,64 @@ test('v1.5.0 Executive Dashboard Metrics: 7-day charts, 4 selectable account car
   assert.equal(activeMetrics.accountCards[2].title, 'YATIRIM & BORSA');
   assert.equal(activeMetrics.accountCards[3].title, 'OPERASYON GİDERİ');
 });
+
+test('v1.5.1 Ofisim & Prestij Yönetimi: 4 Equipment Upgrades (Sv.1-Sv.10), Real B2B Discounts & Billion-TL Holding Tower', () => {
+  const now = 3_100_000;
+  let state = createInitialEmpireState(now, 34);
+
+  // 1) 4 required equipment tracks start at Sv. 1 and Holding Gökdeleni is in billions TL
+  assert.equal(OFFICE_EQUIPMENT_ITEMS.length, 4);
+  assert.deepEqual(
+    OFFICE_EQUIPMENT_ITEMS.map((e) => e.id),
+    ['exec_desk', 'meeting_room', 'guest_hospitality', 'security_secretariat']
+  );
+  const holdingTier = OFFICE_TIERS.find((t) => t.id === 'holding_tower');
+  assert.ok(holdingTier && holdingTier.cost >= 1_000_000_000, 'Holding Gökdeleni must be >= 1 Milyar TL');
+  assert.equal(getNextOfficeTier('bosphorus_suite')?.id, 'holding_tower');
+  assert.equal(getNextOfficeTier('holding_tower'), null);
+
+  for (const item of OFFICE_EQUIPMENT_ITEMS) {
+    assert.equal(getOfficeEquipmentLevel(state, item.id), 1);
+  }
+
+  // 2) Upgrading equipment deducts cash, increments level, boosts prestige, B2B discounts & brand recognition
+  const before = calculateOfficeBenefits(state);
+  const deskCostLv1 = getOfficeEquipmentUpgradeCost('exec_desk', 1);
+  assert.ok(deskCostLv1 > 0);
+
+  // Insufficient cash guard
+  const brokeAttempt = upgradeOfficeEquipment({ ...state, cash: 50_000 }, 'exec_desk', now);
+  assert.equal(brokeAttempt.ok, false);
+
+  state = { ...state, cash: 500_000_000 };
+  const upDesk = upgradeOfficeEquipment(state, 'exec_desk', now + 10);
+  assert.equal(upDesk.ok, true);
+  assert.equal(upDesk.newLevel, 2);
+  assert.equal(upDesk.state.cash, state.cash - deskCostLv1);
+  assert.ok(getOfficeEquipmentUpgradeCost('exec_desk', 2) > deskCostLv1);
+
+  const upMeeting = upgradeOfficeEquipment(upDesk.state, 'meeting_room', now + 20);
+  const upGuest = upgradeOfficeEquipment(upMeeting.state, 'guest_hospitality', now + 30);
+  const upSec = upgradeOfficeEquipment(upGuest.state, 'security_secretariat', now + 40);
+  assert.equal(upSec.ok, true);
+
+  const after = calculateOfficeBenefits(upSec.state);
+  assert.ok(after.officePrestige > before.officePrestige, 'Equipment upgrades must increase officePrestige');
+  assert.ok(after.supplyDiscountRate > before.supplyDiscountRate, 'Guest hospitality must raise supply discount');
+  assert.ok(after.loanInterestDiscount > before.loanInterestDiscount, 'Meeting room must raise loan interest discount');
+  assert.ok(after.loanLimitMultiplier > before.loanLimitMultiplier, 'Meeting room must raise loan limit multiplier');
+  assert.ok((upSec.state.brandRecognition ?? 0) > (state.brandRecognition ?? 0), 'Upgrades must raise brand recognition');
+
+  // 3) Max level (Sv. 10) guard
+  const maxedState = {
+    ...upSec.state,
+    officeEquipmentLevels: { exec_desk: OFFICE_EQUIPMENT_MAX_LEVEL },
+  };
+  assert.equal(getOfficeEquipmentUpgradeCost('exec_desk', OFFICE_EQUIPMENT_MAX_LEVEL), 0);
+  const maxAttempt = upgradeOfficeEquipment(maxedState, 'exec_desk', now + 50);
+  assert.equal(maxAttempt.ok, false);
+});
+
 
 
 

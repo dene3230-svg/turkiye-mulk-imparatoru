@@ -524,6 +524,26 @@ export interface OfficeUpgradeDef {
   brandBonus: number;
 }
 
+export type OfficeEquipmentId =
+  | 'exec_desk'
+  | 'meeting_room'
+  | 'guest_hospitality'
+  | 'security_secretariat';
+
+export interface OfficeEquipmentDef {
+  id: OfficeEquipmentId;
+  name: string;
+  shortBenefit: string;
+  description: string;
+  baseCost: number;
+  costGrowth: number;
+  prestigePerLevel: number;
+  supplyDiscountPerLevel: number;
+  loanInterestDiscountPerLevel: number;
+  loanLimitBonusPerLevel: number;
+  brandBonusPerLevel: number;
+}
+
 export interface PersonalAssetDef {
   id: string;
   name: string;
@@ -782,6 +802,7 @@ export interface EmpireState {
   brandRecognition?: number; // 0 .. 100
   officeTierId?: OfficeTierId;
   officeUpgradeIds?: string[];
+  officeEquipmentLevels?: Partial<Record<OfficeEquipmentId, number>>;
   personalAssetIds?: string[];
   activeMissions: MissionDef[]; // Self-renewing dynamic mission pool (always 4 active)
   claimedMissionIds: string[];

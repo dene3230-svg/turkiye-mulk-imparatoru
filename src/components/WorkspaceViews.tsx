@@ -1,33 +1,48 @@
 import {
-  Bell,
+  Briefcase,
   Building2,
   CalendarCheck2,
-  Crown,
+  Car,
   FileSpreadsheet,
   Hammer,
   Landmark,
   Link2,
   MapPin,
-  MessageSquare,
-  Newspaper,
+  Presentation,
+  ShieldCheck,
   Smartphone,
   Sparkles,
   Star,
   Store,
   Swords,
   TrendingUp,
-  Trophy,
+  UserCheck,
   Users,
   Wrench,
 } from 'lucide-react';
-import type { EmpireState, RemoteBusinessRecord } from '../types/game';
+import type {
+  EmpireState,
+  OfficeEquipmentId,
+  OfficeTierId,
+  RemoteBusinessRecord,
+} from '../types/game';
 import type { ExecutiveDashboardMetrics } from '../game/dashboardMetrics';
 import {
   calculateBusinessHourlyIncome,
   formatTL,
   isBusinessUnderConstruction,
 } from '../game/economy';
-import { calculateBranchServiceQuality } from '../game/officeEngine';
+import {
+  OFFICE_EQUIPMENT_ITEMS,
+  OFFICE_EQUIPMENT_MAX_LEVEL,
+  calculateBranchServiceQuality,
+  calculatePersonalAssetsValuation,
+  getNextOfficeTier,
+  getOfficeEquipmentLevel,
+  getOfficeEquipmentUpgradeCost,
+  getOfficeTierById,
+} from '../game/officeEngine';
+import { OfficeInteriorPreview } from './OfficeInteriorPreview';
 
 /* ============================================================================
    1. FINANS WORKSPACE (Bankalar, Krediler, Bilanço, Borsa, 00:00 Gün Sonu)
@@ -463,13 +478,16 @@ export function BusinessesWorkspace({
 }
 
 /* ============================================================================
-   3. OFİSİM WORKSPACE (Ofis Yükseltmeleri, Prestij Puanı, Akıllı Telefon & Mesajlar)
+   3. OFİSİM WORKSPACE — 3-Column Dark Navy "OFİSİM & PRESTİJ YÖNETİMİ"
    ============================================================================ */
 interface OfficeWorkspaceProps {
+  state: EmpireState;
   metrics: ExecutiveDashboardMetrics;
   unreadNotifCount: number;
   claimableMissionCount: number;
   chatCount: number;
+  onUpgradeEquipment: (id: OfficeEquipmentId) => void;
+  onUpgradeOfficeTier: (tierId: OfficeTierId) => void;
   onOpenOfficeModal: (tab: 'design' | 'assets' | 'phone') => void;
   onOpenPatronChat: () => void;
   onOpenMarketNews: () => void;
@@ -478,176 +496,393 @@ interface OfficeWorkspaceProps {
   onOpenLeaderboard: () => void;
 }
 
+function EquipmentIcon({ id }: { id: OfficeEquipmentId }) {
+  if (id === 'exec_desk') return <Briefcase className="h-4 w-4 lg:h-5 lg:w-5" />;
+  if (id === 'meeting_room') return <Presentation className="h-4 w-4 lg:h-5 lg:w-5" />;
+  if (id === 'guest_hospitality') return <UserCheck className="h-4 w-4 lg:h-5 lg:w-5" />;
+  return <ShieldCheck className="h-4 w-4 lg:h-5 lg:w-5" />;
+}
+
 export function OfficeWorkspace({
+  state,
   metrics,
   unreadNotifCount,
-  claimableMissionCount,
   chatCount,
+  onUpgradeEquipment,
+  onUpgradeOfficeTier,
   onOpenOfficeModal,
-  onOpenPatronChat,
-  onOpenMarketNews,
-  onOpenMissions,
-  onOpenNotifications,
-  onOpenLeaderboard,
 }: OfficeWorkspaceProps) {
+  const currentTier = getOfficeTierById(state.officeTierId);
+  const nextTier = getNextOfficeTier(state.officeTierId);
+  const ownedAssetsCount = (state.personalAssetIds ?? []).length;
+  const personalAssetsVal = calculatePersonalAssetsValuation(state);
+  const prestigePct = Math.max(0, Math.min(100, Math.round(metrics.officePrestige)));
+
+  const canAffordNextTier =
+    Boolean(nextTier) &&
+    state.cash >= (nextTier?.cost ?? 0) &&
+    (state.brandRecognition ?? 5) >= (nextTier?.minBrandRecognition ?? 0);
+
   return (
     <section
-      aria-label="Ofisim, Prestij ve Akıllı Telefon"
+      aria-label="Ofisim ve Prestij Yönetimi 3 Sütunlu Kontrol Paneli"
       data-testid="workspace-office"
-      className="panel-scroll h-full w-full p-3 lg:p-5"
+      className="panel-scroll h-full w-full p-1.5 lg:p-3.5"
     >
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3.5 md:grid-cols-12">
-        {/* Left: Office Tier & Prestige Upgrade Card */}
-        <div className="flex flex-col justify-between rounded-2xl border border-amber-400/30 bg-gradient-to-br from-[#282012]/90 via-[#131C31]/90 to-[#0E1628]/95 p-4 md:col-span-6">
-          <div>
+      <div className="grid min-h-full grid-cols-1 gap-1.5 min-[680px]:h-full min-[680px]:grid-cols-12 lg:gap-3.5">
+        {/* ============================================================
+            COLUMN 1 (LEFT): MEVCUT OFİS, İÇ MEKAN ÖNİZLEME, PRESTİJ & BONUSLAR
+           ============================================================ */}
+        <div
+          data-testid="office-col-left"
+          className="flex min-h-0 flex-col justify-between gap-1.5 min-[680px]:col-span-4 lg:gap-2.5"
+        >
+          {/* Current Office Title */}
+          <div className="shrink-0 px-0.5 leading-tight">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-400/40 bg-amber-500/15 text-amber-300">
-                  <Crown className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-[11px] font-bold text-amber-300">
-                    MERKEZ OFİS · KADEME {metrics.officeTierNumber}/4
-                  </div>
-                  <h2 className="text-base font-extrabold text-white">{metrics.officeTierName}</h2>
-                </div>
-              </div>
-              <span className="font-mono-num text-xl font-extrabold text-amber-300">
-                {metrics.officePrestige}/100
+              <h2 className="text-[10px] font-extrabold tracking-wide text-slate-100 lg:text-xs">
+                MEVCUT OFİS
+              </h2>
+              <span className="font-mono-num text-[9px] font-bold text-amber-300 lg:text-[10px]">
+                Kademe {currentTier.level}/4
               </span>
             </div>
-
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-300"
-                style={{ width: `${Math.max(8, metrics.officePrestige)}%` }}
-              />
+            <div
+              data-testid="office-current-tier-name"
+              className="mt-0.5 truncate text-[10.5px] font-semibold uppercase tracking-wide text-slate-300 lg:text-xs"
+            >
+              {currentTier.name}
             </div>
+          </div>
 
-            <div className="mt-3.5 grid grid-cols-3 gap-2">
-              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-2.5">
-                <div className="text-[10px] text-slate-400">Tanınırlık</div>
-                <div className="mt-0.5 font-mono-num text-sm font-extrabold text-cyan-300">
-                  %{metrics.brandRecognitionPct}
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-2.5">
-                <div className="text-[10px] text-slate-400">Tedarik İndirimi</div>
-                <div className="mt-0.5 font-mono-num text-sm font-extrabold text-emerald-300">
-                  -%{metrics.supplyDiscountPct}
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-2.5">
-                <div className="text-[10px] text-slate-400">Faiz İndirimi</div>
-                <div className="mt-0.5 font-mono-num text-sm font-extrabold text-amber-300">
-                  -%{metrics.loanInterestDiscountPct}
-                </div>
+          {/* Architectural Interior Preview Card */}
+          <div
+            data-testid="office-interior-preview"
+            className="relative min-h-[96px] flex-[1.15] overflow-hidden rounded-2xl border border-slate-700/75 bg-[#0D1628] shadow-[0_8px_28px_rgba(2,6,23,0.45)]"
+          >
+            <OfficeInteriorPreview tierId={currentTier.id} />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0B1221]/85 to-transparent" />
+            <div className="absolute bottom-1.5 left-2 right-2 flex items-center justify-between text-[8.5px] font-bold text-slate-200 lg:bottom-2 lg:left-3 lg:right-3 lg:text-[10px]">
+              <span className="truncate drop-shadow">{currentTier.subtitle}</span>
+              <span className="shrink-0 rounded-md bg-slate-950/75 px-1.5 py-0.5 font-mono-num text-amber-300 border border-amber-400/35">
+                Tanınırlık %{metrics.brandRecognitionPct}
+              </span>
+            </div>
+          </div>
+
+          {/* Prestige Score Progress Bar (0 - 100) */}
+          <div className="shrink-0 space-y-1 px-0.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] font-extrabold tracking-wide text-slate-100 lg:text-xs">
+                PRESTİJ PUANI:{' '}
+                <strong
+                  data-testid="office-prestige-score"
+                  className="font-mono-num text-amber-400"
+                >
+                  {prestigePct}
+                </strong>{' '}
+                <span className="font-mono-num font-semibold text-slate-400">/ 100</span>
+              </span>
+              <span className="font-mono-num text-[9.5px] font-bold text-amber-300 lg:text-[11px]">
+                %{prestigePct}
+              </span>
+            </div>
+            <div className="relative h-3.5 w-full overflow-hidden rounded-full border border-slate-700/70 bg-slate-900/90 lg:h-4.5">
+              <div
+                className="flex h-full items-center justify-end rounded-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 pr-1.5 shadow-[0_0_16px_rgba(251,191,36,0.45)] transition-all duration-300"
+                style={{ width: `${Math.max(14, prestigePct)}%` }}
+              >
+                <span className="font-mono-num text-[8px] font-black text-slate-950 lg:text-[9.5px]">
+                  {prestigePct}%
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              data-testid="office-open-upgrades-btn"
-              onClick={() => onOpenOfficeModal('design')}
-              className="rounded-xl border border-amber-400/60 bg-amber-400/20 py-2.5 text-xs font-extrabold text-amber-100 hover:bg-amber-400/30"
-            >
-              Ofis & Donanım Yükselt
-            </button>
-            <button
-              type="button"
-              data-testid="office-open-assets-btn"
-              onClick={() => onOpenOfficeModal('assets')}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-500/15 py-2.5 text-xs font-extrabold text-cyan-100 hover:bg-cyan-500/25"
-            >
-              Kişisel Varlıklar
-            </button>
+          {/* Active Office Bonuses Card */}
+          <div
+            data-testid="office-active-bonuses"
+            className="shrink-0 rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
+          >
+            <div className="text-[9.5px] font-extrabold tracking-wide text-slate-100 lg:text-[11px]">
+              AKTİF OFİS BONUSLARI
+            </div>
+            <div className="mt-1.5 flex flex-col gap-1.5 lg:mt-2 lg:gap-2">
+              <div
+                data-testid="office-bonus-interest"
+                className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-cyan-400/55 bg-cyan-500/10 px-2.5 py-0.5 text-[9.5px] font-bold text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.14)] lg:px-3 lg:py-1 lg:text-xs"
+              >
+                <span className="truncate">Banka Faiz İndirimi:</span>
+                <strong className="shrink-0 font-mono-num text-cyan-300">
+                  -%{metrics.loanInterestDiscountPct}
+                </strong>
+              </div>
+              <div
+                data-testid="office-bonus-supply"
+                className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-rose-400/55 bg-rose-500/10 px-2.5 py-0.5 text-[9.5px] font-bold text-rose-200 shadow-[0_0_12px_rgba(251,113,133,0.14)] lg:px-3 lg:py-1 lg:text-xs"
+              >
+                <span className="truncate">Tedarikçi İndirimi:</span>
+                <strong className="shrink-0 font-mono-num text-rose-300">
+                  -%{metrics.supplyDiscountPct}
+                </strong>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Right: Executive Smartphone & Messages Hub */}
-        <div className="flex flex-col justify-between rounded-2xl border border-cyan-400/30 bg-[#111B30]/85 p-4 md:col-span-6">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-500/15 text-cyan-300">
-                <Smartphone className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-[11px] font-bold text-cyan-300">YÖNETİCİ İLETİŞİM MERKEZİ</div>
-                <h2 className="text-base font-extrabold text-white">Akıllı Telefon & Mesajlar</h2>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => onOpenOfficeModal('phone')}
-              className="rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/25"
-            >
-              Telefon Ekranı
-            </button>
+        {/* ============================================================
+            COLUMN 2 (CENTER): OFİS DONANIMLARI & YÜKSELTMELER (4 KART)
+           ============================================================ */}
+        <div
+          data-testid="office-col-center"
+          className="flex min-h-0 flex-col gap-1.5 min-[680px]:col-span-4 lg:gap-2.5"
+        >
+          <div className="shrink-0 px-0.5 leading-tight">
+            <h2 className="text-[10px] font-extrabold tracking-wide text-slate-100 lg:text-xs">
+              OFİS DONANIMLARI & YÜKSELTMELER
+            </h2>
           </div>
 
-          <div className="mt-3.5 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={onOpenPatronChat}
-              className="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-900/75 p-3 text-left hover:border-cyan-400/50"
-            >
-              <MessageSquare className="h-4.5 w-4.5 shrink-0 text-cyan-300" />
-              <div className="min-w-0">
-                <div className="truncate text-xs font-bold text-white">Patron Sohbeti</div>
-                <div className="text-[10px] text-slate-400">{chatCount} canlı mesaj</div>
-              </div>
-            </button>
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 lg:gap-2.5">
+            {OFFICE_EQUIPMENT_ITEMS.map((item) => {
+              const level = getOfficeEquipmentLevel(state, item.id);
+              const isMax = level >= OFFICE_EQUIPMENT_MAX_LEVEL;
+              const upgradeCost = getOfficeEquipmentUpgradeCost(item.id, level);
+              const canAfford = !isMax && state.cash >= upgradeCost;
+              const pct = Math.round((level / OFFICE_EQUIPMENT_MAX_LEVEL) * 100);
 
-            <button
-              type="button"
-              onClick={onOpenNotifications}
-              className="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-900/75 p-3 text-left hover:border-amber-400/50"
-            >
-              <Bell className="h-4.5 w-4.5 shrink-0 text-amber-300" />
-              <div className="min-w-0">
-                <div className="truncate text-xs font-bold text-white">Bildirimler</div>
-                <div className="text-[10px] text-slate-400">{unreadNotifCount} okunmamış</div>
-              </div>
-            </button>
+              return (
+                <div
+                  key={item.id}
+                  data-testid={`office-equip-card-${item.id}`}
+                  className="flex min-h-0 flex-1 items-center justify-between gap-1.5 rounded-2xl border border-slate-700/70 bg-[#111B30]/85 px-2 py-1.5 backdrop-blur-md transition-colors hover:border-cyan-400/40 lg:gap-2.5 lg:px-3.5 lg:py-2.5"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:gap-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-indigo-400/35 bg-indigo-500/15 text-sky-300 lg:h-10 lg:w-10">
+                      <EquipmentIcon id={item.id} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col leading-tight lg:flex-row lg:items-baseline lg:gap-1.5">
+                        <span
+                          data-testid={`office-equip-name-${item.id}`}
+                          className="truncate text-[9.5px] font-extrabold leading-tight text-white lg:text-[13px]"
+                        >
+                          {item.name}
+                        </span>
+                        <span
+                          data-testid={`office-equip-level-${item.id}`}
+                          className="shrink-0 font-mono-num text-[9px] font-bold leading-tight text-cyan-300 lg:text-[11px]"
+                        >
+                          (Sv. {level})
+                        </span>
+                      </div>
+                      <div className="hidden truncate text-[10px] text-slate-400 lg:block">
+                        {item.shortBenefit}
+                      </div>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800/95 lg:mt-1.5 lg:h-2">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-300 shadow-[0_0_8px_rgba(52,211,153,0.45)] transition-all duration-300"
+                          style={{ width: `${Math.max(10, pct)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-            <button
-              type="button"
-              onClick={onOpenMissions}
-              className="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-900/75 p-3 text-left hover:border-emerald-400/50"
-            >
-              <Trophy className="h-4.5 w-4.5 shrink-0 text-emerald-300" />
-              <div className="min-w-0">
-                <div className="truncate text-xs font-bold text-white">Görevler</div>
-                <div className="text-[10px] text-slate-400">
-                  {claimableMissionCount > 0
-                    ? `${claimableMissionCount} ödül hazır`
-                    : 'Aktif hedefler'}
+                  <button
+                    type="button"
+                    data-testid={`office-equip-upgrade-${item.id}`}
+                    disabled={isMax}
+                    onClick={() => onUpgradeEquipment(item.id)}
+                    title={
+                      isMax
+                        ? `${item.name} maksimum seviyede`
+                        : `${item.name} Sv. ${level + 1} · ${formatTL(upgradeCost)}`
+                    }
+                    className={`flex shrink-0 flex-col items-center justify-center rounded-full px-2 py-1 text-center transition-all lg:min-w-[84px] lg:px-3.5 lg:py-1.5 ${
+                      isMax
+                        ? 'cursor-default border border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                        : canAfford
+                        ? 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950 shadow-[0_0_16px_rgba(34,211,238,0.38)] hover:brightness-110 active:scale-95'
+                        : 'border border-cyan-400/35 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
+                    }`}
+                  >
+                    <span className="text-[8.5px] font-black leading-none tracking-wide lg:text-[10.5px] whitespace-nowrap">
+                      {isMax ? 'MAKS' : 'YÜKSELT'}
+                    </span>
+                    {!isMax && (
+                      <span
+                        className={`mt-0.5 font-mono-num text-[7.5px] font-bold leading-none lg:text-[9px] whitespace-nowrap ${
+                          canAfford ? 'text-slate-900' : 'text-cyan-300/90'
+                        }`}
+                      >
+                        {formatTL(upgradeCost, true)}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ============================================================
+            COLUMN 3 (RIGHT): KİŞİSEL ALAN & HIZLI ERİŞİM (3 KART: A / B / C)
+           ============================================================ */}
+        <div
+          data-testid="office-col-right"
+          className="flex min-h-0 flex-col gap-1.5 min-[680px]:col-span-4 lg:gap-2.5"
+        >
+          <div className="shrink-0 px-0.5 leading-tight">
+            <h2 className="text-[10px] font-extrabold tracking-wide text-slate-100 lg:text-xs">
+              KİŞİSEL ALAN & HIZLI ERİŞİM
+            </h2>
+          </div>
+
+          {/* Card A — Akıllı Telefonum */}
+          <div
+            data-testid="office-card-phone"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-500/15 text-cyan-300 lg:h-10 lg:w-10">
+                  <Smartphone className="h-4 w-4 lg:h-5 lg:w-5" />
+                </div>
+                <div className="min-w-0 leading-tight">
+                  <div className="text-[10px] font-extrabold tracking-wide text-white lg:text-xs">
+                    AKILLI TELEFONUM
+                  </div>
+                  <div className="mt-0.5 truncate text-[9px] text-slate-300 lg:text-[11px]">
+                    Sosyal Medya & Mesajlar
+                    {unreadNotifCount + chatCount > 0 && (
+                      <span className="ml-1 font-mono-num text-cyan-300">
+                        · {unreadNotifCount > 0 ? `${unreadNotifCount} yeni` : `${chatCount} msj`}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </button>
+              <span className="font-mono-num text-[11px] font-extrabold text-cyan-300 lg:text-xs">
+                A
+              </span>
+            </div>
 
-            <button
-              type="button"
-              onClick={onOpenMarketNews}
-              className="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-900/75 p-3 text-left hover:border-indigo-400/50"
-            >
-              <Newspaper className="h-4.5 w-4.5 shrink-0 text-indigo-300" />
-              <div className="min-w-0">
-                <div className="truncate text-xs font-bold text-white">Piyasa Haberleri</div>
-                <div className="text-[10px] text-slate-400">Güncel ekonomi akışı</div>
-              </div>
-            </button>
+            <div className="mt-1.5 flex justify-end lg:mt-2">
+              <button
+                type="button"
+                data-testid="office-open-phone-btn"
+                onClick={() => onOpenOfficeModal('phone')}
+                className="min-w-[84px] rounded-full border border-sky-400/60 bg-sky-500/15 px-5 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-sky-500/25 lg:min-w-[112px] lg:py-1.5 lg:text-[11px] whitespace-nowrap"
+              >
+                AÇ
+              </button>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onOpenLeaderboard}
-            className="mt-3 w-full rounded-xl border border-slate-700/80 bg-slate-900/75 py-2 text-xs font-bold text-slate-200 hover:border-amber-400/50 hover:text-white"
+          {/* Card B — Ofis Seviyesi Yükselt */}
+          <div
+            data-testid="office-card-tier-upgrade"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
           >
-            Türkiye Patronlar Sıralamasını Görüntüle →
-          </button>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-amber-400/35 bg-amber-500/15 text-amber-300 lg:h-10 lg:w-10">
+                  <Building2 className="h-4 w-4 lg:h-5 lg:w-5" />
+                </div>
+                <div className="min-w-0 leading-tight">
+                  <div className="text-[10px] font-extrabold tracking-wide text-white lg:text-xs">
+                    OFİS SEVİYESİ YÜKSELT
+                  </div>
+                  <div
+                    data-testid="office-next-tier-summary"
+                    className="mt-0.5 line-clamp-2 text-[9px] text-slate-300 lg:text-[11px]"
+                  >
+                    {nextTier
+                      ? `Sonraki: ${nextTier.name} — ${formatTL(nextTier.cost, true)}`
+                      : 'Zirve Seviye: Holding Gökdeleni Aktif'}
+                  </div>
+                </div>
+              </div>
+              <span className="font-mono-num text-[11px] font-extrabold text-amber-300 lg:text-xs">
+                B
+              </span>
+            </div>
+
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5 lg:mt-2 lg:gap-2">
+              <button
+                type="button"
+                data-testid="office-tier-upgrade-btn"
+                disabled={!nextTier}
+                onClick={() => {
+                  if (nextTier) {
+                    onUpgradeOfficeTier(nextTier.id);
+                  }
+                }}
+                className={`rounded-full py-1 text-[9.5px] font-extrabold tracking-wide transition-all lg:py-1.5 lg:text-[11px] whitespace-nowrap ${
+                  !nextTier
+                    ? 'cursor-default border border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                    : canAffordNextTier
+                    ? 'border border-emerald-300 bg-emerald-500/25 text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.35)] hover:bg-emerald-500/35'
+                    : 'border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
+                }`}
+              >
+                {nextTier ? 'YÜKSELT' : 'MAKSİMUM'}
+              </button>
+              <button
+                type="button"
+                data-testid="office-open-upgrades-btn"
+                onClick={() => onOpenOfficeModal('design')}
+                className="rounded-full border border-sky-400/60 bg-sky-500/15 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-sky-500/25 lg:py-1.5 lg:text-[11px] whitespace-nowrap"
+              >
+                DETAY
+              </button>
+            </div>
+          </div>
+
+          {/* Card C — Kişisel Varlıklar */}
+          <div
+            data-testid="office-card-assets"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-fuchsia-400/35 bg-fuchsia-500/15 text-indigo-300 lg:h-10 lg:w-10">
+                  <Car className="h-4 w-4 lg:h-5 lg:w-5" />
+                </div>
+                <div className="min-w-0 leading-tight">
+                  <div className="text-[10px] font-extrabold tracking-wide text-white lg:text-xs">
+                    KİŞİSEL VARLIKLAR
+                  </div>
+                  <div className="mt-0.5 truncate text-[9px] text-slate-300 lg:text-[11px]">
+                    Araçlar & Gayrimenkul
+                    {ownedAssetsCount > 0 && (
+                      <span className="ml-1 font-mono-num text-fuchsia-300">
+                        · {ownedAssetsCount} varlık
+                        <span className="hidden lg:inline">
+                          {' '}
+                          ({formatTL(personalAssetsVal, true)})
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <span className="font-mono-num text-[11px] font-extrabold text-fuchsia-300 lg:text-xs">
+                C
+              </span>
+            </div>
+
+            <div className="mt-1.5 flex justify-end lg:mt-2">
+              <button
+                type="button"
+                data-testid="office-open-assets-btn"
+                onClick={() => onOpenOfficeModal('assets')}
+                className="min-w-[84px] rounded-full border border-sky-400/60 bg-sky-500/15 px-5 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-sky-500/25 lg:min-w-[112px] lg:py-1.5 lg:text-[11px] whitespace-nowrap"
+              >
+                AÇ
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
