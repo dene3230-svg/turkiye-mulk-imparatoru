@@ -1,24 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
+  Briefcase,
   Building2,
   CalendarCheck2,
   Clock,
+  Crown,
   FastForward,
   Home,
   MapPin,
   Pause,
   Settings,
-  Sun,
-  Moon,
   Globe2,
   Radio,
   Landmark,
-  LayoutGrid,
   Link2,
-  Newspaper,
+  Sparkles,
   Store,
-  Trophy,
+  User,
   X,
 } from 'lucide-react';
 
@@ -220,6 +219,23 @@ import {
 import { DayEndReportModal } from './components/DayEndReportModal';
 import { DaySimAutoStopModal } from './components/DaySimAutoStopModal';
 import { OfficeModal, type OfficeModalTabId } from './components/OfficeModal';
+import { ExecutiveDashboard } from './components/ExecutiveDashboard';
+import {
+  DashboardDetailModal,
+  type DashboardDetailTarget,
+} from './components/DashboardDetailModal';
+import {
+  BusinessesWorkspace,
+  FinansWorkspace,
+  OfficeWorkspace,
+} from './components/WorkspaceViews';
+import {
+  computeExecutiveDashboardMetrics,
+  type AccountCardId,
+  type OperationCardId,
+} from './game/dashboardMetrics';
+
+type ExecutiveNavId = 'overview' | 'map' | 'finance' | 'businesses' | 'office';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
 const TUTORIAL_STORAGE_KEY = 'tmi_tutorial_done_v122';
@@ -247,10 +263,10 @@ function isTutorialCompleted(): boolean {
 }
 
 const DEFAULT_GAME_SETTINGS: GameSettings = {
-  theme: 'light',
+  theme: 'dark',
   notificationsEnabled: true,
   soundEnabled: true,
-  mapStyle: 'osm',
+  mapStyle: 'carto',
 };
 
 function loadSettings(): GameSettings {
@@ -580,6 +596,9 @@ export default function App() {
   const [patronChatOpen, setPatronChatOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => !isTutorialCompleted());
 
+  const [activeNav, setActiveNav] = useState<ExecutiveNavId>('overview');
+  const [selectedAccountId, setSelectedAccountId] = useState<AccountCardId>('cash');
+  const [dashboardDetail, setDashboardDetail] = useState<DashboardDetailTarget | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [pinDropMode, setPinDropMode] = useState<boolean>(true);
   const [flyTarget, setFlyTarget] = useState<{
@@ -591,9 +610,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v145',
-      title: 'Türkiye Mülk İmparatoru v1.4.5',
-      body: 'Çok oyunculu harita işletme eşitlemesi eklendi. Tüm oyuncuların işletmeleri haritada canlı olarak kırmızı pin ve oyuncu ismiyle görüntüleniyor.',
+      id: 'welcome-v150',
+      title: 'Türkiye Mülk İmparatoru v1.5.0',
+      body: 'Modern 3 sütunlu yatay yönetici kontrol paneli ve yeni minimalist arayüz tasarımı eklendi.',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -1691,6 +1710,8 @@ export default function App() {
       setSelectedCompetitorId(null);
       setDroppedPin(null);
       setPinDropMode(true);
+      setDashboardDetail(null);
+      setActiveNav('map');
       pushNotification(
         'Zincir Şube Yerleştirme Modu',
         `"${draft.suggestedName}" için haritada (aynı il veya 81 ilden biri) kara üzerine tıklayın.`,
@@ -1806,6 +1827,8 @@ export default function App() {
       setSelectedCompetitorId(null);
       setDroppedPin(null);
       setActiveDrawer(null);
+      setDashboardDetail(null);
+      setActiveNav('map');
       soundEngine.playClick();
       if (target) {
         if (target.cityPlate !== activePlate) {
@@ -1822,6 +1845,8 @@ export default function App() {
     setSelectedBusinessId(null);
     setDroppedPin(null);
     setActiveDrawer(null);
+    setDashboardDetail(null);
+    setActiveNav('map');
     soundEngine.playClick();
     setFlyTarget({ lat: record.lat, lng: record.lng, zoom: 15, nonce: Date.now() });
   }, []);
@@ -1917,6 +1942,7 @@ export default function App() {
       setActivePlate(rival.city_plate);
     }
     setSelectedCompetitorId(rival.id);
+    setActiveNav('map');
     setFlyTarget({ lat: rival.lat, lng: rival.lng, zoom: 16, nonce: Date.now() });
   };
 
@@ -2254,6 +2280,7 @@ export default function App() {
     setSelectedCompetitorId(null);
     setDroppedPin(null);
     setPinDropMode(true);
+    setActiveNav('map');
     pushNotification(
       `${brand.brandName} Franchise Modu`,
       'Haritada kara üzerine tıklayarak bu markanın bayilik şubesini (+%35 ciro bonusu ile) kurun.',
@@ -2745,6 +2772,49 @@ export default function App() {
     [empire.officeTierId, empire.officeUpgradeIds, empire.personalAssetIds]
   );
 
+  const dashboardMetrics = useMemo(
+    () => computeExecutiveDashboardMetrics(empire, stockQuotes, now),
+    [empire, stockQuotes, now]
+  );
+
+  const handleSelectExecutiveNav = useCallback(
+    (nav: ExecutiveNavId) => {
+      soundEngine.playClick();
+      closeAllInGameOverlays();
+      setDashboardDetail(null);
+      setActiveNav(nav);
+      if (nav === 'map') {
+        setPinDropMode(true);
+      }
+    },
+    [closeAllInGameOverlays]
+  );
+
+  const handleManageOperation = useCallback(
+    (opId: OperationCardId) => {
+      soundEngine.playClick();
+      closeAllInGameOverlays();
+      setDashboardDetail(null);
+      if (opId === 'businesses') {
+        setActiveNav('businesses');
+      } else if (opId === 'office') {
+        setActiveNav('office');
+      } else {
+        setActiveNav('map');
+        setPinDropMode(true);
+      }
+    },
+    [closeAllInGameOverlays]
+  );
+
+  const activeNavSubtitle: Record<ExecutiveNavId, string> = {
+    overview: 'FİNANSAL GENEL BAKIŞ',
+    map: `CANLI TÜRKİYE HARİTASI · ${activeProvince.code} ${activeProvince.name.toLocaleUpperCase('tr-TR')}`,
+    finance: 'FİNANS, BANKALAR & BORSA',
+    businesses: 'İŞLETMELER & ŞUBE OPERASYONLARI',
+    office: 'OFİSİM, PRESTİJ & AKILLI TELEFON',
+  };
+
   const selectedBusiness = useMemo(
     () => empire.businesses.find((b) => b.id === selectedBusinessId) ?? null,
     [empire.businesses, selectedBusinessId]
@@ -2817,124 +2887,64 @@ export default function App() {
       )}
 
       {screen === 'playing' && (
-        <div className="relative h-full w-full overflow-hidden">
-          <TurkeyMap
-            theme={settings.theme}
-            mapStyle={settings.mapStyle}
-            activePlate={activePlate}
-            currentUserId={user?.id}
-            ownBusinesses={empire.businesses}
-            localSyncRecords={localSyncRecords}
-            competitorBusinesses={competitorBusinesses}
-            syncRefreshNonce={syncRefreshNonce}
-            selectedBusinessId={selectedBusinessId}
-            selectedCompetitorId={selectedCompetitorId}
-            droppedPin={droppedPin}
-            droppedPinBlocked={!droppedPinDistanceCheck.allowed}
-            pinDropMode={pinDropMode}
-            initialCenter={initialMapFocus}
-            flyTarget={flyTarget}
-            onMapClick={handleMapClick}
-            onSelectOwnBusiness={handleSelectOwnBusiness}
-            onSelectCompetitor={handleSelectCompetitor}
-            onWorldSyncUpdate={handleWorldSyncUpdate}
-            onRemoteInsert={handleRemoteInsert}
-            onRemoteUpdate={handleRemoteUpdate}
-            onRemoteDelete={handleRemoteDelete}
-          />
-
-          {/* Top Clean Landscape HUD Overlay + Live DB Sync Status Box */}
+        <div
+          data-testid="executive-shell"
+          className="relative flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-[#080E1C] via-[#0B1221] to-[#111827] text-slate-100"
+        >
+          {/* ================================================================
+              TOP INFORMATION BAR — Clean Single-Row Executive Header
+             ================================================================ */}
           <header
-            aria-label="Oyun Durum Çubuğu"
+            aria-label="Yönetici Üst Bilgi Şeridi"
             data-testid="top-hud"
-            className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex flex-col gap-1 pl-[var(--hud-left-gap)] pr-[var(--hud-right-gap)] pt-[var(--hud-top-gap)]"
+            className="z-[600] flex h-[44px] shrink-0 items-center justify-between gap-1.5 border-b border-slate-800/90 bg-[#0A1120]/95 px-2 backdrop-blur-md lg:h-[54px] lg:gap-3 lg:px-4"
           >
-            <div className="flex w-full items-center justify-between gap-1.5">
-            {/* Left Economy & Quota Cluster — Clean 2-Row Layout, Zero Overlap */}
-            <div
-              data-testid="hud-left-cluster"
-              className="compact-short-hud pointer-events-auto flex min-w-0 items-center gap-[clamp(6px,1vw,10px)] rounded-2xl border border-slate-200/95 bg-white/95 px-[clamp(8px,1.2vw,12px)] py-1.5 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95"
-            >
-              <div className="h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-amber-500/50 bg-[#0B1426] sm:h-8 sm:w-8">
+            {/* Left: Brand Emblem + MÜLK İMPARATORLUĞU + Active Sub-Screen Name */}
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-rose-400/55 bg-gradient-to-br from-rose-500/30 to-amber-500/20 p-0.5 shadow-[0_0_16px_rgba(244,63,94,0.3)] lg:h-9 lg:w-9">
                 <img
                   src="./icon.png"
-                  alt="Türkiye Mülk İmparatoru"
-                  className="h-full w-full object-cover"
+                  alt="Mülk İmparatorluğu Logosu"
+                  className="h-full w-full rounded-full object-cover"
                   referrerPolicy="no-referrer"
                 />
               </div>
-
-              <div className="relative min-w-0">
-                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="max-w-[clamp(96px,15vw,170px)] truncate text-[clamp(9.5px,1.15vw,11px)] font-bold leading-none text-amber-700 dark:text-amber-400">
-                    Sv.{companyTier.level} · {empire.playerIpo?.holdingName ?? companyTier.title}
-                  </span>
-                </div>
-                <div className="mt-0.5 flex items-baseline gap-2 whitespace-nowrap">
-                  <span
-                    data-testid="hud-cash"
-                    className={`font-mono-num text-[clamp(12px,1.55vw,15.5px)] font-extrabold leading-none ${
-                      empire.cash < 0
-                        ? 'text-rose-600 dark:text-rose-400'
-                        : 'text-slate-900 dark:text-white'
-                    }`}
-                  >
-                    {formatTL(empire.cash)}
-                  </span>
-                  <span className="font-mono-num text-[clamp(9.5px,1.1vw,11px)] font-semibold leading-none text-slate-500 dark:text-slate-400">
-                    Şube {empire.businesses.length}/{companyTier.maxBranches}
-                    <span className="hidden min-[960px]:inline">
-                      {' '}
-                      · Tan. %{Math.round(empire.brandRecognition ?? 5)} · Puan {empire.creditScore}
-                    </span>
-                  </span>
-                  <span
-                    data-testid="hud-income"
-                    className="hidden font-mono-num text-[11px] font-bold leading-none text-emerald-700 dark:text-emerald-400 min-[1060px]:inline"
-                  >
-                    +{formatTL(totalIncomePerSec, true)}/sn
-                  </span>
-                </div>
-
-                {cashPopups.map((p) => (
-                  <span
-                    key={p.id}
-                    className="animate-float-cash pointer-events-none absolute -bottom-5 left-0 font-mono-num text-xs font-extrabold text-emerald-600 dark:text-emerald-400 whitespace-nowrap"
-                  >
-                    +{formatTL(p.amount)}
-                  </span>
-                ))}
+              <div className="leading-tight">
+                <h1 className="text-[11.5px] font-extrabold tracking-wide text-white lg:text-base whitespace-nowrap">
+                  MÜLK İMPARATORLUĞU
+                </h1>
+                <p
+                  data-testid="top-bar-subtitle"
+                  className="text-[8.5px] font-semibold tracking-wider text-slate-400 lg:text-[10.5px] whitespace-nowrap"
+                >
+                  {activeNavSubtitle[activeNav]}
+                </p>
               </div>
             </div>
 
-            {/* Center Compact Game Calendar & Time Speed Capsule (Durdur / 1x / 2x / 4x / Gün+) */}
-            <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+            {/* Center: Ultra-Compact Game Clock & Speed Controls (Durdur / 1x / 2x / 4x / Gün+) */}
+            <div className="hidden shrink-0 items-center gap-1 min-[780px]:flex lg:gap-1.5">
               <div
                 data-testid="time-speed-capsule"
-                className={`flex shrink-0 items-center gap-1 rounded-2xl border px-1.5 py-1 shadow-lg transition-colors ${
+                className={`flex shrink-0 items-center gap-0.5 rounded-xl border px-1 py-0.5 transition-colors lg:gap-1 lg:px-1.5 ${
                   gameSpeed === 0
-                    ? 'border-amber-400/90 bg-amber-50/95 dark:border-amber-500/70 dark:bg-amber-950/90'
+                    ? 'border-amber-400/70 bg-amber-950/60'
                     : gameSpeed === 'day'
-                    ? 'border-emerald-400/95 bg-emerald-50/95 dark:border-emerald-500/80 dark:bg-emerald-950/90'
-                    : 'border-slate-200/95 bg-white/95 dark:border-slate-700/90 dark:bg-slate-900/95'
+                    ? 'border-emerald-400/70 bg-emerald-950/60'
+                    : 'border-slate-700/80 bg-[#111B30]/90'
                 }`}
               >
                 <div
                   data-testid="hud-game-clock"
                   title={gameClock.totalDaysLabel}
-                  className="flex items-center gap-1 pl-1 pr-0.5 whitespace-nowrap"
+                  className="flex items-center gap-1 pl-0.5 pr-0.5 whitespace-nowrap lg:pl-1"
                 >
-                  <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <span className="hidden font-mono-num text-[clamp(10.5px,1.2vw,12px)] font-extrabold text-slate-900 dark:text-white min-[960px]:inline">
-                    {gameClock.label}
-                  </span>
-                  <span className="font-mono-num text-[10.5px] font-extrabold text-slate-900 dark:text-white min-[960px]:hidden">
+                  <Clock className="h-2.5 w-2.5 shrink-0 text-cyan-300 lg:h-3 lg:w-3" />
+                  <span className="font-mono-num text-[9.5px] font-bold text-slate-100 lg:text-[10.5px]">
                     {gameClock.compactLabel}
                   </span>
                 </div>
-
-                <div className="h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
-
+                <div className="h-3.5 w-px bg-slate-700/80 lg:h-4" />
                 <div role="group" aria-label="Oyun Zaman Hızı" className="flex items-center gap-0.5">
                   {(
                     [
@@ -2942,7 +2952,7 @@ export default function App() {
                       { speed: 1 as GameSpeed, label: 'Normal 1x', short: '1x' },
                       { speed: 2 as GameSpeed, label: 'Hızlı 2x', short: '2x' },
                       { speed: 4 as GameSpeed, label: 'Çok Hızlı 4x', short: '4x' },
-                      { speed: 'day' as GameSpeed, label: 'Gün Gün Hızlı İlerleme (Oto-Korumalı)', short: 'Gün+' },
+                      { speed: 'day' as GameSpeed, label: 'Gün Gün Hızlı İlerleme', short: 'Gün+' },
                     ] as const
                   ).map((item) => {
                     const active = gameSpeed === item.speed;
@@ -2955,23 +2965,23 @@ export default function App() {
                         aria-pressed={active}
                         title={item.label}
                         onClick={() => handleSetGameSpeed(item.speed)}
-                        className={`flex h-7 min-w-[24px] items-center justify-center gap-0.5 rounded-lg px-1.5 font-mono-num text-[10.5px] font-extrabold transition-colors sm:h-8 sm:min-w-[28px] sm:text-[11px] whitespace-nowrap ${
+                        className={`flex h-5 min-w-[19px] items-center justify-center gap-0.5 rounded-md px-1 font-mono-num text-[9px] font-bold transition-colors whitespace-nowrap lg:h-6 lg:min-w-[22px] lg:rounded-lg lg:px-1.5 lg:text-[10px] ${
                           active
                             ? item.speed === 0
-                              ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
+                              ? 'bg-amber-400 text-slate-950'
                               : item.speed === 'day'
-                              ? 'bg-emerald-500 text-slate-950 font-black shadow-xs'
-                              : 'bg-slate-900 text-white shadow-xs dark:bg-amber-400 dark:text-slate-950 dark:font-bold'
+                              ? 'bg-emerald-400 text-slate-950'
+                              : 'bg-cyan-400 text-slate-950'
                             : item.speed === 'day'
-                            ? 'text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/50'
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+                            ? 'text-emerald-300 hover:bg-emerald-900/50'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                         }`}
                       >
                         {item.speed === 0 ? (
-                          <Pause className="h-3 w-3" />
+                          <Pause className="h-2.5 w-2.5" />
                         ) : item.speed === 'day' ? (
                           <>
-                            <FastForward className="h-3 w-3 shrink-0" />
+                            <FastForward className="h-2.5 w-2.5 shrink-0" />
                             <span>{item.short}</span>
                           </>
                         ) : (
@@ -2992,418 +3002,580 @@ export default function App() {
                     setDayEndModalOpen(true);
                   }}
                   title="00:00 Gün Sonu Raporu & Hasılat Tahsilatı"
-                  className="flex h-9 items-center gap-1 rounded-2xl border border-emerald-400/90 bg-emerald-500 px-2.5 text-[11px] font-black text-slate-950 shadow-lg hover:bg-emerald-400 whitespace-nowrap"
+                  className="flex h-6 items-center gap-1 rounded-lg border border-emerald-400/70 bg-emerald-500/20 px-1.5 font-mono-num text-[9px] font-extrabold text-emerald-200 hover:bg-emerald-500/30 whitespace-nowrap lg:h-7 lg:rounded-xl lg:px-2 lg:text-[10px]"
                 >
-                  <CalendarCheck2 className="h-3.5 w-3.5 shrink-0" />
+                  <CalendarCheck2 className="h-3 w-3 shrink-0" />
                   <span>00:00 ({empire.pendingDayEndReports?.length})</span>
                 </button>
               )}
             </div>
 
-            {/* Right City Room Switcher & Utility Cluster */}
-            <div
-              data-testid="hud-right-cluster"
-              className="pointer-events-auto flex shrink-0 items-center gap-[clamp(3px,0.6vw,6px)] rounded-2xl border border-slate-200/95 bg-white/95 p-1 shadow-lg dark:border-slate-700/90 dark:bg-slate-900/95 sm:p-1.5"
-            >
+            {/* Right: Firma Tanınırlığı (%), Ofis Prestiji, Toplam Kasa (₺) + Profile & Settings Icons */}
+            <div className="flex shrink-0 items-center gap-2 lg:gap-4">
+              {/* Firma Tanınırlığı (%) */}
               <button
                 type="button"
-                onClick={() => {
-                  soundEngine.playClick();
-                  setCityPickerOpen(true);
-                }}
-                aria-label="Şehir Seç veya Değiştir"
-                data-testid="city-switcher-btn"
-                className="flex h-9 items-center gap-1 rounded-xl border border-amber-300/80 bg-amber-50/90 px-[clamp(7px,1.2vw,10px)] text-[clamp(10.5px,1.35vw,12px)] font-bold text-slate-900 transition-colors hover:bg-amber-100 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/50 whitespace-nowrap"
+                data-testid="topbar-brand-recognition"
+                onClick={() => handleSelectExecutiveNav('office')}
+                title="Firma Tanınırlığı"
+                className="hidden items-center gap-1 text-left min-[600px]:flex lg:gap-1.5"
               >
-                <Globe2 className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
-                <span className="font-mono-num">{activeProvince.code}</span>
-                <span className="max-w-[74px] truncate sm:max-w-[115px]">
-                  {activeProvince.name}
-                </span>
-                <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 xl:inline-flex">
-                  · <Radio className="h-3 w-3" />
-                  {roomStatus === 'live' ? 'Canlı' : 'Oda'}
-                </span>
+                <Sparkles className="h-3 w-3 shrink-0 text-amber-400 lg:h-3.5 lg:w-3.5" />
+                <div className="leading-tight">
+                  <div className="text-[8px] font-medium text-slate-400 whitespace-nowrap lg:text-[9px]">
+                    Tanınırlık
+                  </div>
+                  <div className="font-mono-num text-[10px] font-extrabold text-amber-300 whitespace-nowrap lg:text-[11px]">
+                    %{dashboardMetrics.brandRecognitionPct}
+                  </div>
+                </div>
               </button>
 
+              {/* Ofis Prestiji */}
               <button
                 type="button"
-                onClick={handleToggleTheme}
-                aria-label={settings.theme === 'light' ? 'Karanlık Tema' : 'Açık Tema'}
-                title={settings.theme === 'light' ? 'Karanlık Tema' : 'Açık Tema'}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                data-testid="topbar-office-prestige"
+                onClick={() => handleSelectExecutiveNav('office')}
+                title="Ofis Prestij Puanı"
+                className="hidden items-center gap-1 text-left min-[680px]:flex lg:gap-1.5"
               >
-                {settings.theme === 'light' ? (
-                  <Moon className="h-4 w-4" />
-                ) : (
-                  <Sun className="h-4 w-4 text-amber-400" />
-                )}
+                <Crown className="h-3 w-3 shrink-0 text-orange-400 lg:h-3.5 lg:w-3.5" />
+                <div className="leading-tight">
+                  <div className="text-[8px] font-medium text-slate-400 whitespace-nowrap lg:text-[9px]">
+                    Prestij
+                  </div>
+                  <div className="font-mono-num text-[10px] font-extrabold text-orange-300 whitespace-nowrap lg:text-[11px]">
+                    {dashboardMetrics.officePrestige}/100
+                  </div>
+                </div>
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.playClick();
-                  setNotifOpen(true);
-                }}
-                aria-label={`Bildirim Merkezi (${unreadNotifCount} okunmamış)`}
-                className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-              >
-                <Bell className="h-4 w-4" />
-                {unreadNotifCount > 0 && (
-                  <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-600 px-1 font-mono-num text-[9px] font-bold text-white">
-                    {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.playClick();
-                  setSettingsOpen(true);
-                }}
-                aria-label="Ayarlar"
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleReturnToMainMenu}
-                aria-label="Ana Menü"
-                title="Ana Menü"
-                className="hidden h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 xl:flex whitespace-nowrap"
-              >
-                <Home className="h-3.5 w-3.5 shrink-0" />
-                <span>Ana Menü</span>
-              </button>
-            </div>
-            </div>
-
-            {/* Compact Live Multiplayer DB Status Box (Top Bar Sub-Pill — Click to Refresh) */}
-            <div className="pointer-events-none flex w-full justify-center">
-              <button
-                type="button"
-                data-testid="map-db-status-box"
-                onClick={() => {
-                  soundEngine.playClick();
-                  setSyncRefreshNonce((n) => n + 1);
-                }}
-                title={
-                  worldDbStats.error
-                    ? worldDbStats.error
-                    : 'Canlı çok oyunculu harita veritabanı durumu — yenilemek için tıklayın'
-                }
-                className={`pointer-events-auto flex max-w-[min(92vw,420px)] items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono-num text-[10.5px] font-bold shadow-md backdrop-blur-sm transition-colors ${
-                  worldDbStats.error
-                    ? 'border-rose-300 bg-rose-600/95 text-white hover:bg-rose-700'
-                    : 'border-slate-200/95 bg-white/95 text-slate-800 hover:bg-slate-50 dark:border-slate-700/90 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`h-2 w-2 shrink-0 rounded-full ${
-                    worldDbStats.error
-                      ? 'bg-white'
-                      : worldDbStats.loading
-                      ? 'bg-amber-400 animate-pulse'
-                      : 'bg-emerald-500 animate-pulse'
+              {/* Toplam Kasa (₺) */}
+              <div className="relative text-right leading-tight">
+                <div className="text-[8px] font-medium text-slate-400 whitespace-nowrap lg:text-[9px]">
+                  Toplam Kasa
+                </div>
+                <div
+                  data-testid="hud-cash"
+                  className={`font-mono-num text-[11.5px] font-extrabold lg:text-base whitespace-nowrap ${
+                    empire.cash < 0 ? 'text-rose-400' : 'text-white'
                   }`}
-                />
-                <span className="truncate">
-                  {worldDbStats.error
-                    ? worldDbStats.error
-                    : worldDbStats.loading
-                    ? 'DB Eşitleniyor...'
-                    : `DB Toplam: ${worldDbStats.dbTotal} | Rakip: ${worldDbStats.rivalCount}`}
-                </span>
-              </button>
+                >
+                  {formatTL(empire.cash)}
+                </div>
+                {cashPopups.map((p) => (
+                  <span
+                    key={p.id}
+                    className="animate-float-cash pointer-events-none absolute -bottom-5 right-0 font-mono-num text-[11px] font-extrabold text-emerald-400 whitespace-nowrap"
+                  >
+                    +{formatTL(p.amount)}
+                  </span>
+                ))}
+              </div>
+
+              {/* Profile / Notifications & Settings Icons */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="topbar-profile-btn"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setNotifOpen(true);
+                  }}
+                  aria-label={`Profil ve Bildirimler (${unreadNotifCount} okunmamış)`}
+                  title={`${user?.name ?? 'Patron'} · Bildirimler`}
+                  className="relative flex h-7 w-7 items-center justify-center rounded-full border border-slate-700/80 bg-[#131E34] text-slate-200 hover:border-cyan-400/60 hover:text-white lg:h-8 lg:w-8"
+                >
+                  <User className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+                  {unreadNotifCount > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-cyan-400 px-1 font-mono-num text-[8.5px] font-black text-slate-950">
+                      {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="topbar-settings-btn"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setSettingsOpen(true);
+                  }}
+                  aria-label="Ayarlar"
+                  title="Ayarlar"
+                  className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-700/80 bg-[#131E34] text-slate-200 hover:border-cyan-400/60 hover:text-white lg:h-8 lg:w-8"
+                >
+                  <Settings className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+                </button>
+              </div>
             </div>
           </header>
 
-          {/* Bottom Centered 6-Button Clean Navigation Bar: Harita · Yönetim · Finans · Haberler · Görevler · Menü */}
-          <nav
-            aria-label="Oyun Araç Çubuğu"
-            data-testid="bottom-action-dock"
-            className="compact-short-hud pointer-events-auto fixed bottom-[var(--hud-bottom-gap)] left-1/2 z-[600] flex max-w-[calc(100dvw-16px)] -translate-x-1/2 items-center gap-[clamp(3px,0.7vw,7px)] overflow-x-auto rounded-2xl border border-slate-200/95 bg-white/95 p-1.5 shadow-xl no-scrollbar dark:border-slate-700/90 dark:bg-slate-900/95"
-          >
-            {/* 1) Harita (Map view + Pin Drop active) */}
-            <button
-              type="button"
-              data-testid="dock-map-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setPinDropMode(true);
-                setBottomSheetGroup(null);
-                setActiveDrawer(null);
-                setHrModalOpen(false);
-                setRivalsModalOpen(false);
-                setBorsaModalOpen(false);
-                setBankingModalOpen(false);
-                setAccountingModalOpen(false);
-                setHubMenuOpen(false);
-                setOfficeModalOpen(false);
-                setHoldingModalOpen(false);
-                setLeaderboardModalOpen(false);
-                setSelectedBusinessId(null);
-                setSelectedCompetitorId(null);
-                if (!droppedPin) {
-                  focusHeadquarters(empire);
-                }
-              }}
-              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                !bottomSheetGroup &&
-                !activeDrawer &&
-                !hrModalOpen &&
-                !holdingModalOpen &&
-                !rivalsModalOpen &&
-                !borsaModalOpen &&
-                !bankingModalOpen &&
-                !accountingModalOpen &&
-                !officeModalOpen &&
-                !hubMenuOpen
-                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm hover:bg-amber-300'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
+          {/* ================================================================
+              BODY: LEFT VERTICAL NAVIGATION RAIL + MAIN WORKSPACE CANVAS
+             ================================================================ */}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            {/* Left Vertical Navigation Rail (6 Concise Executive Sections) */}
+            <nav
+              aria-label="Ana Kontrol Paneli Menüsü"
+              data-testid="left-nav-rail"
+              className="z-[550] flex w-[68px] shrink-0 flex-col items-center justify-between border-r border-slate-800/90 bg-[#0A1120]/95 py-1.5 sm:w-[74px] lg:w-[84px] lg:py-2"
             >
-              <MapPin className="h-4 w-4 shrink-0" />
-              <span>Harita</span>
-            </button>
+              <div className="flex w-full flex-col items-center gap-0.5 px-1 lg:gap-1 lg:px-1.5">
+                {(
+                  [
+                    { id: 'overview' as const, label: 'Genel Bakış', icon: Home },
+                    { id: 'map' as const, label: 'Harita', icon: MapPin },
+                    { id: 'finance' as const, label: 'Finans', icon: Landmark },
+                    { id: 'businesses' as const, label: 'İşletmeler', icon: Building2 },
+                    { id: 'office' as const, label: 'Ofisim', icon: Briefcase },
+                  ] as const
+                ).map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeNav === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      data-testid={`nav-rail-${item.id}`}
+                      aria-current={isActive ? 'page' : undefined}
+                      onClick={() => handleSelectExecutiveNav(item.id)}
+                      className={`group flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1.5 text-center transition-all lg:px-1 lg:py-2 ${
+                        isActive
+                          ? 'border-cyan-400/50 bg-gradient-to-b from-cyan-500/20 to-sky-500/10 text-cyan-300 shadow-[0_0_16px_rgba(34,211,238,0.18)]'
+                          : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+                      }`}
+                    >
+                      <Icon className={`h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 ${isActive ? 'text-cyan-300' : ''}`} />
+                      <span className="w-full text-[8.5px] font-bold leading-tight whitespace-nowrap lg:text-[10px]">
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-            {/* 2) Yönetim — Opens Bottom Sheet Quick-Access Popup */}
-            <button
-              type="button"
-              data-testid="dock-management-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setBottomSheetGroup((prev) => (prev === 'management' ? null : 'management'));
-              }}
-              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                bottomSheetGroup === 'management' ||
-                activeDrawer === 'portfolio' ||
-                hrModalOpen ||
-                holdingModalOpen ||
-                rivalsModalOpen
-                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Building2 className="h-4 w-4 shrink-0" />
-              <span>Yönetim</span>
-            </button>
-
-            {/* 3) Finans — Opens Bottom Sheet Quick-Access Popup */}
-            <button
-              type="button"
-              data-testid="dock-finance-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setBottomSheetGroup((prev) => (prev === 'finance' ? null : 'finance'));
-              }}
-              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                bottomSheetGroup === 'finance' ||
-                accountingModalOpen ||
-                bankingModalOpen ||
-                borsaModalOpen
-                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Landmark className="h-4 w-4 shrink-0" />
-              <span>Finans</span>
-            </button>
-
-            {/* 4) Haberler (Piyasa Haberleri) */}
-            <button
-              type="button"
-              data-testid="dock-news-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setBottomSheetGroup(null);
-                setDroppedPin(null);
-                setSelectedBusinessId(null);
-                setSelectedCompetitorId(null);
-                setHrModalOpen(false);
-                setHoldingModalOpen(false);
-                setRivalsModalOpen(false);
-                setBorsaModalOpen(false);
-                setBankingModalOpen(false);
-                setAccountingModalOpen(false);
-                setHubMenuOpen(false);
-                setOfficeModalOpen(false);
-                setActiveDrawer((prev) => (prev === 'market' ? null : 'market'));
-              }}
-              className={`compact-short-btn flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                activeDrawer === 'market'
-                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Newspaper className="h-4 w-4 shrink-0" />
-              <span>Haberler</span>
-            </button>
-
-            {/* 5) Görevler (Dinamik Görevler) */}
-            <button
-              type="button"
-              data-testid="dock-missions-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setBottomSheetGroup(null);
-                setDroppedPin(null);
-                setSelectedBusinessId(null);
-                setSelectedCompetitorId(null);
-                setHrModalOpen(false);
-                setHoldingModalOpen(false);
-                setRivalsModalOpen(false);
-                setBorsaModalOpen(false);
-                setBankingModalOpen(false);
-                setAccountingModalOpen(false);
-                setHubMenuOpen(false);
-                setOfficeModalOpen(false);
-                setActiveDrawer((prev) => (prev === 'missions' ? null : 'missions'));
-              }}
-              className={`compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                activeDrawer === 'missions'
-                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Trophy className="h-4 w-4 shrink-0" />
-              <span>Görevler</span>
-              {claimableMissionCount > 0 && (
-                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 font-mono-num text-[10px] font-black text-slate-950">
-                  {claimableMissionCount}
-                </span>
-              )}
-            </button>
-
-            {/* 6) Ofisim — Opens Office & Tools Bottom Sheet Popup */}
-            <button
-              type="button"
-              data-testid="dock-menu-btn"
-              onClick={() => {
-                soundEngine.playClick();
-                setBottomSheetGroup((prev) => (prev === 'office' ? null : 'office'));
-              }}
-              className={`compact-short-btn relative flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-[clamp(9px,1.5vw,15px)] text-[clamp(11px,1.35vw,13px)] font-bold transition-colors whitespace-nowrap ${
-                bottomSheetGroup === 'office' || officeModalOpen || hubMenuOpen || dayEndModalOpen
-                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4 shrink-0" />
-              <span>Ofisim</span>
-              {(empire.pendingDayEndReports ?? []).length > 0 && (
-                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 font-mono-num text-[10px] font-black text-slate-950">
-                  {empire.pendingDayEndReports?.length}
-                </span>
-              )}
-            </button>
-          </nav>
-
-          {/* Controlled Patron Chat Panel (Launched via Menü -> Patron Sohbeti, never collides with 6-button dock) */}
-          <PatronChatPanel
-            activeProvince={activeProvince}
-            messages={chatMessages}
-            open={patronChatOpen}
-            onOpenChange={setPatronChatOpen}
-            hideFloatingButton={true}
-            onSendMessage={handleSendChat}
-          />
-
-          {/* Active Chain Clone or Franchise Placement Banner above Bottom Dock */}
-          {(chainCloneDraft || preselectedFranchise) &&
-            !droppedPin &&
-            !activeDrawer &&
-            !hrModalOpen &&
-            !holdingModalOpen &&
-            !rivalsModalOpen && (
-              <div
-                data-testid="map-special-placement-banner"
-                className="pointer-events-auto fixed bottom-[calc(var(--panel-bottom-offset)+4px)] left-1/2 z-[520] flex w-[min(92vw,470px)] -translate-x-1/2 items-center justify-between gap-2 rounded-xl border border-amber-400 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  {chainCloneDraft ? (
-                    <Link2 className="h-4 w-4 shrink-0 text-amber-400" />
-                  ) : (
-                    <Store className="h-4 w-4 shrink-0 text-emerald-400" />
-                  )}
-                  <p className="truncate">
-                    {chainCloneDraft ? (
-                      <>
-                        <strong className="text-amber-300">Zincir Şube:</strong>{' '}
-                        {chainCloneDraft.suggestedName} için haritada kara üzerine tıklayın
-                      </>
-                    ) : (
-                      <>
-                        <strong className="text-emerald-300">Franchise:</strong>{' '}
-                        {preselectedFranchise?.brandName} şubesi için haritada kara üzerine tıklayın
-                      </>
-                    )}
-                  </p>
-                </div>
+              <div className="w-full px-1 lg:px-1.5">
                 <button
                   type="button"
+                  data-testid="nav-rail-settings"
                   onClick={() => {
-                    setChainCloneDraft(null);
-                    setPreselectedFranchise(null);
+                    soundEngine.playClick();
+                    setSettingsOpen(true);
                   }}
-                  className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-700"
+                  className="flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-transparent px-0.5 py-1.5 text-center text-slate-400 transition-all hover:bg-slate-800/60 hover:text-slate-100 lg:px-1 lg:py-2"
                 >
-                  <X className="h-3 w-3" /> İptal
+                  <Settings className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5" />
+                  <span className="w-full text-[8.5px] font-bold leading-tight whitespace-nowrap lg:text-[10px]">
+                    Ayarlar
+                  </span>
                 </button>
               </div>
-            )}
+            </nav>
 
-          {/* Contextual Hint when empty — centered cleanly above the 6-button dock */}
-          {empire.businesses.length === 0 &&
-            !chainCloneDraft &&
-            !preselectedFranchise &&
-            !droppedPin &&
-            !activeDrawer &&
-            !selectedCompetitor && (
-              <div className="pointer-events-none fixed bottom-[calc(var(--panel-bottom-offset)+4px)] left-1/2 z-[500] w-[min(90vw,430px)] -translate-x-1/2 rounded-xl border border-amber-300/80 bg-white/95 px-3 py-1.5 text-center text-[clamp(10.5px,1.3vw,12px)] text-slate-700 shadow-md dark:border-amber-700/70 dark:bg-slate-900/95 dark:text-slate-200">
-                <strong className="text-amber-700 dark:text-amber-400">
-                  {activeProvince.code} {activeProvince.name}:
-                </strong>{' '}
-                Kara üzerinde bir caddeye tıklayıp pin bırakın; ilk işletmeniz Merkez Üssünüz olur.
+            {/* Main Content Viewport */}
+            <main className="relative min-w-0 flex-1 overflow-hidden">
+              {/* Persistent Mounted TurkeyMap so Supabase Realtime public.businesses sync runs continuously */}
+              <div
+                className={
+                  activeNav === 'map'
+                    ? 'relative h-full w-full'
+                    : 'pointer-events-none invisible absolute inset-0 -z-10'
+                }
+                aria-hidden={activeNav !== 'map'}
+              >
+                <TurkeyMap
+                  theme={settings.theme}
+                  mapStyle={settings.mapStyle}
+                  activePlate={activePlate}
+                  currentUserId={user?.id}
+                  ownBusinesses={empire.businesses}
+                  localSyncRecords={localSyncRecords}
+                  competitorBusinesses={competitorBusinesses}
+                  syncRefreshNonce={syncRefreshNonce}
+                  selectedBusinessId={selectedBusinessId}
+                  selectedCompetitorId={selectedCompetitorId}
+                  droppedPin={droppedPin}
+                  droppedPinBlocked={!droppedPinDistanceCheck.allowed}
+                  pinDropMode={pinDropMode}
+                  initialCenter={initialMapFocus}
+                  flyTarget={flyTarget}
+                  isVisible={activeNav === 'map'}
+                  onMapClick={handleMapClick}
+                  onSelectOwnBusiness={handleSelectOwnBusiness}
+                  onSelectCompetitor={handleSelectCompetitor}
+                  onWorldSyncUpdate={handleWorldSyncUpdate}
+                  onRemoteInsert={handleRemoteInsert}
+                  onRemoteUpdate={handleRemoteUpdate}
+                  onRemoteDelete={handleRemoteDelete}
+                />
               </div>
-            )}
 
-          {/* Right Contextual Side Panel Container — pinned cleanly between Top HUD & Bottom Dock */}
-          {(droppedPin || selectedBusiness || selectedCompetitor) && (
-            <div
-              data-testid="right-panel-container"
-              className="pointer-events-none fixed bottom-[var(--panel-bottom-offset)] right-[var(--hud-right-gap)] top-[var(--panel-top-offset)] z-[650] flex justify-end overflow-hidden"
-            >
-              {droppedPin ? (
-                <PinDropPanel
-                  location={droppedPin}
-                  cash={empire.cash}
-                  companyLevel={companyTier.level}
-                  ownBranchCount={empire.businesses.length}
-                  maxBranches={companyTier.maxBranches}
-                  distanceCheck={droppedPinDistanceCheck}
-                  availableFranchises={allFranchises}
-                  chainCloneDraft={chainCloneDraft}
-                  preselectedFranchise={preselectedFranchise}
-                  onCancelSpecialMode={() => {
-                    setChainCloneDraft(null);
-                    setPreselectedFranchise(null);
+              {/* VIEW 1: 3-Column Executive Dashboard ("Genel Bakış") */}
+              {activeNav === 'overview' && (
+                <ExecutiveDashboard
+                  metrics={dashboardMetrics}
+                  selectedAccountId={selectedAccountId}
+                  onSelectAccount={(id) => {
+                    soundEngine.playClick();
+                    setSelectedAccountId(id);
                   }}
-                  onEstablish={handleEstablishBusiness}
-                  onClose={() => {
-                    setDroppedPin(null);
+                  onOpenAccountDetail={(id) => {
+                    soundEngine.playClick();
+                    setSelectedAccountId(id);
+                    setDashboardDetail({ kind: 'account', id });
+                  }}
+                  onManageOperation={handleManageOperation}
+                  onDetailOperation={(id) => {
+                    soundEngine.playClick();
+                    setDashboardDetail({ kind: 'operation', id });
                   }}
                 />
-              ) : selectedBusiness ? (
-                <BusinessInspector
-                  business={selectedBusiness}
+              )}
+
+              {/* VIEW 2: Map Floating Minimal Toolbar (Only visible on Harita) */}
+              {activeNav === 'map' && (
+                <>
+                  <div className="pointer-events-none absolute inset-x-0 top-2.5 z-[520] flex flex-wrap items-center justify-between gap-2 px-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        soundEngine.playClick();
+                        setCityPickerOpen(true);
+                      }}
+                      aria-label="Şehir Seç veya Değiştir"
+                      data-testid="city-switcher-btn"
+                      className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-xl border border-amber-400/50 bg-[#0B1221]/92 px-3 text-xs font-bold text-amber-200 shadow-lg backdrop-blur-md hover:bg-slate-900 whitespace-nowrap"
+                    >
+                      <Globe2 className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                      <span className="font-mono-num">{activeProvince.code}</span>
+                      <span>{activeProvince.name}</span>
+                      <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-emerald-400 sm:inline-flex">
+                        · <Radio className="h-3 w-3" />
+                        {roomStatus === 'live' ? 'Canlı' : 'Oda'}
+                      </span>
+                    </button>
+
+                    {/* Live Multiplayer DB Status Box (Click to Refresh) */}
+                    <button
+                      type="button"
+                      data-testid="map-db-status-box"
+                      onClick={() => {
+                        soundEngine.playClick();
+                        setSyncRefreshNonce((n) => n + 1);
+                      }}
+                      title={
+                        worldDbStats.error
+                          ? worldDbStats.error
+                          : 'Canlı çok oyunculu harita veritabanı durumu — yenilemek için tıklayın'
+                      }
+                      className={`pointer-events-auto flex max-w-[min(85vw,380px)] items-center gap-1.5 rounded-xl border px-3 py-1 font-mono-num text-[11px] font-bold shadow-lg backdrop-blur-md transition-colors ${
+                        worldDbStats.error
+                          ? 'border-rose-400/70 bg-rose-600/95 text-white hover:bg-rose-700'
+                          : 'border-cyan-400/35 bg-[#0B1221]/92 text-slate-100 hover:bg-slate-900'
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          worldDbStats.error
+                            ? 'bg-white'
+                            : worldDbStats.loading
+                            ? 'bg-amber-400 animate-pulse'
+                            : 'bg-emerald-400'
+                        }`}
+                      />
+                      <span className="truncate">
+                        {worldDbStats.error
+                          ? worldDbStats.error
+                          : worldDbStats.loading
+                          ? 'DB Eşitleniyor...'
+                          : `DB Toplam: ${worldDbStats.dbTotal} | Rakip: ${worldDbStats.rivalCount}`}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Active Chain Clone or Franchise Placement Banner */}
+                  {(chainCloneDraft || preselectedFranchise) && !droppedPin && (
+                    <div
+                      data-testid="map-special-placement-banner"
+                      className="pointer-events-auto absolute bottom-3 left-1/2 z-[520] flex w-[min(90%,470px)] -translate-x-1/2 items-center justify-between gap-2 rounded-xl border border-amber-400 bg-[#0B1221]/95 px-3 py-2 text-xs text-white shadow-xl"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        {chainCloneDraft ? (
+                          <Link2 className="h-4 w-4 shrink-0 text-amber-400" />
+                        ) : (
+                          <Store className="h-4 w-4 shrink-0 text-emerald-400" />
+                        )}
+                        <p className="truncate">
+                          {chainCloneDraft ? (
+                            <>
+                              <strong className="text-amber-300">Zincir Şube:</strong>{' '}
+                              {chainCloneDraft.suggestedName} için haritada kara üzerine tıklayın
+                            </>
+                          ) : (
+                            <>
+                              <strong className="text-emerald-300">Franchise:</strong>{' '}
+                              {preselectedFranchise?.brandName} şubesi için haritada kara üzerine tıklayın
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChainCloneDraft(null);
+                          setPreselectedFranchise(null);
+                        }}
+                        className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-700"
+                      >
+                        <X className="h-3 w-3" /> İptal
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Contextual Hint when no business built yet */}
+                  {empire.businesses.length === 0 &&
+                    !chainCloneDraft &&
+                    !preselectedFranchise &&
+                    !droppedPin &&
+                    !selectedCompetitor && (
+                      <div className="pointer-events-none absolute bottom-3 left-1/2 z-[500] w-[min(90%,430px)] -translate-x-1/2 rounded-xl border border-cyan-400/40 bg-[#0B1221]/92 px-3 py-1.5 text-center text-xs text-slate-200 shadow-lg backdrop-blur-md">
+                        <strong className="text-cyan-300">
+                          {activeProvince.code} {activeProvince.name}:
+                        </strong>{' '}
+                        Kara üzerinde bir caddeye tıklayıp pin bırakın; ilk işletmeniz Merkez Üssünüz olur.
+                      </div>
+                    )}
+
+                  {/* Right Contextual Map Inspector (Pin Drop / Own Business / Competitor) */}
+                  {(droppedPin || selectedBusiness || selectedCompetitor) && (
+                    <div
+                      data-testid="right-panel-container"
+                      className="pointer-events-none absolute bottom-2.5 right-2.5 top-12 z-[650] flex justify-end overflow-hidden"
+                    >
+                      {droppedPin ? (
+                        <PinDropPanel
+                          location={droppedPin}
+                          cash={empire.cash}
+                          companyLevel={companyTier.level}
+                          ownBranchCount={empire.businesses.length}
+                          maxBranches={companyTier.maxBranches}
+                          distanceCheck={droppedPinDistanceCheck}
+                          availableFranchises={allFranchises}
+                          chainCloneDraft={chainCloneDraft}
+                          preselectedFranchise={preselectedFranchise}
+                          onCancelSpecialMode={() => {
+                            setChainCloneDraft(null);
+                            setPreselectedFranchise(null);
+                          }}
+                          onEstablish={handleEstablishBusiness}
+                          onClose={() => setDroppedPin(null)}
+                        />
+                      ) : selectedBusiness ? (
+                        <BusinessInspector
+                          business={selectedBusiness}
+                          state={empire}
+                          now={now}
+                          onEnterInterior={(id) => setInteriorBusinessId(id)}
+                          onOpenHrModal={(id) => {
+                            setHrInitialSubView('branches');
+                            setHrTargetBusinessId(id);
+                            handleSelectManagementTab('hr');
+                          }}
+                          onCloneBusiness={handleStartCloneBusiness}
+                          onLaunchAdCampaign={handleLaunchAdCampaign}
+                          onHireDoubleShift={handleHireDoubleShift}
+                          onOpenDayEndReport={() => setDayEndModalOpen(true)}
+                          onRestock={handleRestockBusiness}
+                          onInvestQuality={handleInvestBranchQuality}
+                          onCollect={handleCollectBusiness}
+                          onUpgrade={handleUpgradeBusiness}
+                          onBoost={handleBoostBusiness}
+                          onSell={handleSellBusiness}
+                          onClose={() => setSelectedBusinessId(null)}
+                        />
+                      ) : selectedCompetitor ? (
+                        <CompetitorInspector
+                          competitor={selectedCompetitor}
+                          cash={empire.cash}
+                          ownBranchCount={empire.businesses.length}
+                          maxBranches={companyTier.maxBranches}
+                          hasBranchInCity={empire.businesses.some(
+                            (b) => b.cityPlate === selectedCompetitor.city_plate
+                          )}
+                          blitzActive={(empire.competitiveBlitzes ?? []).some(
+                            (bl) =>
+                              bl.targetRivalId === selectedCompetitor.id &&
+                              bl.endsAtGameMin > (empire.gameMinutes ?? 540)
+                          )}
+                          onTakeover={handleTakeoverCompetitor}
+                          onLaunchBlitz={handleLaunchCompetitiveBlitz}
+                          onOpenRivalsModal={() => {
+                            setSelectedCompetitorId(null);
+                            handleSelectManagementTab('rivals');
+                          }}
+                          onClose={() => setSelectedCompetitorId(null)}
+                        />
+                      ) : null}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* VIEW 3: Finans Workspace */}
+              {activeNav === 'finance' && (
+                <FinansWorkspace
                   state={empire}
+                  metrics={dashboardMetrics}
+                  onOpenBanking={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setBankingModalOpen(true);
+                  }}
+                  onOpenAccounting={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setAccountingModalOpen(true);
+                  }}
+                  onOpenBorsa={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setBorsaMode('market');
+                    setBorsaModalOpen(true);
+                  }}
+                  onOpenInvestments={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setBorsaMode('portfolio');
+                    setBorsaModalOpen(true);
+                  }}
+                  onOpenDayEnd={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setDayEndModalOpen(true);
+                  }}
+                />
+              )}
+
+              {/* VIEW 4: İşletmeler Workspace */}
+              {activeNav === 'businesses' && (
+                <BusinessesWorkspace
+                  state={empire}
+                  competitorBusinesses={competitorBusinesses}
+                  maxBranches={companyTier.maxBranches}
                   now={now}
+                  onGoMapNewBranch={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setActiveNav('map');
+                    setPinDropMode(true);
+                  }}
+                  onOpenHr={(id) => {
+                    soundEngine.playClick();
+                    setHrInitialSubView('branches');
+                    if (id) setHrTargetBusinessId(id);
+                    handleSelectManagementTab('hr');
+                  }}
+                  onOpenFranchise={() => handleSelectManagementTab('franchise')}
+                  onOpenRivals={() => handleSelectManagementTab('rivals')}
+                  onFocusBusinessOnMap={handleSelectOwnBusiness}
+                  onEnterInterior={(id) => setInteriorBusinessId(id)}
+                  onInvestQuality={handleInvestBranchQuality}
+                  onUpgradeBusiness={handleUpgradeBusiness}
+                  onCloneBusiness={handleStartCloneBusiness}
+                  onRestockBusiness={handleRestockBusiness}
+                />
+              )}
+
+              {/* VIEW 5: Ofisim Workspace */}
+              {activeNav === 'office' && (
+                <OfficeWorkspace
+                  metrics={dashboardMetrics}
+                  unreadNotifCount={unreadNotifCount}
+                  claimableMissionCount={claimableMissionCount}
+                  chatCount={chatMessages.length}
+                  onOpenOfficeModal={(tab) => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setOfficeModalTab(tab);
+                    setOfficeModalOpen(true);
+                  }}
+                  onOpenPatronChat={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setPatronChatOpen(true);
+                  }}
+                  onOpenMarketNews={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setActiveDrawer('market');
+                  }}
+                  onOpenMissions={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setActiveDrawer('missions');
+                  }}
+                  onOpenNotifications={() => {
+                    soundEngine.playClick();
+                    setNotifOpen(true);
+                  }}
+                  onOpenLeaderboard={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setLeaderboardModalOpen(true);
+                  }}
+                />
+              )}
+
+              {/* Controlled Patron Chat Panel */}
+              <PatronChatPanel
+                activeProvince={activeProvince}
+                messages={chatMessages}
+                open={patronChatOpen}
+                onOpenChange={setPatronChatOpen}
+                hideFloatingButton={true}
+                onSendMessage={handleSendChat}
+              />
+
+              {/* Slide-Over Detail Modal for Dashboard DETAY & Account Cards */}
+              <DashboardDetailModal
+                target={dashboardDetail}
+                state={empire}
+                quotes={stockQuotes}
+                metrics={dashboardMetrics}
+                now={now}
+                onClose={() => setDashboardDetail(null)}
+                onNavigateManage={(section) => handleSelectExecutiveNav(section)}
+                onOpenBanking={() => {
+                  closeAllInGameOverlays();
+                  setBankingModalOpen(true);
+                }}
+                onOpenAccounting={() => {
+                  closeAllInGameOverlays();
+                  setAccountingModalOpen(true);
+                }}
+                onOpenBorsa={() => {
+                  closeAllInGameOverlays();
+                  setBorsaMode('market');
+                  setBorsaModalOpen(true);
+                }}
+                onOpenFranchise={() => handleSelectManagementTab('franchise')}
+                onFocusBusinessOnMap={handleSelectOwnBusiness}
+              />
+
+              {/* Unified Modal Drawer for Piyasa Haberleri & Görevler */}
+              {activeDrawer && (
+                <SideDrawer
+                  tab={activeDrawer}
+                  state={empire}
+                  stockQuotes={stockQuotes}
+                  allBanks={allBanks}
+                  competitorBusinesses={competitorBusinesses}
+                  now={now}
+                  onClose={() => setActiveDrawer(null)}
+                  onSelectManagementTab={handleSelectManagementTab}
+                  onSelectBusiness={handleSelectOwnBusiness}
                   onEnterInterior={(id) => setInteriorBusinessId(id)}
                   onOpenHrModal={(id) => {
                     setHrInitialSubView('branches');
@@ -3413,78 +3585,25 @@ export default function App() {
                   onCloneBusiness={handleStartCloneBusiness}
                   onLaunchAdCampaign={handleLaunchAdCampaign}
                   onHireDoubleShift={handleHireDoubleShift}
-                  onOpenDayEndReport={() => setDayEndModalOpen(true)}
-                  onRestock={handleRestockBusiness}
-                  onInvestQuality={handleInvestBranchQuality}
-                  onCollect={handleCollectBusiness}
-                  onUpgrade={handleUpgradeBusiness}
-                  onBoost={handleBoostBusiness}
-                  onSell={handleSellBusiness}
-                  onClose={() => setSelectedBusinessId(null)}
-                />
-              ) : selectedCompetitor ? (
-                <CompetitorInspector
-                  competitor={selectedCompetitor}
-                  cash={empire.cash}
-                  ownBranchCount={empire.businesses.length}
-                  maxBranches={companyTier.maxBranches}
-                  hasBranchInCity={empire.businesses.some(
-                    (b) => b.cityPlate === selectedCompetitor.city_plate
-                  )}
-                  blitzActive={(empire.competitiveBlitzes ?? []).some(
-                    (bl) =>
-                      bl.targetRivalId === selectedCompetitor.id &&
-                      bl.endsAtGameMin > (empire.gameMinutes ?? 540)
-                  )}
-                  onTakeover={handleTakeoverCompetitor}
-                  onLaunchBlitz={handleLaunchCompetitiveBlitz}
-                  onOpenRivalsModal={() => {
-                    setSelectedCompetitorId(null);
-                    handleSelectManagementTab('rivals');
+                  onOpenDayEndReport={() => {
+                    setActiveDrawer(null);
+                    setDayEndModalOpen(true);
                   }}
-                  onClose={() => setSelectedCompetitorId(null)}
+                  onCollectBusiness={handleCollectBusiness}
+                  onCollectAll={handleCollectAll}
+                  onUpgradeBusiness={handleUpgradeBusiness}
+                  onRestockBusiness={handleRestockBusiness}
+                  onClaimMission={handleClaimMission}
+                  onEnablePinMode={() => {
+                    setActiveDrawer(null);
+                    setActiveNav('map');
+                    setPinDropMode(true);
+                    handleMapClick(activeProvince.lat, activeProvince.lng);
+                  }}
                 />
-              ) : null}
-            </div>
-          )}
-
-          {/* Unified MobileGameModal for Yönetim (İşletmelerim), Haberler & Görevler */}
-          {activeDrawer && (
-            <SideDrawer
-              tab={activeDrawer}
-              state={empire}
-              stockQuotes={stockQuotes}
-              allBanks={allBanks}
-              competitorBusinesses={competitorBusinesses}
-              now={now}
-              onClose={() => setActiveDrawer(null)}
-              onSelectManagementTab={handleSelectManagementTab}
-              onSelectBusiness={handleSelectOwnBusiness}
-              onEnterInterior={(id) => setInteriorBusinessId(id)}
-              onOpenHrModal={(id) => {
-                setHrInitialSubView('branches');
-                setHrTargetBusinessId(id);
-                handleSelectManagementTab('hr');
-              }}
-              onCloneBusiness={handleStartCloneBusiness}
-              onLaunchAdCampaign={handleLaunchAdCampaign}
-              onHireDoubleShift={handleHireDoubleShift}
-              onOpenDayEndReport={() => {
-                setActiveDrawer(null);
-                setDayEndModalOpen(true);
-              }}
-              onCollectBusiness={handleCollectBusiness}
-              onCollectAll={handleCollectAll}
-              onUpgradeBusiness={handleUpgradeBusiness}
-              onRestockBusiness={handleRestockBusiness}
-              onClaimMission={handleClaimMission}
-              onEnablePinMode={() => {
-                setActiveDrawer(null);
-                setPinDropMode(true);
-                handleMapClick(activeProvince.lat, activeProvince.lng);
-              }}
-            />
-          )}
+              )}
+            </main>
+          </div>
         </div>
       )}
 

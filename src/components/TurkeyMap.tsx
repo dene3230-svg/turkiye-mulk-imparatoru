@@ -69,6 +69,7 @@ interface TurkeyMapProps {
   onRemoteInsert?: (record: RemoteBusinessRecord) => void;
   onRemoteUpdate?: (record: RemoteBusinessRecord) => void;
   onRemoteDelete?: (id: string) => void;
+  isVisible?: boolean;
 }
 
 const TILE_URLS = {
@@ -131,6 +132,7 @@ export function TurkeyMap({
   onRemoteInsert,
   onRemoteUpdate,
   onRemoteDelete,
+  isVisible = true,
 }: TurkeyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -290,6 +292,23 @@ export function TurkeyMap({
     lastSigRef.current = portfolioSyncSig;
     syncWorldNowRef.current?.();
   }, [portfolioSyncSig]);
+
+  // Recalculate Leaflet viewport cleanly whenever the Map tab becomes visible
+  useEffect(() => {
+    if (!isVisible) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const raf = window.requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false });
+    });
+    const timer = window.setTimeout(() => {
+      map.invalidateSize({ animate: false });
+    }, 180);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [isVisible]);
 
   // Mount Leaflet map once
   useEffect(() => {

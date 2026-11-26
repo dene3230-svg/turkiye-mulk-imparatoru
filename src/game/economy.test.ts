@@ -146,6 +146,7 @@ import {
   toggleGeneralManagerAutoAds,
 } from './strategyEngine.ts';
 import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
+import { computeExecutiveDashboardMetrics } from './dashboardMetrics.ts';
 import {
   hashPassword,
   loginPlayerAccountWithAdapter,
@@ -608,7 +609,7 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.4.5');
+  assert.equal(APP_VERSION, '1.5.0');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2165,6 +2166,76 @@ test('v1.4.5 Unified Multiplayer Map Sync: deterministic UUID mapping, canonical
   );
   assert.equal(merged.length, 2);
   assert.ok(merged.every((r) => r.id !== uuidA));
+});
+
+test('v1.5.0 Executive Dashboard Metrics: 7-day charts, 4 selectable account cards & 3 operational cards', () => {
+  const now = 1_764_000_000_000;
+  const quotes = createInitialStockQuotes();
+  const baseState = createInitialEmpireState(now, 34);
+
+  // 1) Fresh state produces 7 chart points, 7 weekly trend bars, 4 account cards & zero NaN
+  const freshMetrics = computeExecutiveDashboardMetrics(baseState, quotes, now);
+  assert.equal(freshMetrics.incomeExpenseSeries.length, 7);
+  assert.equal(freshMetrics.weeklyTrends.length, 7);
+  assert.equal(freshMetrics.accountCards.length, 4);
+  assert.deepEqual(
+    freshMetrics.accountCards.map((c) => c.id),
+    ['cash', 'credit', 'investments', 'expenses']
+  );
+  assert.equal(freshMetrics.totalCash, baseState.cash);
+  assert.equal(freshMetrics.branchCount, 0);
+  assert.ok(Number.isFinite(freshMetrics.weeklyTrendDeltaPct));
+  assert.ok(Number.isFinite(freshMetrics.dailyCashDeltaPct));
+
+  // 2) Active empire with an operational branch & stock holding reflects real figures
+  const pin = resolvePinLocation(41.0368, 28.9932, 34);
+  const built = purchaseBusiness(
+    { ...baseState, cash: 25_000_000 },
+    'kafe',
+    pin,
+    'Karaköy Kahve',
+    { id: 'u1', name: 'Patron' },
+    [],
+    now
+  );
+  assert.equal(built.ok, true);
+  assert.ok(built.business);
+  const operationalState = {
+    ...built.state,
+    businesses: built.state.businesses.map((b) => ({
+      ...b,
+      constructionDaysRemaining: 0,
+      employees: [
+        {
+          id: 'emp-1',
+          name: 'Deniz',
+          role: 'calisan' as const,
+          roleTitle: 'Barista',
+          stars: 4 as const,
+          speed: 82,
+          efficiency: 85,
+          leadership: 60,
+          hourlySalary: 220,
+          dailyWage: 1_200,
+          dailyEmployerSgk: 270,
+          hireCost: 12_000,
+          hiredAt: now,
+        },
+      ],
+    })),
+    stockPortfolio: [{ ticker: quotes[0].ticker, shares: 100, avgCost: quotes[0].price }],
+  };
+  const activeMetrics = computeExecutiveDashboardMetrics(operationalState, quotes, now);
+  assert.equal(activeMetrics.branchCount, 1);
+  assert.ok(activeMetrics.avgServiceQuality > 0);
+  assert.ok(activeMetrics.dailyEstimatedRevenue > 0);
+  assert.ok(activeMetrics.dailyOperatingExpenses > 0);
+  assert.ok(activeMetrics.stockPortfolioValue > 0);
+  assert.ok(activeMetrics.investmentsTotal > activeMetrics.stockPortfolioValue);
+  assert.equal(activeMetrics.accountCards[0].title, 'ANA İŞLETME KASASI');
+  assert.equal(activeMetrics.accountCards[1].title, 'TİCARİ KREDİ & BANKA');
+  assert.equal(activeMetrics.accountCards[2].title, 'YATIRIM & BORSA');
+  assert.equal(activeMetrics.accountCards[3].title, 'OPERASYON GİDERİ');
 });
 
 

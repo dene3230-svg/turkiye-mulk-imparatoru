@@ -49,10 +49,12 @@ export const DayEndReportModal: React.FC<DayEndReportModalProps> = ({
   const currentReport: DayEndSummary | null =
     activeList.find((r) => r.id === selectedId) ?? activeList[0] ?? null;
 
-  const totalPendingNet = pendingReports.reduce((s, r) => s + r.manualCollectibleNet, 0);
-  const lossBranchesCount = currentReport
-    ? currentReport.branchLines.filter((l) => l.isLoss).length
-    : 0;
+  const totalPendingNet = pendingReports.reduce(
+    (s, r) => s + (typeof r?.manualCollectibleNet === 'number' && Number.isFinite(r.manualCollectibleNet) ? r.manualCollectibleNet : 0),
+    0
+  );
+  const currentBranchLines = Array.isArray(currentReport?.branchLines) ? currentReport.branchLines : [];
+  const lossBranchesCount = currentBranchLines.filter((l) => l.isLoss).length;
 
   return (
     <div
@@ -223,23 +225,23 @@ export const DayEndReportModal: React.FC<DayEndReportModalProps> = ({
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
                     <Building2 className="w-3.5 h-3.5 text-amber-400" />
-                    Şube Bazlı Gün Sonu Kâr / Zarar Dökümü ({currentReport.branchLines.length})
+                    Şube Bazlı Gün Sonu Kâr / Zarar Dökümü ({currentBranchLines.length})
                   </h3>
-                  {currentReport.autoSettledNet !== 0 && (
+                  {(currentReport.autoSettledNet ?? 0) !== 0 && (
                     <span className="text-[11px] font-semibold text-sky-300">
-                      Müdür Oto-Aktarım: {currentReport.autoSettledNet >= 0 ? '+' : ''}
-                      {formatTL(currentReport.autoSettledNet)}
+                      Müdür Oto-Aktarım: {(currentReport.autoSettledNet ?? 0) >= 0 ? '+' : ''}
+                      {formatTL(currentReport.autoSettledNet ?? 0)}
                     </span>
                   )}
                 </div>
 
-                {currentReport.branchLines.length === 0 ? (
+                {currentBranchLines.length === 0 ? (
                   <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-xs text-slate-400 text-center">
                     Bu gün aktif şube hareketi bulunmuyor.
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    {currentReport.branchLines.map((line) => (
+                    {currentBranchLines.map((line) => (
                       <div
                         key={line.businessId}
                         className={`rounded-xl border p-2.5 sm:p-3 transition-colors ${
