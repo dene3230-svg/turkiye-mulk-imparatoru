@@ -14,11 +14,56 @@ import {
   calculatePersonalAssetsValuation,
   OFFICE_TIERS,
 } from './officeEngine';
-import { getCreditTier } from './bankingEngine';
-import { getBlueprintById } from './catalog';
+import {
+  BANK_MIN_BRAND_RECOGNITION,
+  BANK_MIN_OFFICE_PRESTIGE,
+  BANK_MIN_OPERATING_DAYS,
+  getCreditTier,
+} from './bankingEngine';
+import { getBlueprintById, IPO_MIN_NET_WORTH } from './catalog';
+import { checkIpoEligibility } from './stockMarket';
 
 export type AccountCardId = 'cash' | 'credit' | 'investments' | 'expenses';
 export type OperationCardId = 'businesses' | 'office' | 'growth';
+
+export interface MiniIncomeExpenseBar {
+  label: string;
+  income: number;
+  expense: number;
+  incomePct: number;
+  expensePct: number;
+}
+
+export interface FinanceCommandMetrics {
+  // Column 1: Banking & Commercial Credit
+  creditEligibilityPct: number;
+  creditUnlocked: boolean;
+  creditBrandPassed: boolean;
+  creditPrestigePassed: boolean;
+  creditProfitabilityPassed: boolean;
+  creditTenurePassed: boolean;
+  creditLockSummary: string;
+  // Column 2: Accounting, Taxes & 00:00 Day-End
+  unpaidTaxCount: number;
+  unpaidTaxTotal: number;
+  accountingAutoActive: boolean;
+  miniBars: MiniIncomeExpenseBar[];
+  pendingDayEndCount: number;
+  pendingDayEndNetCash: number;
+  accruedTodayNetCash: number;
+  archivedDayEndCount: number;
+  // Column 3: BIST & IPO
+  stockPositionCount: number;
+  bistIndexValue: number;
+  bistDailyChangePct: number;
+  bistSparklinePoints: number[];
+  ipoListedTicker: string | null;
+  ipoEligible: boolean;
+  ipoNetWorth: number;
+  ipoTargetNetWorth: number;
+  ipoNetWorthPct: number;
+  ipoStatusText: string;
+}
 
 export interface IncomeExpensePoint {
   label: string;
@@ -494,3 +539,214 @@ export function computeExecutiveDashboardMetrics(
     tierProgressPct,
   };
 }
+
+/**
+ * Pure deterministic selector for the v1.5.2 3-column Finans, Bankalar & Borsa Command Center.
+ */
+export function computeFinanceCommandMetrics(
+  state: EmpireState,
+  quotes: StockQuote[],
+  execMetrics: ExecutiveDashboardMetrics,
+  now: number
+): FinanceCommandMetrics {
+  const safeCash = safeNum(state.cash, 0);
+  const safeCreditScore = Math.round(safeNum(state.creditScore, 1100));
+  const currentGameDay = Math.max(1, Math.floor(safeNum(state.gameMinutes, 540) / 1440) + 1);
+  const brand = Math.max(0, Math.min(100, safeNum(state.brandRecognition, 5)));
+  const officePrestige = Math.max(0, Math.min(100, safeNum(execMetrics.officePrestige, 10)));
+
+  // Latest closed day report (pending or archived)
+  const allReports = [
+    ...(state.pendingDayEndReports ?? []),
+    ...(state.dayEndHistory ?? []),
+  ].filter((r): r is NonNullable<typeof r> => Boolean(r && typeof r === 'object'));
+  const latestReport =
+    [...allReports].sort((a, b) => safeNum(b.completedDay, 0) - safeNum(a.completedDay, 0))[0] ??
+    null;
+
+  const creditBrandPassed = brand >= BANK_MIN_BRAND_RECOGNITION;
+  const creditPrestigePassed = officePrestige >= BANK_MIN_OFFICE_PRESTIGE;
+  const creditProfitabilityPassed =
+    safeCash >= 0 && latestReport !== null && safeNum(latestReport.dailyNetCashFlow, 0) > 0;
+  const creditTenurePassed = currentGameDay >= BANK_MIN_OPERATING_DAYS;
+  const creditScorePassed = safeCreditScore >= 700;
+
+  const creditUnlocked =
+    creditBrandPassed &&
+    creditPrestigePassed &&
+    creditProfitabilityPassed &&
+    creditTenurePassed &&
+    creditScorePassed;
+
+  // Weighted progress across the real strict bank audit gates
+  const brandWeight = Math.min(1, brand / Math.max(1, BANK_MIN_BRAND_RECOGNITION)) * 30;
+  const prestigeWeight = Math.min(1, officePrestige / Math.max(1, BANK_MIN_OFFICE_PRESTIGE)) * 25;
+  const liveNetDaily = execMetrics.dailyEstimatedRevenue - execMetrics.dailyOperatingExpenses;
+  const profitWeight = creditProfitabilityPassed
+    ? 25
+    : safeCash >= 0 && liveNetDaily > 0
+    ? 10
+    : 0;
+  const tenureWeight = Math.min(1, currentGameDay / Math.max(1, BANK_MIN_OPERATING_DAYS)) * 20;
+
+  const rawEligibilityPct = Math.round(brandWeight + prestigeWeight + profitWeight + tenureWeight);
+  const creditEligibilityPct = creditUnlocked
+    ? 100
+    : Math.max(6, Math.min(92, rawEligibilityPct));
+
+  let creditLockSummary = 'Tüm Kredi Şartları Sağlandı · Kullanıma Hazır';
+  if (!creditUnlocked) {
+    const missing: string[] = [];
+    if (!creditBrandPassed) missing.push(`Tanınırlık %${Math.round(brand)}/%${BANK_MIN_BRAND_RECOGNITION}`);
+    if (!creditProfitabilityPassed) {
+      missing.push(safeCash < 0 ? 'Eksi Kasa' : 'Pozitif Bilanço');
+    }
+    if (!creditPrestigePassed) missing.push(`Prestij ${officePrestige}/${BANK_MIN_OFFICE_PRESTIGE}`);
+    if (!creditTenurePassed) missing.push(`${currentGameDay}/${BANK_MIN_OPERATING_DAYS} Gün`);
+    if (!creditScorePassed) missing.push('Kara Liste');
+    creditLockSummary = `Kilitli · ${missing.slice(0, 2).join(' & ')}`;
+  }
+
+  // Column 2: Accounting, Taxes & Mini Income-Expense Bars (last 4 periods)
+  const unpaidTaxes = (state.pendingTaxes ?? []).filter((t) => t.status !== 'paid');
+  const unpaidTaxCount = unpaidTaxes.length;
+  const unpaidTaxTotal = Math.round(
+    unpaidTaxes.reduce((sum, t) => sum + Math.max(0, safeNum(t.amount, 0)), 0)
+  );
+  const accountingAutoActive = Boolean(state.accountant);
+
+  const recent4 = (execMetrics.incomeExpenseSeries ?? []).slice(-4);
+  const maxVal = Math.max(
+    1,
+    ...recent4.flatMap((p) => [Math.max(0, safeNum(p.income, 0)), Math.max(0, safeNum(p.expense, 0))])
+  );
+  const allZeroBars = recent4.every((p) => p.income <= 0 && p.expense <= 0);
+  const miniBars: MiniIncomeExpenseBar[] = recent4.map((p, idx) => {
+    if (allZeroBars) {
+      // Subtle baseline silhouette for brand-new firms with zero turnover yet
+      const baseInc = [38, 48, 42, 54][idx] ?? 44;
+      const baseExp = [24, 30, 26, 28][idx] ?? 26;
+      return {
+        label: p.label,
+        income: 0,
+        expense: 0,
+        incomePct: baseInc,
+        expensePct: baseExp,
+      };
+    }
+    return {
+      label: p.label,
+      income: Math.max(0, Math.round(safeNum(p.income, 0))),
+      expense: Math.max(0, Math.round(safeNum(p.expense, 0))),
+      incomePct: Math.max(16, Math.min(100, Math.round((Math.max(0, p.income) / maxVal) * 86) + 14)),
+      expensePct: Math.max(
+        14,
+        Math.min(100, Math.round((Math.max(0, p.expense) / maxVal) * 86) + 14)
+      ),
+    };
+  });
+
+  // 00:00 Day-End pending & live accrued net cash
+  const pendingReports = state.pendingDayEndReports ?? [];
+  const pendingDayEndCount = pendingReports.length;
+  const pendingDayEndNetCash = Math.round(
+    pendingReports.reduce(
+      (sum, r) => sum + safeNum(r.manualCollectibleNet, safeNum(r.dailyNetCashFlow, 0)),
+      0
+    )
+  );
+  const accruedGross = (state.businesses ?? []).reduce(
+    (s, b) => s + Math.max(0, safeNum(b.dailyAccruedGross, 0)),
+    0
+  );
+  const accruedTodayNetCash =
+    accruedGross > 0
+      ? Math.round(accruedGross - execMetrics.dailyOperatingExpenses * 0.5)
+      : Math.round(execMetrics.dailyEstimatedRevenue - execMetrics.dailyOperatingExpenses);
+  const archivedDayEndCount = (state.dayEndHistory ?? []).length;
+
+  // Column 3: BIST 100 live index sparkline & IPO readiness
+  const stockPositionCount = (state.stockPortfolio ?? []).filter(
+    (h) => safeNum(h.shares, 0) > 0
+  ).length;
+  const bistQuotes = (quotes ?? []).filter((q) => !q.isPlayerIpo);
+  const activeQuotes = bistQuotes.length > 0 ? bistQuotes : quotes ?? [];
+
+  let sumOpen = 0;
+  let sumPrice = 0;
+  for (const q of activeQuotes) {
+    sumOpen += Math.max(1, safeNum(q.openPrice, q.price));
+    sumPrice += Math.max(1, safeNum(q.price, 1));
+  }
+  const indexRatio = sumOpen > 0 ? sumPrice / sumOpen : 1;
+  const bistIndexValue = Math.round(10_240 * indexRatio);
+  const bistDailyChangePct = Number(((indexRatio - 1) * 100).toFixed(2));
+
+  // Build 12-point BIST composite sparkline from real quote histories
+  const sparkLen = 12;
+  const compositeSeries: number[] = [];
+  for (let i = 0; i < sparkLen; i += 1) {
+    let ptSum = 0;
+    let ptCount = 0;
+    for (const q of activeQuotes) {
+      const hist = Array.isArray(q.history) && q.history.length > 0 ? q.history : [q.price];
+      const idx = Math.min(
+        hist.length - 1,
+        Math.max(0, Math.round((i / Math.max(1, sparkLen - 1)) * (hist.length - 1)))
+      );
+      const base = Math.max(1, safeNum(q.openPrice, hist[0] ?? 1));
+      ptSum += safeNum(hist[idx], base) / base;
+      ptCount += 1;
+    }
+    compositeSeries.push(ptCount > 0 ? ptSum / ptCount : 1);
+  }
+  const minSpark = Math.min(...compositeSeries);
+  const maxSpark = Math.max(...compositeSeries);
+  const spanSpark = Math.max(0.002, maxSpark - minSpark);
+  const bistSparklinePoints = compositeSeries.map((v) =>
+    Math.round(16 + ((v - minSpark) / spanSpark) * 76)
+  );
+
+  // IPO readiness (Net Worth vs ₺250 Mn + Brand Recognition)
+  const ipoNetWorth = Math.max(0, Math.round(safeNum(calculateNetWorth(state, now, quotes), safeCash)));
+  const ipoCheck = checkIpoEligibility(state, ipoNetWorth);
+  const ipoListedTicker = state.playerIpo?.ticker ?? null;
+  const ipoNetWorthPct = Math.min(
+    100,
+    Math.max(0, Math.round((ipoNetWorth / Math.max(1, IPO_MIN_NET_WORTH)) * 100))
+  );
+  const ipoStatusText = ipoListedTicker
+    ? `Halka Açık: ${ipoListedTicker} (BIST)`
+    : ipoCheck.eligible
+    ? 'Halka Arza Uygun · IPO Hazır'
+    : `IPO · Tanınırlık %${Math.round(brand)}`;
+
+  return {
+    creditEligibilityPct,
+    creditUnlocked,
+    creditBrandPassed,
+    creditPrestigePassed,
+    creditProfitabilityPassed,
+    creditTenurePassed,
+    creditLockSummary,
+    unpaidTaxCount,
+    unpaidTaxTotal,
+    accountingAutoActive,
+    miniBars,
+    pendingDayEndCount,
+    pendingDayEndNetCash,
+    accruedTodayNetCash,
+    archivedDayEndCount,
+    stockPositionCount,
+    bistIndexValue,
+    bistDailyChangePct,
+    bistSparklinePoints,
+    ipoListedTicker,
+    ipoEligible: ipoCheck.eligible,
+    ipoNetWorth,
+    ipoTargetNetWorth: IPO_MIN_NET_WORTH,
+    ipoNetWorthPct,
+    ipoStatusText,
+  };
+}
+

@@ -1,11 +1,11 @@
 {
-  "version": "1.5.1",
+  "version": "1.5.2",
   "buildDate": "2026-11-26",
   "mandatory": false,
   "notes": [
+    "Finans, Bankalar & Borsa sekmesi 3 sütunlu gelişmiş komuta merkezi tasarımına güncellendi",
     "Ofisim & Prestij Yönetimi sekmesi yeni 3 sütunlu modern arayüzle eklendi",
     "Modern 3 sütunlu yatay yönetici kontrol paneli ve yeni minimalist arayüz tasarımı eklendi",
-    "Çok oyunculu harita işletme eşitlemesi eklendi",
-    "Google girişi kaldırıldı; kullanıcı adı, şifre ve zorunlu görünen isim ile hesap sistemi ve ayarlar menüsüne Ana Menüye Dön butonu eklendi"
+    "Çok oyunculu harita işletme eşitlemesi eklendi"
   ]
 }

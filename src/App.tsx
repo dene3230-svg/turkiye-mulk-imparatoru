@@ -593,6 +593,7 @@ export default function App() {
   const [borsaModalOpen, setBorsaModalOpen] = useState(false);
   const [borsaMode, setBorsaMode] = useState<'market' | 'portfolio'>('market');
   const [bankingModalOpen, setBankingModalOpen] = useState(false);
+  const [bankingInitialTab, setBankingInitialTab] = useState<'loans' | 'own-bank'>('loans');
   const [accountingModalOpen, setAccountingModalOpen] = useState(false);
   const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
   const [hubMenuOpen, setHubMenuOpen] = useState(false);
@@ -3458,9 +3459,12 @@ export default function App() {
                 <FinansWorkspace
                   state={empire}
                   metrics={dashboardMetrics}
-                  onOpenBanking={() => {
+                  stockQuotes={stockQuotes}
+                  now={now}
+                  onOpenBanking={(tab = 'loans') => {
                     soundEngine.playClick();
                     closeAllInGameOverlays();
+                    setBankingInitialTab(tab);
                     setBankingModalOpen(true);
                   }}
                   onOpenAccounting={() => {
@@ -3485,6 +3489,7 @@ export default function App() {
                     closeAllInGameOverlays();
                     setDayEndModalOpen(true);
                   }}
+                  onCollectDayEndAll={handleCollectDayEndAll}
                 />
               )}
 
@@ -3746,6 +3751,7 @@ export default function App() {
 
       <BankingModal
         open={bankingModalOpen}
+        initialSubTab={bankingInitialTab}
         state={empire}
         allBanks={allBanks}
         activeProvince={activeProvince}

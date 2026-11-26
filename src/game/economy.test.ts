@@ -152,7 +152,10 @@ import {
   toggleGeneralManagerAutoAds,
 } from './strategyEngine.ts';
 import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
-import { computeExecutiveDashboardMetrics } from './dashboardMetrics.ts';
+import {
+  computeExecutiveDashboardMetrics,
+  computeFinanceCommandMetrics,
+} from './dashboardMetrics.ts';
 import {
   hashPassword,
   loginPlayerAccountWithAdapter,
@@ -615,7 +618,7 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.5.1');
+  assert.equal(APP_VERSION, '1.5.2');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2300,6 +2303,108 @@ test('v1.5.1 Ofisim & Prestij Yönetimi: 4 Equipment Upgrades (Sv.1-Sv.10), Real
   const maxAttempt = upgradeOfficeEquipment(maxedState, 'exec_desk', now + 50);
   assert.equal(maxAttempt.ok, false);
 });
+
+test('v1.5.2 Finans, Bankalar & Borsa 3-Column Command Center: Credit Eligibility Lock/Unlock, Mini Bars, 00:00 Pending Cash & BIST/IPO Sparkline', () => {
+  const now = 3_200_000;
+  const quotes = createInitialStockQuotes();
+
+  // 1) Brand-new firm: credit is LOCKED, 4 mini bars, 12 BIST sparkline points, IPO locked
+  const freshState = createInitialEmpireState(now, 34);
+  const freshExec = computeExecutiveDashboardMetrics(freshState, quotes, now);
+  const freshFin = computeFinanceCommandMetrics(freshState, quotes, freshExec, now);
+
+  assert.equal(freshFin.creditUnlocked, false, 'New firm must have commercial credit locked');
+  assert.ok(freshFin.creditEligibilityPct >= 6 && freshFin.creditEligibilityPct < 100);
+  assert.ok(freshFin.creditLockSummary.startsWith('Kilitli'));
+  assert.equal(freshFin.miniBars.length, 4);
+  assert.equal(freshFin.bistSparklinePoints.length, 12);
+  assert.ok(freshFin.bistIndexValue > 5_000);
+  assert.ok(Number.isFinite(freshFin.bistDailyChangePct));
+  assert.equal(freshFin.ipoEligible, false);
+  assert.equal(freshFin.ipoTargetNetWorth, IPO_MIN_NET_WORTH);
+  assert.equal(freshFin.accountingAutoActive, false);
+
+  // 2) Mature profitable firm with pending 00:00 day-end cash, unpaid tax, stocks & high office prestige
+  const matureState = {
+    ...freshState,
+    cash: 320_000_000,
+    creditScore: 1450,
+    gameMinutes: 25 * 1440,
+    brandRecognition: 42,
+    officeTierId: 'bosphorus_suite' as const,
+    accountant: {
+      id: 'acc-1',
+      name: 'Selin Y.',
+      title: 'Baş Muhasebeci',
+      stars: 4 as const,
+      taxOptimizationRate: 0.08,
+      hourlySalary: 500,
+      hireCost: 45_000,
+      hiredAt: now,
+    },
+    pendingTaxes: [
+      {
+        id: 'tax-1',
+        monthNumber: 1,
+        dueGameDay: 30,
+        amount: 245_000,
+        breakdown: {
+          kdv: 100_000,
+          sgkStopaj: 65_000,
+          corporateTax: 55_000,
+          municipalTax: 25_000,
+          totalTax: 245_000,
+        },
+        overdueDays: 0,
+        status: 'pending' as const,
+        createdAt: now,
+      },
+    ],
+    pendingDayEndReports: [
+      {
+        id: 'de-24',
+        completedDay: 24,
+        month: 1,
+        dayOfMonth: 24,
+        dailyGrossRevenue: 1_200_000,
+        dailySupplyCost: 420_000,
+        dailyUtilitiesAndRent: 180_000,
+        dailySalariesPaid: 150_000,
+        dailyNetCashFlow: 450_000,
+        manualCollectibleNet: 450_000,
+        autoSettledNet: 0,
+        creditScoreDelta: 12,
+        weeklyDividendPaid: 0,
+        monthlyClosing: null,
+        branchLines: [],
+        collected: false,
+      },
+    ],
+    stockPortfolio: [{ ticker: quotes[0].ticker, shares: 500, avgCost: quotes[0].price }],
+  };
+  const matureExec = computeExecutiveDashboardMetrics(matureState, quotes, now);
+  const matureFin = computeFinanceCommandMetrics(matureState, quotes, matureExec, now);
+
+  assert.equal(matureFin.creditUnlocked, true, 'Mature profitable firm must unlock commercial credit');
+  assert.equal(matureFin.creditEligibilityPct, 100);
+  assert.equal(matureFin.unpaidTaxCount, 1);
+  assert.equal(matureFin.unpaidTaxTotal, 245_000);
+  assert.equal(matureFin.accountingAutoActive, true);
+  assert.equal(matureFin.pendingDayEndCount, 1);
+  assert.equal(matureFin.pendingDayEndNetCash, 450_000);
+  assert.equal(matureFin.stockPositionCount, 1);
+  assert.equal(matureFin.ipoNetWorthPct, 100);
+
+  // 3) Settling pending day-end cash transfers 450k into cash and clears pending count
+  const settled = collectDayEndReport(matureState, undefined, now + 100);
+  assert.equal(settled.ok, true);
+  assert.equal(settled.state.cash, matureState.cash + 450_000);
+  const postSettleExec = computeExecutiveDashboardMetrics(settled.state, quotes, now + 100);
+  const postSettleFin = computeFinanceCommandMetrics(settled.state, quotes, postSettleExec, now + 100);
+  assert.equal(postSettleFin.pendingDayEndCount, 0);
+  assert.equal(postSettleFin.pendingDayEndNetCash, 0);
+});
+
 
 
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Landmark,
   ShieldAlert,
@@ -33,6 +33,7 @@ import { BrandLogo } from './BrandLogo';
 
 interface BankingModalProps {
   open: boolean;
+  initialSubTab?: 'loans' | 'own-bank';
   state: EmpireState;
   allBanks: BankRecord[];
   activeProvince: ProvinceInfo;
@@ -75,6 +76,7 @@ const TERM_OPTIONS = [3, 6, 12];
 
 export function BankingModal({
   open,
+  initialSubTab = 'loans',
   state,
   allBanks,
   activeProvince,
@@ -90,7 +92,14 @@ export function BankingModal({
   onSwitchToInvestments,
   onClose,
 }: BankingModalProps) {
-  const [subTab, setSubTab] = useState<'loans' | 'own-bank'>('loans');
+  const [subTab, setSubTab] = useState<'loans' | 'own-bank'>(initialSubTab);
+
+  useEffect(() => {
+    if (open) {
+      setSubTab(initialSubTab);
+    }
+  }, [open, initialSubTab]);
+
   const [selectedBankId, setSelectedBankId] = useState<string>(allBanks[0]?.id ?? '');
   const [loanAmount, setLoanAmount] = useState<number>(500_000);
   const [termMonths, setTermMonths] = useState<number>(6);
@@ -162,7 +171,7 @@ export function BankingModal({
   const holdingCount = (state.stockPortfolio ?? []).filter((h) => h.shares > 0).length;
 
   const canOpenOwnBank = Boolean(state.ownBank) || netWorth >= BANK_MIN_NET_WORTH;
-  const effectiveSubTab = subTab === 'own-bank' && !canOpenOwnBank ? 'loans' : subTab;
+  const effectiveSubTab = subTab;
 
   const canBorrow = Boolean(selectedBank) && Boolean(eligibility?.eligible);
 
@@ -217,18 +226,17 @@ export function BankingModal({
               <button
                 type="button"
                 data-testid="bank-tab-own"
-                disabled={!canOpenOwnBank}
                 title={
                   !canOpenOwnBank
                     ? `BDDK şartı: Kendi bankanızı kurmak için ₺5 Milyar net değer gerekir (Mevcut: ${formatTL(netWorth, true)})`
                     : undefined
                 }
-                onClick={() => canOpenOwnBank && setSubTab('own-bank')}
+                onClick={() => setSubTab('own-bank')}
                 className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
-                  !canOpenOwnBank
-                    ? 'cursor-not-allowed border-slate-700/80 bg-slate-900/70 text-slate-500 opacity-70'
-                    : effectiveSubTab === 'own-bank'
+                  effectiveSubTab === 'own-bank'
                     ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
+                    : !canOpenOwnBank
+                    ? 'border-amber-500/35 bg-amber-500/10 text-amber-200/85 hover:border-amber-400/60 hover:bg-amber-500/15'
                     : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
                 }`}
               >
@@ -832,6 +840,45 @@ export function BankingModal({
             >
               Banka Politikalarını & Sermayeyi Güncelle
             </button>
+          </section>
+        ) : !canOpenOwnBank ? (
+          <section
+            data-testid="own-bank-locked-card"
+            className="rounded-xl border border-amber-500/40 bg-slate-900/85 p-4 space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-amber-300">
+                <Lock className="h-4 w-4" />
+                <h3 className="text-sm font-black text-white">
+                  Kendi Bankanı Kur — BDDK ₺5 Milyar Şartı
+                </h3>
+              </div>
+              <span className="rounded-full border border-amber-400/40 bg-amber-500/15 px-2.5 py-0.5 font-mono-num text-xs font-bold text-amber-300">
+                %{Math.min(100, Math.round((Math.max(0, netWorth) / BANK_MIN_NET_WORTH) * 100))}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">
+              BDDK mevzuatı gereği kendi bankanızı kurmak için toplam holding net değerinizin en az{' '}
+              <strong className="text-amber-300">{formatTL(BANK_MIN_NET_WORTH)}</strong> olması gerekir.
+              Ayrıca kuruluşta <strong className="text-white">{formatTL(BANK_LICENSE_COST, true)}</strong> lisans ve en az{' '}
+              <strong className="text-white">{formatTL(BANK_MIN_POOL_CAPITAL, true)}</strong> kredi havuzu gerekir.
+            </p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Mevcut Net Değer</span>
+                <span className="font-mono-num font-bold text-white">
+                  {formatTL(netWorth)} / {formatTL(BANK_MIN_NET_WORTH)}
+                </span>
+              </div>
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-300"
+                  style={{
+                    width: `${Math.max(3, Math.min(100, (Math.max(0, netWorth) / BANK_MIN_NET_WORTH) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
           </section>
         ) : (
           /* Create Own Bank Form (Only reachable when netWorth >= ₺5 Milyar) */

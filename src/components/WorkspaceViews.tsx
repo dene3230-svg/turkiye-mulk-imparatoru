@@ -7,6 +7,7 @@ import {
   Hammer,
   Landmark,
   Link2,
+  Lock,
   MapPin,
   Presentation,
   ShieldCheck,
@@ -25,8 +26,12 @@ import type {
   OfficeEquipmentId,
   OfficeTierId,
   RemoteBusinessRecord,
+  StockQuote,
 } from '../types/game';
-import type { ExecutiveDashboardMetrics } from '../game/dashboardMetrics';
+import {
+  computeFinanceCommandMetrics,
+  type ExecutiveDashboardMetrics,
+} from '../game/dashboardMetrics';
 import {
   calculateBusinessHourlyIncome,
   formatTL,
@@ -45,181 +50,528 @@ import {
 import { OfficeInteriorPreview } from './OfficeInteriorPreview';
 
 /* ============================================================================
-   1. FINANS WORKSPACE (Bankalar, Krediler, Bilanço, Borsa, 00:00 Gün Sonu)
+   1. FINANS WORKSPACE (3 Sütunlu Finans, Bankalar & Borsa Komuta Merkezi)
    ============================================================================ */
 interface FinansWorkspaceProps {
   state: EmpireState;
   metrics: ExecutiveDashboardMetrics;
-  onOpenBanking: () => void;
+  stockQuotes: StockQuote[];
+  now: number;
+  onOpenBanking: (tab?: 'loans' | 'own-bank') => void;
   onOpenAccounting: () => void;
   onOpenBorsa: () => void;
   onOpenInvestments: () => void;
   onOpenDayEnd: () => void;
+  onCollectDayEndAll: () => void;
+}
+
+function buildSparklineGeometry(points: number[], width: number, height: number) {
+  const safe = points.length >= 2 ? points : [40, 45, 42, 55, 50, 62];
+  const padX = 4;
+  const padY = 5;
+  const usableW = width - padX * 2;
+  const usableH = height - padY * 2;
+
+  const coords = safe.map((val, idx) => {
+    const x = padX + (idx / Math.max(1, safe.length - 1)) * usableW;
+    const clamped = Math.max(5, Math.min(100, val));
+    const y = padY + (1 - clamped / 100) * usableH;
+    return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+  });
+
+  const linePath = coords
+    .map((c, idx) => `${idx === 0 ? 'M' : 'L'} ${c.x} ${c.y}`)
+    .join(' ');
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  const areaPath = `${linePath} L ${last.x} ${height} L ${first.x} ${height} Z`;
+
+  return { linePath, areaPath, last };
 }
 
 export function FinansWorkspace({
   state,
   metrics,
+  stockQuotes,
+  now,
   onOpenBanking,
   onOpenAccounting,
   onOpenBorsa,
   onOpenInvestments,
   onOpenDayEnd,
+  onCollectDayEndAll,
 }: FinansWorkspaceProps) {
-  const unpaidTaxes = (state.pendingTaxes ?? []).filter((t) => t.status !== 'paid');
-  const pendingDayEndCount = (state.pendingDayEndReports ?? []).length;
+  const fm = computeFinanceCommandMetrics(state, stockQuotes, metrics, now);
+  const spark = buildSparklineGeometry(fm.bistSparklinePoints, 220, 52);
+  const bistUp = fm.bistDailyChangePct >= 0;
 
   return (
     <section
       aria-label="Finans Kontrol Merkezi"
       data-testid="workspace-finance"
-      className="panel-scroll h-full w-full p-3 lg:p-5"
+      className="flex h-full min-h-0 w-full flex-col gap-2 overflow-y-auto px-2.5 py-2 min-[680px]:overflow-hidden lg:gap-3 lg:px-4 lg:py-3"
     >
-      <div className="mx-auto max-w-6xl space-y-3 lg:space-y-4">
-        {/* Compact KPI Strip */}
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <div className="rounded-2xl border border-cyan-500/25 bg-[#111B30]/85 p-3">
-            <div className="text-[11px] text-slate-400">Toplam Likit Kasa</div>
-            <div
-              className={`mt-1 font-mono-num text-base font-extrabold lg:text-lg ${
-                metrics.totalCash < 0 ? 'text-rose-400' : 'text-white'
-              }`}
-            >
-              {formatTL(metrics.totalCash)}
-            </div>
+      {/* 1. TOP COMPACT KPI STRIP (4 BOXES) */}
+      <div
+        data-testid="finance-kpi-strip"
+        className="grid shrink-0 grid-cols-2 gap-1.5 min-[680px]:grid-cols-4 lg:gap-3"
+      >
+        <div className="rounded-2xl border border-cyan-500/30 bg-[#101B30]/88 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+          <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
+            Toplam Likit Kasa
           </div>
-          <div className="rounded-2xl border border-amber-500/25 bg-[#111B30]/85 p-3">
-            <div className="text-[11px] text-slate-400">Kredi Puanı & Aktif Borç</div>
-            <div className="mt-1 font-mono-num text-base font-extrabold text-amber-300 lg:text-lg">
-              {state.creditScore} · {formatTL(metrics.activeLoanDebt, true)}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-indigo-500/25 bg-[#111B30]/85 p-3">
-            <div className="text-[11px] text-slate-400">Borsa & Yatırım Portföyü</div>
-            <div className="mt-1 font-mono-num text-base font-extrabold text-indigo-300 lg:text-lg">
-              {formatTL(metrics.stockPortfolioValue)}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-rose-500/25 bg-[#111B30]/85 p-3">
-            <div className="text-[11px] text-slate-400">Günlük Operasyon Gideri</div>
-            <div className="mt-1 font-mono-num text-base font-extrabold text-rose-300 lg:text-lg">
-              {formatTL(metrics.dailyOperatingExpenses)}
-            </div>
+          <div
+            data-testid="finance-kpi-cash"
+            className={`mt-0.5 truncate font-mono-num text-xs font-extrabold lg:mt-1 lg:text-lg ${
+              metrics.totalCash < 0 ? 'text-rose-400' : 'text-white'
+            }`}
+          >
+            {formatTL(metrics.totalCash)}
           </div>
         </div>
 
-        {/* 4 Financial Modules */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            data-testid="finance-card-banking"
-            onClick={onOpenBanking}
-            className="flex flex-col justify-between rounded-2xl border border-amber-400/30 bg-gradient-to-br from-[#2B2412]/90 to-[#111B30]/90 p-4 text-left transition-all hover:border-amber-300/70"
+        <div className="rounded-2xl border border-amber-400/35 bg-gradient-to-r from-[#211E17]/90 to-[#181728]/90 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+          <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
+            Kredi Puanı & Aktif Borç
+          </div>
+          <div
+            data-testid="finance-kpi-credit"
+            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-amber-300 lg:mt-1 lg:text-lg"
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-400/35 bg-amber-500/15 text-amber-300">
-                <Landmark className="h-5 w-5" />
-              </div>
-              <span className="font-mono-num text-xs font-bold text-amber-300">
-                Limit {formatTL(metrics.availableCreditLimit, true)}
-              </span>
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-extrabold text-white">Bankalar & Ticari Krediler</h3>
-              <p className="mt-1 text-xs text-slate-300">
-                Sıkı kredi denetimi, aylık taksit ödemeleri, teminat yönetimi ve kendi bankanı kurma.
-              </p>
-            </div>
-            <div className="mt-3 flex items-center justify-between border-t border-slate-700/60 pt-2.5 text-[11px] font-bold text-amber-200">
-              <span>{metrics.activeLoanCount} aktif kredi · Faiz indirimi -%{metrics.loanInterestDiscountPct}</span>
-              <span>Aç →</span>
-            </div>
-          </button>
+            {state.creditScore} <span className="text-slate-500">·</span>{' '}
+            <span className={metrics.activeLoanDebt > 0 ? 'text-rose-300' : 'text-rose-200'}>
+              {formatTL(metrics.activeLoanDebt, true)}
+            </span>
+          </div>
+        </div>
 
-          <button
-            type="button"
-            data-testid="finance-card-accounting"
-            onClick={onOpenAccounting}
-            className="flex flex-col justify-between rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-[#10293B]/90 to-[#111B30]/90 p-4 text-left transition-all hover:border-cyan-300/70"
+        <div className="rounded-2xl border border-indigo-400/30 bg-[#121B35]/88 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+          <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
+            Borsa & Yatırım Portföyü
+          </div>
+          <div
+            data-testid="finance-kpi-portfolio"
+            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-indigo-300 lg:mt-1 lg:text-lg"
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-500/15 text-cyan-300">
-                <FileSpreadsheet className="h-5 w-5" />
-              </div>
-              <span className="font-mono-num text-xs font-bold text-cyan-300">
-                {unpaidTaxes.length} Bekleyen Vergi
+            {formatTL(metrics.stockPortfolioValue)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-rose-500/30 bg-[#1B172C]/88 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+          <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
+            Günlük Operasyon Gideri
+          </div>
+          <div
+            data-testid="finance-kpi-expenses"
+            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-rose-300 lg:mt-1 lg:text-lg"
+          >
+            {formatTL(metrics.dailyOperatingExpenses)}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. 3-COLUMN FINANCIAL COMMAND CENTER */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 min-[680px]:grid-cols-12 lg:gap-3">
+        {/* ============================================================
+            COLUMN 1 (LEFT — GOLD/AMBER): BANKALAR & TİCARİ KREDİLER
+           ============================================================ */}
+        <div
+          data-testid="finance-col-banking"
+          className="flex min-h-0 flex-col justify-between rounded-2xl border border-amber-400/40 bg-gradient-to-b from-[#2B2312]/90 via-[#151B2C]/92 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(251,191,36,0.14)] backdrop-blur-md min-[680px]:col-span-4 lg:p-4"
+        >
+          {/* Top Icon + Limit Badge */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-400/45 bg-amber-500/15 text-amber-300 lg:h-10 lg:w-10">
+              <Landmark className="h-4 w-4 lg:h-5 lg:w-5" />
+            </div>
+            <span
+              data-testid="finance-credit-limit-badge"
+              className="rounded-full border border-amber-400/40 bg-amber-500/15 px-2.5 py-0.5 font-mono-num text-[9.5px] font-extrabold text-amber-200 lg:px-3 lg:py-1 lg:text-xs"
+            >
+              Limit: {formatTL(metrics.availableCreditLimit, true)}
+            </span>
+          </div>
+
+          {/* Title & Description */}
+          <div className="mt-1.5 lg:mt-2.5">
+            <h2 className="text-[11px] font-extrabold tracking-wide text-white lg:text-sm">
+              BANKALAR & TİCARİ KREDİLER
+            </h2>
+            <p className="mt-0.5 line-clamp-2 text-[9.5px] leading-snug text-slate-300 lg:mt-1 lg:text-xs">
+              Sıkı kredi denetimi, aylık taksit ödemeleri, teminat yönetimi ve kendi bankanı kurma.
+            </p>
+          </div>
+
+          {/* Credit Eligibility Progress Bar */}
+          <div
+            data-testid="finance-credit-eligibility"
+            className="mt-2 rounded-xl border border-slate-700/70 bg-[#0D1526]/80 px-2.5 py-1.5 lg:mt-3 lg:px-3 lg:py-2.5"
+          >
+            <div className="flex items-center justify-between gap-1.5 text-[9.5px] lg:text-[11px]">
+              <span className="font-bold text-slate-200">Kredi Uygunluğu</span>
+              <span
+                data-testid="finance-credit-lock-badge"
+                className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-mono-num text-[8.5px] font-extrabold lg:px-2 lg:text-[10px] ${
+                  fm.creditUnlocked
+                    ? 'border border-emerald-400/45 bg-emerald-500/15 text-emerald-300'
+                    : 'border border-rose-400/45 bg-rose-500/15 text-rose-300'
+                }`}
+              >
+                {fm.creditUnlocked ? (
+                  <ShieldCheck className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
+                ) : (
+                  <Lock className="h-2.5 w-2.5 lg:h-3 lg:w-3" />
+                )}
+                {fm.creditUnlocked ? `UYGUN · %100` : `KİLİTLİ · %${fm.creditEligibilityPct}`}
               </span>
             </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-extrabold text-white">Bilanço, Vergi & Muhasebe</h3>
-              <p className="mt-1 text-xs text-slate-300">
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800/95 lg:h-2">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  fm.creditUnlocked
+                    ? 'bg-gradient-to-r from-emerald-400 to-cyan-300 shadow-[0_0_10px_rgba(52,211,153,0.45)]'
+                    : 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 shadow-[0_0_8px_rgba(56,189,248,0.35)]'
+                }`}
+                style={{ width: `${fm.creditEligibilityPct}%` }}
+              />
+            </div>
+            <div className="mt-1 truncate text-[8.5px] text-slate-400 lg:text-[10px]">
+              {fm.creditLockSummary}
+            </div>
+          </div>
+
+          {/* Active Loans + Interest Discount Row */}
+          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 text-[9.5px] lg:mt-2.5 lg:text-xs">
+            <span className="font-semibold text-slate-300">
+              <strong className="font-mono-num text-white">{metrics.activeLoanCount}</strong> aktif
+              kredi
+            </span>
+            <span
+              data-testid="finance-interest-discount"
+              className="rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 font-mono-num text-[9px] font-bold text-amber-200 lg:px-2.5 lg:text-[11px]"
+            >
+              Faiz İndirimi:{' '}
+              <strong className="text-cyan-300">-%{metrics.loanInterestDiscountPct}</strong>
+            </span>
+          </div>
+
+          {/* Bottom Action Buttons */}
+          <div className="mt-2 grid grid-cols-2 gap-1.5 lg:mt-3 lg:gap-2">
+            <button
+              type="button"
+              data-testid="finance-btn-take-loan"
+              onClick={() => onOpenBanking('loans')}
+              className="flex min-h-[32px] items-center justify-center rounded-xl border border-amber-300/55 bg-amber-500/20 px-2 py-1 text-[9.5px] font-extrabold tracking-wide text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.16)] transition-all hover:bg-amber-500/30 active:scale-[0.98] lg:min-h-[40px] lg:text-xs"
+            >
+              KREDİ ÇEK
+            </button>
+            <button
+              type="button"
+              data-testid="finance-btn-create-bank"
+              onClick={() => onOpenBanking('own-bank')}
+              className="flex min-h-[32px] flex-col items-center justify-center rounded-xl border border-slate-600/80 bg-[#1A243B]/90 px-1.5 py-1 text-center transition-all hover:border-amber-300/60 hover:bg-[#222E4A] active:scale-[0.98] lg:min-h-[40px]"
+            >
+              <span className="text-[9px] font-extrabold leading-none tracking-wide text-white lg:text-[11px]">
+                BANKA KUR
+              </span>
+              <span className="mt-0.5 font-mono-num text-[7.5px] font-bold leading-none text-amber-300 lg:text-[9.5px]">
+                (5 Milyar ₺)
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* ============================================================
+            COLUMN 2 (CENTER — SPLIT CYAN & EMERALD): BİLANÇO + 00:00
+           ============================================================ */}
+        <div
+          data-testid="finance-col-center"
+          className="flex min-h-0 flex-col gap-2 min-[680px]:col-span-4 lg:gap-3"
+        >
+          {/* TOP CARD: BİLANÇO, VERGİ & MUHASEBE */}
+          <div
+            data-testid="finance-card-accounting"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-cyan-400/35 bg-gradient-to-b from-[#102B3D]/90 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(34,211,238,0.12)] backdrop-blur-md lg:p-3.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-500/15 text-cyan-300 lg:h-9 lg:w-9">
+                <FileSpreadsheet className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+              </div>
+              <span
+                data-testid="finance-pending-tax-badge"
+                className={`rounded-full border px-2 py-0.5 font-mono-num text-[9px] font-extrabold lg:px-2.5 lg:text-[11px] ${
+                  fm.unpaidTaxCount > 0
+                    ? 'border-amber-400/50 bg-amber-500/15 text-amber-200'
+                    : 'border-cyan-400/40 bg-cyan-500/15 text-cyan-200'
+                }`}
+              >
+                {fm.unpaidTaxCount} Bekleyen Vergi
+              </span>
+            </div>
+
+            <div className="mt-1">
+              <h2 className="text-[10.5px] font-extrabold tracking-wide text-white lg:text-xs">
+                BİLANÇO, VERGİ & MUHASEBE
+              </h2>
+              <p className="mt-1 hidden text-xs leading-snug text-slate-300 lg:block">
                 KDV, SGK, Kurumlar ve Belediye vergileri, günlük/aylık/yıllık kâr-zarar tabloları.
               </p>
             </div>
-            <div className="mt-3 flex items-center justify-between border-t border-slate-700/60 pt-2.5 text-[11px] font-bold text-cyan-200">
-              <span>Muhasebe: {state.accountant ? 'Otomatik Aktif' : 'Manuel Takip'}</span>
-              <span>Aç →</span>
-            </div>
-          </button>
 
-          <button
-            type="button"
-            data-testid="finance-card-borsa"
-            onClick={onOpenBorsa}
-            className="flex flex-col justify-between rounded-2xl border border-indigo-400/30 bg-gradient-to-br from-[#1B1F47]/90 to-[#111B30]/90 p-4 text-left transition-all hover:border-indigo-300/70"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-400/35 bg-indigo-500/15 text-indigo-300">
-                <TrendingUp className="h-5 w-5" />
+            {/* Mini Revenue vs Expense Bar Chart + Accounting Status */}
+            <div className="mt-1 flex items-end justify-between gap-2">
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="truncate text-[9px] font-semibold text-slate-300 lg:text-[11px]">
+                  Muhasebe:{' '}
+                  <strong
+                    className={
+                      fm.accountingAutoActive ? 'text-emerald-300' : 'text-cyan-200'
+                    }
+                  >
+                    {fm.accountingAutoActive ? 'Otomatik Takip' : 'Manuel Takip'}
+                  </strong>
+                </div>
+                <div className="mt-0.5 flex items-center gap-2 text-[8px] text-slate-400 lg:text-[9.5px]">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                    Gelir
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                    Gider
+                  </span>
+                </div>
               </div>
-              <span className="font-mono-num text-xs font-bold text-indigo-300">
-                {(state.stockPortfolio ?? []).filter((h) => h.shares > 0).length} Hisse Pozisyonu
-              </span>
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-extrabold text-white">Borsa İstanbul & Halka Arz</h3>
-              <p className="mt-1 text-xs text-slate-300">
-                Canlı hisse alım-satım emirleri, temettü gelirleri ve kendi holdingini halka arz etme.
-              </p>
-            </div>
-            <div className="mt-3 flex items-center justify-between border-t border-slate-700/60 pt-2.5 text-[11px] font-bold text-indigo-200">
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenInvestments();
-                }}
-                className="underline decoration-indigo-400/50 underline-offset-2"
+
+              {/* 4-pair Mini Bar Chart */}
+              <div
+                data-testid="finance-mini-barchart"
+                aria-label="Gelir gider mini grafiği"
+                className="flex h-7 shrink-0 items-end gap-1.5 rounded-lg border border-slate-700/60 bg-[#0B1324]/80 px-2 py-1 lg:h-11 lg:gap-2 lg:px-2.5"
               >
-                Yatırımlarım ({formatTL(metrics.stockPortfolioValue, true)})
-              </span>
-              <span>Piyasayı Aç →</span>
+                {fm.miniBars.map((bar, idx) => (
+                  <div key={`${bar.label}-${idx}`} className="flex h-full items-end gap-0.5">
+                    <div
+                      className="w-1.5 rounded-t-sm bg-gradient-to-t from-cyan-500 to-sky-300 lg:w-2"
+                      style={{ height: `${bar.incomePct}%` }}
+                      title={`${bar.label} Gelir: ${formatTL(bar.income, true)}`}
+                    />
+                    <div
+                      className="w-1.5 rounded-t-sm bg-gradient-to-t from-rose-600 to-rose-400 lg:w-2"
+                      style={{ height: `${bar.expensePct}%` }}
+                      title={`${bar.label} Gider: ${formatTL(bar.expense, true)}`}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </button>
 
-          <button
-            type="button"
+            <button
+              type="button"
+              data-testid="finance-btn-accounting"
+              onClick={onOpenAccounting}
+              className="mt-1.5 flex min-h-[28px] w-full items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-500/15 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/25 active:scale-[0.98] lg:mt-2 lg:min-h-[34px] lg:text-xs"
+            >
+              DETAY / ÖDE
+              {fm.unpaidTaxTotal > 0 ? ` (${formatTL(fm.unpaidTaxTotal, true)})` : ''}
+            </button>
+          </div>
+
+          {/* BOTTOM CARD: 00:00 GÜN SONU KAPANIŞI */}
+          <div
             data-testid="finance-card-dayend"
-            onClick={onOpenDayEnd}
-            className="flex flex-col justify-between rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-[#102E2B]/90 to-[#111B30]/90 p-4 text-left transition-all hover:border-emerald-300/70"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-emerald-400/35 bg-gradient-to-b from-[#10302C]/90 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(52,211,153,0.12)] backdrop-blur-md lg:p-3.5"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-400/35 bg-emerald-500/15 text-emerald-300">
-                <CalendarCheck2 className="h-5 w-5" />
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-emerald-400/40 bg-emerald-500/15 text-emerald-300 lg:h-9 lg:w-9">
+                <CalendarCheck2 className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
               </div>
-              <span className="font-mono-num text-xs font-bold text-emerald-300">
-                {pendingDayEndCount} Bekleyen Kapanış
-              </span>
+              <button
+                type="button"
+                data-testid="finance-dayend-pending-badge"
+                onClick={onOpenDayEnd}
+                className={`rounded-full border px-2 py-0.5 font-mono-num text-[9px] font-extrabold transition-colors lg:px-2.5 lg:text-[11px] ${
+                  fm.pendingDayEndCount > 0
+                    ? 'border-emerald-300/60 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30'
+                    : 'border-slate-600/70 bg-slate-800/70 text-slate-300 hover:border-emerald-400/40'
+                }`}
+              >
+                {fm.pendingDayEndCount} Bekleyen Kapanış
+              </button>
             </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-extrabold text-white">00:00 Gün Sonu Hasılat & Kapanış</h3>
-              <p className="mt-1 text-xs text-slate-300">
+
+            <div className="mt-1">
+              <h2 className="text-[10.5px] font-extrabold tracking-wide text-white lg:text-xs">
+                00:00 GÜN SONU KAPANIŞI
+              </h2>
+              <p className="mt-1 hidden text-xs leading-snug text-slate-300 lg:block">
                 Şube bazlı günlük kâr/zarar raporlarını incele ve bekleyen net nakit tahsilatlarını kasaya aktar.
               </p>
+              <div className="mt-0.5 flex items-center justify-between gap-2 text-[9px] lg:mt-1.5 lg:text-[11px]">
+                <span className="truncate text-slate-300">
+                  {fm.pendingDayEndCount > 0
+                    ? 'Biriken Net Hasılat:'
+                    : `Arşiv: ${fm.archivedDayEndCount} kapanış`}
+                </span>
+                <span
+                  data-testid="finance-dayend-net-amount"
+                  className={`shrink-0 font-mono-num font-extrabold ${
+                    (fm.pendingDayEndCount > 0 ? fm.pendingDayEndNetCash : fm.accruedTodayNetCash) <
+                    0
+                      ? 'text-rose-300'
+                      : 'text-emerald-300'
+                  }`}
+                >
+                  {fm.pendingDayEndCount > 0
+                    ? `${fm.pendingDayEndNetCash >= 0 ? '+' : ''}${formatTL(
+                        fm.pendingDayEndNetCash,
+                        true
+                      )}`
+                    : `${fm.accruedTodayNetCash >= 0 ? '+' : ''}${formatTL(
+                        fm.accruedTodayNetCash,
+                        true
+                      )}`}
+                </span>
+              </div>
             </div>
-            <div className="mt-3 flex items-center justify-between border-t border-slate-700/60 pt-2.5 text-[11px] font-bold text-emerald-200">
-              <span>Arşivde {(state.dayEndHistory ?? []).length} gün sonu kaydı</span>
-              <span>Raporları Aç →</span>
+
+            <button
+              type="button"
+              data-testid="finance-btn-settle-dayend"
+              onClick={() => {
+                if (fm.pendingDayEndCount > 0) {
+                  onCollectDayEndAll();
+                } else {
+                  onOpenDayEnd();
+                }
+              }}
+              className={`mt-1.5 flex min-h-[28px] w-full items-center justify-center rounded-xl px-3 py-1 text-[9.5px] font-extrabold tracking-wide transition-all active:scale-[0.98] lg:mt-2 lg:min-h-[34px] lg:text-xs ${
+                fm.pendingDayEndCount > 0
+                  ? 'border border-cyan-300/75 bg-gradient-to-r from-emerald-500/30 to-cyan-500/30 text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.28)] hover:brightness-110'
+                  : 'border border-cyan-400/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+              }`}
+            >
+              HASILATI AKTAR
+            </button>
+          </div>
+        </div>
+
+        {/* ============================================================
+            COLUMN 3 (RIGHT — INDIGO/PURPLE): BORSA İSTANBUL & HALKA ARZ
+           ============================================================ */}
+        <div
+          data-testid="finance-col-borsa"
+          className="flex min-h-0 flex-col justify-between rounded-2xl border border-indigo-400/40 bg-gradient-to-b from-[#1E1F4D]/92 via-[#151A38]/92 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(129,140,248,0.16)] backdrop-blur-md min-[680px]:col-span-4 lg:p-4"
+        >
+          {/* Top Icon + Stock Positions Badge */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-400/45 bg-indigo-500/15 text-indigo-300 lg:h-10 lg:w-10">
+              <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5" />
             </div>
+            <button
+              type="button"
+              data-testid="finance-positions-badge"
+              onClick={onOpenInvestments}
+              className="rounded-full border border-indigo-400/45 bg-indigo-500/15 px-2.5 py-0.5 font-mono-num text-[9.5px] font-extrabold text-indigo-200 transition-colors hover:bg-indigo-500/25 lg:px-3 lg:py-1 lg:text-xs"
+            >
+              {fm.stockPositionCount} Hisse Pozisyonu
+            </button>
+          </div>
+
+          {/* Title & Description */}
+          <div className="mt-1.5 lg:mt-2.5">
+            <h2 className="text-[11px] font-extrabold tracking-wide text-white lg:text-sm">
+              BORSA İSTANBUL & HALKA ARZ
+            </h2>
+            <p className="mt-0.5 line-clamp-2 text-[9.5px] leading-snug text-slate-300 lg:mt-1 lg:text-xs">
+              Canlı hisse alım-satım emirleri, temettü gelirleri ve kendi holdingini halka arz etme.
+            </p>
+          </div>
+
+          {/* Live BIST 100 Sparkline Box */}
+          <div
+            data-testid="finance-bist-sparkline"
+            className="mt-1.5 rounded-xl border border-indigo-400/25 bg-[#0D132B]/85 px-2.5 py-1.5 lg:mt-2.5 lg:px-3 lg:py-2.5"
+          >
+            <div className="flex items-center justify-between gap-2 text-[9.5px] lg:text-xs">
+              <span className="font-bold text-slate-200">
+                BIST 100{' '}
+                <strong className="ml-1 font-mono-num text-white">
+                  {fm.bistIndexValue.toLocaleString('tr-TR')}
+                </strong>
+              </span>
+              <span
+                data-testid="finance-bist-change"
+                className={`font-mono-num font-extrabold ${
+                  bistUp ? 'text-cyan-300' : 'text-rose-400'
+                }`}
+              >
+                {bistUp ? '↗ +' : '↘ '}
+                {fm.bistDailyChangePct.toFixed(2)}%
+              </span>
+            </div>
+
+            <svg
+              viewBox="0 0 220 52"
+              preserveAspectRatio="none"
+              aria-label="BIST 100 endeks grafiği"
+              className="mt-1 h-9 w-full overflow-visible lg:mt-1.5 lg:h-14"
+            >
+              <defs>
+                <linearGradient id="bistSparkFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={bistUp ? '#38BDF8' : '#FB7185'} stopOpacity="0.42" />
+                  <stop offset="100%" stopColor="#6366F1" stopOpacity="0.02" />
+                </linearGradient>
+                <linearGradient id="bistSparkStroke" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#818CF8" />
+                  <stop offset="100%" stopColor={bistUp ? '#22D3EE' : '#FB7185'} />
+                </linearGradient>
+              </defs>
+              <path d={spark.areaPath} fill="url(#bistSparkFill)" />
+              <path
+                d={spark.linePath}
+                fill="none"
+                stroke="url(#bistSparkStroke)"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle
+                cx={spark.last.x}
+                cy={spark.last.y}
+                r="3"
+                fill={bistUp ? '#22D3EE' : '#FB7185'}
+              />
+            </svg>
+          </div>
+
+          {/* IPO Eligibility Readiness Strip */}
+          <div
+            data-testid="finance-ipo-readiness"
+            className="mt-1.5 flex flex-col gap-1 text-[9px] lg:mt-2 lg:text-[11px]"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-semibold text-indigo-200">{fm.ipoStatusText}</span>
+              <span className="shrink-0 font-mono-num text-[8.5px] font-bold text-slate-400 lg:text-[10px]">
+                {formatTL(fm.ipoNetWorth, true)} / {formatTL(fm.ipoTargetNetWorth, true)}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800/95">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-400 to-cyan-300"
+                style={{ width: `${Math.max(5, fm.ipoNetWorthPct)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Bottom Full-Width Action Button */}
+          <button
+            type="button"
+            data-testid="finance-btn-borsa"
+            onClick={onOpenBorsa}
+            className="mt-2 flex min-h-[32px] w-full items-center justify-center rounded-xl border border-indigo-400/55 bg-indigo-500/20 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-indigo-100 shadow-[0_0_14px_rgba(99,102,241,0.22)] transition-all hover:bg-indigo-500/30 active:scale-[0.98] lg:mt-3 lg:min-h-[40px] lg:text-xs"
+          >
+            BORSA & HALKA ARZ AÇ
           </button>
         </div>
       </div>
