@@ -1,10 +1,10 @@
 {
-  "version": "1.4.3",
+  "version": "1.4.5",
   "buildDate": "2026-11-26",
   "mandatory": false,
   "notes": [
+    "Çok oyunculu harita işletme eşitlemesi eklendi",
     "Google girişi kaldırıldı; kullanıcı adı, şifre ve zorunlu görünen isim ile hesap sistemi ve ayarlar menüsüne Ana Menüye Dön butonu eklendi",
-    "Gerçekçi Türkiye fiyat ve maliyet marjları, milyarlık banka kurulum şartı, firma tanınırlığı, hizmet kalitesine bağlı müşteri trafiği, sıkı banka kredi kuralları ve Ofisim bölümü eklendi",
-    "Mobil cihazlarda açılış ekranı donma ve çökme sorunu giderildi"
+    "Gerçekçi Türkiye fiyat ve maliyet marjları, milyarlık banka kurulum şartı, firma tanınırlığı, hizmet kalitesine bağlı müşteri trafiği, sıkı banka kredi kuralları ve Ofisim bölümü eklendi"
   ]
 }

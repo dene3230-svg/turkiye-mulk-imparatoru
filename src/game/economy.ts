@@ -785,8 +785,24 @@ export function purchaseBusiness(
     : extractBaseBrandName(trimmedName);
 
   const affinityMultiplier = getAffinityMultiplier(bp, location);
+  const generatedBusinessId =
+    typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : (() => {
+          const hex = (n: number, len: number) =>
+            (Math.abs(Math.floor(n)) >>> 0).toString(16).padStart(len, '0').slice(-len);
+          const a = hex(now, 8);
+          const b = hex(Math.random() * 0xffff, 4);
+          const c = `4${hex(Math.random() * 0xfff, 3)}`;
+          const d = `${(8 + Math.floor(Math.random() * 4)).toString(16)}${hex(
+            Math.random() * 0xfff,
+            3
+          )}`;
+          const e = `${hex(Math.random() * 0xffffffff, 8)}${hex(Math.random() * 0xffff, 4)}`;
+          return `${a}-${b}-${c}-${d}-${e}`;
+        })();
   const newBusiness: OwnedBusiness = {
-    id: `biz-${now}-${Math.floor(Math.random() * 100000)}`,
+    id: generatedBusinessId,
     ownerId: owner.id,
     ownerName: owner.name,
     blueprintId: bp.id,

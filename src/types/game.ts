@@ -341,6 +341,7 @@ export interface RemoteBusinessRecord {
   id: string;
   owner_id: string;
   owner_name: string;
+  company_name?: string;
   city_plate: number;
   city_name: string;
   district: string;

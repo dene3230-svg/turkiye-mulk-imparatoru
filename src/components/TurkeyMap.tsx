@@ -10,9 +10,26 @@ import type {
 } from '../types/game';
 import { MIN_BUSINESS_DISTANCE_METERS } from '../game/catalog';
 import { calculateVaultCapacity } from '../game/economy';
-import { DEFAULT_PROVINCE_PLATE, TURKEY_BOUNDS, TURKEY_CENTER, getProvinceByPlate } from '../game/provinces81';
+import {
+  DEFAULT_PROVINCE_PLATE,
+  TURKEY_BOUNDS,
+  TURKEY_CENTER,
+  getProvinceByPlate,
+} from '../game/provinces81';
 import { getBrandLogoSvgString } from './BrandLogo';
-import { isRealPlayerBusiness, parseOwnerAndHolding } from '../services/cityRoom';
+import {
+  applyRealtimeBusinessDelete,
+  applyRealtimeBusinessPatch,
+  applyRealtimeBusinessUpsert,
+  computeWorldDbStats,
+  fetchAllWorldBusinesses,
+  isRealPlayerBusiness,
+  parseOwnerAndHolding,
+  subscribeToGlobalBusinesses,
+  syncPlayerBusinessesToWorld,
+  type RoomSyncStatus,
+  type WorldDbSyncSnapshot,
+} from '../services/cityRoom';
 
 function escapeHtml(text: string): string {
   return text
@@ -33,8 +50,11 @@ interface TurkeyMapProps {
   theme: ThemeMode;
   mapStyle: 'osm' | 'carto';
   activePlate: number;
+  currentUserId?: string;
   ownBusinesses: OwnedBusiness[];
+  localSyncRecords: RemoteBusinessRecord[];
   competitorBusinesses: RemoteBusinessRecord[];
+  syncRefreshNonce?: number;
   selectedBusinessId: string | null;
   selectedCompetitorId: string | null;
   droppedPin: PinLocationInfo | null;
@@ -45,6 +65,10 @@ interface TurkeyMapProps {
   onMapClick: (lat: number, lng: number) => void;
   onSelectOwnBusiness: (businessId: string) => void;
   onSelectCompetitor: (record: RemoteBusinessRecord) => void;
+  onWorldSyncUpdate?: (snapshot: WorldDbSyncSnapshot) => void;
+  onRemoteInsert?: (record: RemoteBusinessRecord) => void;
+  onRemoteUpdate?: (record: RemoteBusinessRecord) => void;
+  onRemoteDelete?: (id: string) => void;
 }
 
 const TILE_URLS = {
@@ -88,8 +112,11 @@ export function TurkeyMap({
   theme,
   mapStyle,
   activePlate,
+  currentUserId,
   ownBusinesses,
+  localSyncRecords,
   competitorBusinesses,
+  syncRefreshNonce = 0,
   selectedBusinessId,
   selectedCompetitorId,
   droppedPin,
@@ -100,6 +127,10 @@ export function TurkeyMap({
   onMapClick,
   onSelectOwnBusiness,
   onSelectCompetitor,
+  onWorldSyncUpdate,
+  onRemoteInsert,
+  onRemoteUpdate,
+  onRemoteDelete,
 }: TurkeyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -113,9 +144,152 @@ export function TurkeyMap({
   const onMapClickRef = useRef(onMapClick);
   const onSelectOwnRef = useRef(onSelectOwnBusiness);
   const onSelectCompetitorRef = useRef(onSelectCompetitor);
+  const onWorldSyncUpdateRef = useRef(onWorldSyncUpdate);
+  const onRemoteInsertRef = useRef(onRemoteInsert);
+  const onRemoteUpdateRef = useRef(onRemoteUpdate);
+  const onRemoteDeleteRef = useRef(onRemoteDelete);
+  const localSyncRecordsRef = useRef(localSyncRecords);
+  const currentUserIdRef = useRef(currentUserId);
+  const dbRecordsRef = useRef<RemoteBusinessRecord[]>([]);
+  const roomStatusRef = useRef<RoomSyncStatus>('connecting');
+  const syncErrorRef = useRef<string | null>(null);
+
   onMapClickRef.current = onMapClick;
   onSelectOwnRef.current = onSelectOwnBusiness;
   onSelectCompetitorRef.current = onSelectCompetitor;
+  onWorldSyncUpdateRef.current = onWorldSyncUpdate;
+  onRemoteInsertRef.current = onRemoteInsert;
+  onRemoteUpdateRef.current = onRemoteUpdate;
+  onRemoteDeleteRef.current = onRemoteDelete;
+  localSyncRecordsRef.current = localSyncRecords;
+  currentUserIdRef.current = currentUserId;
+
+  // ============================================================================
+  // SINGLE CENTRALIZED MULTIPLAYER MAP SYNC (UPSERT OWN -> SELECT '*' -> REALTIME)
+  // ============================================================================
+  const emitSnapshot = (loading = false) => {
+    const ownIds = new Set(localSyncRecordsRef.current.map((r) => r.id));
+    const stats = computeWorldDbStats(dbRecordsRef.current, currentUserIdRef.current, ownIds);
+    onWorldSyncUpdateRef.current?.({
+      records: dbRecordsRef.current,
+      dbTotal: stats.dbTotal,
+      rivalCount: stats.rivalCount,
+      status: roomStatusRef.current,
+      error: syncErrorRef.current,
+      loading,
+      lastSyncedAt: Date.now(),
+    });
+  };
+
+  const syncWorldNowRef = useRef<(() => Promise<void>) | null>(null);
+  syncWorldNowRef.current = async () => {
+    let latestError: string | null = null;
+    const ownLocal = localSyncRecordsRef.current;
+
+    // 1) Upsert all local player businesses into `public.businesses`
+    if (ownLocal.length > 0) {
+      const upsertRes = await syncPlayerBusinessesToWorld(ownLocal);
+      if (!upsertRes.ok && upsertRes.error) {
+        latestError = upsertRes.error;
+      }
+    }
+
+    // 2) Fetch ALL businesses across Turkey (`select('*')` without city restriction)
+    const fetchRes = await fetchAllWorldBusinesses();
+    if (fetchRes.error) {
+      latestError = fetchRes.error;
+      roomStatusRef.current = 'offline';
+    } else {
+      dbRecordsRef.current = fetchRes.records;
+      if (roomStatusRef.current !== 'live') {
+        roomStatusRef.current = fetchRes.connected ? 'live' : 'offline';
+      }
+    }
+
+    syncErrorRef.current = latestError;
+    emitSnapshot(false);
+  };
+
+  // Mount-level single unified sync + Realtime subscription + 15s fallback poll
+  useEffect(() => {
+    let active = true;
+    emitSnapshot(true);
+
+    const runSync = async () => {
+      if (!active) return;
+      await syncWorldNowRef.current?.();
+    };
+
+    runSync();
+
+    const unsubscribe = subscribeToGlobalBusinesses({
+      onUpsert: (rec) => {
+        if (!active) return;
+        dbRecordsRef.current = applyRealtimeBusinessUpsert(dbRecordsRef.current, rec);
+        syncErrorRef.current = null;
+        emitSnapshot(false);
+      },
+      onPatch: (id, patch) => {
+        if (!active) return;
+        dbRecordsRef.current = applyRealtimeBusinessPatch(dbRecordsRef.current, id, patch);
+        emitSnapshot(false);
+      },
+      onInsert: (rec) => {
+        if (!active) return;
+        onRemoteInsertRef.current?.(rec);
+      },
+      onUpdate: (rec) => {
+        if (!active) return;
+        onRemoteUpdateRef.current?.(rec);
+      },
+      onDelete: (id) => {
+        if (!active) return;
+        dbRecordsRef.current = applyRealtimeBusinessDelete(dbRecordsRef.current, id);
+        emitSnapshot(false);
+        onRemoteDeleteRef.current?.(id);
+      },
+      onStatus: (status) => {
+        if (!active) return;
+        roomStatusRef.current = status;
+        emitSnapshot(false);
+      },
+      onReconnect: () => {
+        if (!active) return;
+        runSync();
+      },
+    });
+
+    const pollTimer = window.setInterval(() => {
+      if (active) runSync();
+    }, 15_000);
+
+    const handleOnline = () => {
+      if (active) runSync();
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      active = false;
+      window.clearInterval(pollTimer);
+      window.removeEventListener('online', handleOnline);
+      unsubscribe();
+    };
+  }, []);
+
+  // Re-sync whenever player builds/upgrades/acquires branches or clicks manual refresh
+  const portfolioSyncSig = `${currentUserId ?? ''}|${syncRefreshNonce}|${localSyncRecords
+    .map((r) => `${r.id}@${r.level}:${r.business_name}:${r.owner_name}`)
+    .join(',')}`;
+  const lastSigRef = useRef<string>('');
+  useEffect(() => {
+    if (lastSigRef.current === '') {
+      lastSigRef.current = portfolioSyncSig;
+      return;
+    }
+    if (lastSigRef.current === portfolioSyncSig) return;
+    lastSigRef.current = portfolioSyncSig;
+    syncWorldNowRef.current?.();
+  }, [portfolioSyncSig]);
 
   // Mount Leaflet map once
   useEffect(() => {
@@ -248,7 +422,7 @@ export function TurkeyMap({
     }).addTo(map);
   }, [droppedPin, droppedPinBlocked]);
 
-  // Render own (Gold/Emerald) & competitor (Crimson/Navy) pins, 75m protection rings, and zoom clustering
+  // Render own (Gold/Emerald) & other players' (Bright Red + Player Name) pins, 75m rings & clustering
   useEffect(() => {
     const map = mapRef.current;
     const circleLayer = circleLayerRef.current;
@@ -258,7 +432,6 @@ export function TurkeyMap({
     circleLayer.clearLayers();
     markerLayer.clearLayers();
 
-    // Combine ALL own businesses and ALL live competitor businesses across Turkey
     const items: MapPinItem[] = [
       ...ownBusinesses.map((biz) => {
         const cap = calculateVaultCapacity(biz);
@@ -290,34 +463,34 @@ export function TurkeyMap({
       })),
     ];
 
-    // Draw subtle 75m protection circles when zoomed in enough to read them
+    // Draw subtle 75m protection circles when zoomed in
     if (zoomLevel >= 13) {
       for (const item of items) {
         const strokeCol = item.isOwn
           ? '#059669'
           : item.isRealPlayer
-          ? '#06B6D4'
-          : '#DC2626';
+          ? '#DC2626'
+          : '#991B1B';
         const fillCol = item.isOwn
           ? '#10B981'
           : item.isRealPlayer
-          ? '#22D3EE'
-          : '#EF4444';
+          ? '#EF4444'
+          : '#DC2626';
         L.circle([item.lat, item.lng], {
           radius: MIN_BUSINESS_DISTANCE_METERS,
           color: strokeCol,
-          weight: item.isRealPlayer ? 1.5 : 1,
-          opacity: 0.5,
+          weight: item.isRealPlayer ? 1.8 : 1,
+          opacity: 0.55,
           fillColor: fillCol,
-          fillOpacity: 0.11,
+          fillOpacity: item.isRealPlayer ? 0.14 : 0.1,
           interactive: false,
         }).addTo(circleLayer);
       }
     }
 
-    // Cluster nearby pins when zoomed out (zoom <= 12)
-    const shouldCluster = zoomLevel <= 12;
-    const cellSizeDeg = zoomLevel <= 7 ? 0.85 : zoomLevel <= 9 ? 0.25 : zoomLevel <= 11 ? 0.06 : 0.025;
+    // Cluster nearby pins only when zoomed out wide (zoom <= 10) so city-level red player pins stay clearly visible
+    const shouldCluster = zoomLevel <= 10;
+    const cellSizeDeg = zoomLevel <= 7 ? 0.85 : zoomLevel <= 9 ? 0.25 : 0.08;
 
     if (shouldCluster && items.length > 1) {
       const buckets = new Map<string, MapPinItem[]>();
@@ -335,12 +508,12 @@ export function TurkeyMap({
           const ownCount = group.filter((g) => g.isOwn).length;
           const realCount = group.filter((g) => g.isRealPlayer).length;
           const borderCol =
-            realCount > 0 ? '#22D3EE' : ownCount > 0 ? '#10B981' : '#EF4444';
+            realCount > 0 ? '#FCA5A5' : ownCount > 0 ? '#10B981' : '#EF4444';
           const bgCol =
             ownCount === group.length
               ? '#065F46'
               : realCount > 0
-              ? 'linear-gradient(135deg,#BE123C,#0E7490)'
+              ? 'linear-gradient(135deg,#EF4444,#991B1B)'
               : ownCount > 0
               ? '#0F172A'
               : '#991B1B';
@@ -351,9 +524,9 @@ export function TurkeyMap({
               <div style="
                 transform:translate(-50%,-50%);
                 width:40px;height:40px;border-radius:9999px;
-                background:${bgCol};color:#FEF08A;
+                background:${bgCol};color:#FFFFFF;
                 border:3px solid ${borderCol};
-                box-shadow:0 6px 18px rgba(15,23,42,0.45);
+                box-shadow:0 6px 18px rgba(15,23,42,0.48);
                 display:flex;align-items:center;justify-content:center;
                 font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;
                 cursor:pointer;
@@ -395,28 +568,31 @@ export function TurkeyMap({
         : item.isOwn
         ? '2.5px solid #ECFDF5'
         : item.isRealPlayer
-        ? '2.5px solid #22D3EE'
+        ? '2.5px solid #FFFFFF'
         : '2.5px solid #FCA5A5';
 
       const parsedOwner =
         !item.isOwn && item.competitor
-          ? parseOwnerAndHolding(item.competitor.owner_name)
+          ? parseOwnerAndHolding(item.competitor.owner_name, item.competitor.company_name)
           : null;
 
-      const innerContent =
-        !item.isOwn && item.competitor
-          ? getBrandLogoSvgString(parsedOwner?.holdingName || item.competitor.owner_name, markerSize - 8)
-          : isUnderConstruction
+      const innerContent = item.isOwn
+        ? isUnderConstruction
           ? '<span>🏗️</span>'
-          : `<span>${glyph}</span>`;
+          : `<span>${glyph}</span>`
+        : item.isRealPlayer
+        ? `<span>${glyph}</span>`
+        : item.competitor
+        ? getBrandLogoSvgString(parsedOwner?.holdingName || item.competitor.owner_name, markerSize - 8)
+        : `<span>${glyph}</span>`;
 
-      // Own Active = Gold/Emerald | Own Construction = Amber/Bronze | Real Player = Crimson/Turquoise | AI = Deep Crimson
+      // Own Active = Gold/Emerald | Own Construction = Amber | Real Player = Bold Crimson Red | AI = Dark Red/Slate
       const bgStyle = isUnderConstruction
         ? 'linear-gradient(135deg,#F59E0B,#92400E)'
         : item.isOwn
         ? 'linear-gradient(135deg,#D97706,#059669)'
         : item.isRealPlayer
-        ? 'linear-gradient(135deg,#E11D48,#06B6D4)'
+        ? 'linear-gradient(135deg,#EF4444,#B91C1C)'
         : 'linear-gradient(135deg,#7F1D1D,#0F172A)';
 
       const badgeBg = isUnderConstruction
@@ -424,13 +600,38 @@ export function TurkeyMap({
         : item.isOwn
         ? '#064E3B'
         : item.isRealPlayer
-        ? '#0E7490'
-        : '#991B1B';
+        ? '#991B1B'
+        : '#7F1D1D';
+
       const glowShadow = item.isRealPlayer
-        ? '0 0 0 3px rgba(34,211,238,0.28), 0 6px 18px rgba(15,23,42,0.55)'
+        ? '0 0 0 3px rgba(239,68,68,0.42), 0 6px 18px rgba(153,27,27,0.55)'
         : `0 6px 18px rgba(15,23,42,${isSelected ? '0.52' : '0.4'})`;
 
-      const ownerTagHtml = isUnderConstruction
+      // Real competitor player name tag sits prominently right above/on the red pin
+      const realPlayerTopTagHtml =
+        !item.isOwn && item.isRealPlayer && parsedOwner
+          ? `<div
+              data-testid="real-player-pin-label"
+              style="
+                margin-bottom:3px;
+                max-width:142px;
+                padding:2px 7px;
+                border-radius:9999px;
+                background:rgba(185,28,28,0.96);
+                border:1.5px solid #FEE2E2;
+                color:#FFFFFF;
+                font-size:10px;
+                font-weight:800;
+                line-height:1.15;
+                white-space:nowrap;
+                overflow:hidden;
+                text-overflow:ellipsis;
+                box-shadow:0 3px 8px rgba(0,0,0,0.45);
+                pointer-events:none;
+              ">${escapeHtml(truncateLabel(parsedOwner.playerName, 20))}</div>`
+          : '';
+
+      const bottomTagHtml = isUnderConstruction
         ? `<div style="
               margin-top:4px;
               padding:1.5px 6px;
@@ -445,15 +646,15 @@ export function TurkeyMap({
               box-shadow:0 2px 6px rgba(0,0,0,0.45);
               pointer-events:none;
             ">🏗️ ${item.constructionDaysRemaining}g Kaldı</div>`
-        : !item.isOwn && parsedOwner
+        : !item.isOwn && !item.isRealPlayer && parsedOwner
         ? `<div style="
               margin-top:4px;
               max-width:124px;
               padding:1.5px 6px;
               border-radius:9999px;
-              background:${item.isRealPlayer ? 'rgba(8,47,73,0.94)' : 'rgba(15,23,42,0.9)'};
-              border:1px solid ${item.isRealPlayer ? 'rgba(34,211,238,0.85)' : 'rgba(248,113,113,0.6)'};
-              color:${item.isRealPlayer ? '#ECFEFF' : '#FEE2E2'};
+              background:rgba(15,23,42,0.9);
+              border:1px solid rgba(248,113,113,0.6);
+              color:#FEE2E2;
               font-size:9px;
               font-weight:800;
               line-height:1.2;
@@ -462,16 +663,14 @@ export function TurkeyMap({
               text-overflow:ellipsis;
               box-shadow:0 2px 6px rgba(0,0,0,0.45);
               pointer-events:none;
-            ">${item.isRealPlayer ? '● ' : ''}${escapeHtml(
-            truncateLabel(parsedOwner.holdingName || parsedOwner.playerName, 16)
-          )}</div>`
+            ">${escapeHtml(truncateLabel(parsedOwner.holdingName || parsedOwner.playerName, 16))}</div>`
         : '';
 
       const pinTitle = item.isOwn
         ? isUnderConstruction
           ? `${item.own?.customName ?? 'Şubem'} (İnşaat: ${item.constructionDaysRemaining} gün kaldı)`
           : `${item.own?.customName ?? 'Şubem'} (S${item.level})`
-        : `${item.competitor?.business_name ?? 'Rakip'} · ${parsedOwner?.playerName ?? ''} (${parsedOwner?.holdingName ?? ''})`;
+        : `${item.competitor?.business_name ?? 'Rakip'} · ${parsedOwner?.playerName ?? ''}`;
 
       const icon = L.divIcon({
         className: item.isOwn
@@ -486,10 +685,11 @@ export function TurkeyMap({
             data-under-construction="${isUnderConstruction ? 'true' : 'false'}"
             style="position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;"
           >
+            ${realPlayerTopTagHtml}
             <div style="
               width:${markerSize}px;
               height:${markerSize}px;
-              border-radius:12px;
+              border-radius:${item.isRealPlayer ? '9999px' : '12px'};
               background:${bgStyle};
               border:${borderStyle};
               box-shadow:${glowShadow};
@@ -511,11 +711,11 @@ export function TurkeyMap({
                 item.readyRing
                   ? `<span style="position:absolute;top:-5px;left:-5px;width:11px;height:11px;border-radius:9999px;background:#10B981;border:2px solid #FFFFFF;"></span>`
                   : item.isRealPlayer
-                  ? `<span style="position:absolute;top:-5px;left:-5px;width:11px;height:11px;border-radius:9999px;background:#22D3EE;border:2px solid #082F49;box-shadow:0 0 8px #22D3EE;"></span>`
+                  ? `<span style="position:absolute;top:-4px;left:-4px;width:11px;height:11px;border-radius:9999px;background:#EF4444;border:2px solid #FFFFFF;box-shadow:0 0 8px #EF4444;"></span>`
                   : ''
               }
             </div>
-            ${ownerTagHtml}
+            ${bottomTagHtml}
           </div>
         `,
         iconSize: [44, 44],
@@ -526,7 +726,7 @@ export function TurkeyMap({
         icon,
         title: pinTitle,
         alt: pinTitle,
-        zIndexOffset: isSelected ? 820 : item.isRealPlayer ? 620 : item.isOwn ? 560 : 480,
+        zIndexOffset: isSelected ? 820 : item.isRealPlayer ? 660 : item.isOwn ? 560 : 480,
       });
 
       marker.on('click', (e) => {

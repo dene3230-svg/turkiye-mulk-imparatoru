@@ -69,6 +69,10 @@ import {
   applyRealtimeBusinessDelete,
   applyRealtimeBusinessPatch,
   applyRealtimeBusinessUpsert,
+  buildBusinessesUpsertPayload,
+  computeWorldDbStats,
+  ensureUuidForBusinessId,
+  extractMissingColumnName,
   findUnsyncedLocalBusinesses,
   formatOwnerDisplayName,
   formatSupabaseError,
@@ -604,12 +608,13 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.4.3');
+  assert.equal(APP_VERSION, '1.4.5');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
   assert.equal(compareSemver('1.4.0-fix', '1.4.1'), 1);
   assert.equal(compareSemver('1.4.1', '1.4.3'), 1);
+  assert.equal(compareSemver('1.4.3', '1.4.5'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix2'), 1);
   assert.ok(getCompanyTier(BANK_MIN_NET_WORTH).level >= 7);
 });
@@ -2067,6 +2072,99 @@ test('v1.4.3 Account Validation, Salted Password Hashing & Supabase Adapter Regi
   assert.equal(okLogin.ok, true);
   assert.equal(okLogin.user?.id, regOk.user.id);
   assert.equal(okLogin.user?.name, 'Kemal Holding');
+});
+
+test('v1.4.5 Unified Multiplayer Map Sync: deterministic UUID mapping, canonical upsert payload, schema fallback parser & live DB stats', () => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  // 1) Legacy non-UUID business ID converts deterministically to a valid RFC-4122 UUID
+  const legacyId = 'biz-176400123-49182';
+  const uuidA = ensureUuidForBusinessId(legacyId);
+  const uuidB = ensureUuidForBusinessId(legacyId);
+  assert.equal(uuidA, uuidB, 'Deterministic UUID must stay identical across syncs');
+  assert.ok(uuidRegex.test(uuidA), `Expected valid v4 UUID, got ${uuidA}`);
+
+  // Already-valid UUID passes through unchanged
+  const nativeUuid = '156f51b8-95b0-4fed-a970-2afb214b6b57';
+  assert.equal(ensureUuidForBusinessId(nativeUuid), nativeUuid);
+
+  // 2) Upsert payload includes all requested fields: id, owner_id, owner_name, company_name, name, sector, level, hourly_revenue, lat, lng
+  const rec = normalizeRecord({
+    id: legacyId,
+    owner_id: 'player-a',
+    owner_name: 'Ahmet Yılmaz',
+    company_name: 'Yılmaz Holding',
+    name: 'Kadıköy Kafe',
+    sector: 'kafe',
+    level: 3,
+    hourly_revenue: 14500,
+    lat: 40.9909,
+    lng: 29.0293,
+  });
+  assert.ok(rec);
+  const payload = buildBusinessesUpsertPayload(rec);
+  assert.equal(payload.id, uuidA);
+  assert.equal(payload.owner_id, 'player-a');
+  assert.equal(payload.owner_name, 'Ahmet Yılmaz');
+  assert.equal(payload.company_name, 'Yılmaz Holding');
+  assert.equal(payload.name, 'Kadıköy Kafe');
+  assert.equal(payload.sector, 'kafe');
+  assert.equal(payload.level, 3);
+  assert.equal(payload.hourly_revenue, 14500);
+  assert.equal(payload.lat, 40.9909);
+  assert.equal(payload.lng, 29.0293);
+
+  // 3) Schema fallback extractor parses both PostgREST PGRST204 and PostgreSQL 42703 errors
+  assert.equal(
+    extractMissingColumnName("Could not find the 'name' column of 'businesses' in the schema cache"),
+    'name'
+  );
+  assert.equal(extractMissingColumnName('column businesses.latitude does not exist'), 'latitude');
+
+  // 4) Live DB stats compute exact "DB Toplam: X | Rakip: Y" excluding current player (even across legacy ID -> UUID)
+  const ownRow = normalizeRecord({
+    id: uuidA,
+    owner_id: 'player-a',
+    owner_name: 'Ahmet Yılmaz',
+    business_name: 'Kadıköy Kafe',
+    business_type: 'kafe',
+    lat: 40.9909,
+    lng: 29.0293,
+  })!;
+  const rival1 = normalizeRecord({
+    id: '256f51b8-95b0-4fed-a970-2afb214b6b51',
+    owner_id: 'player-b',
+    owner_name: 'Mehmet Demir',
+    company_name: 'Demir A.Ş.',
+    business_name: 'Ankara Restoran',
+    sector: 'restoran',
+    lat: 39.9208,
+    lng: 32.8541,
+  })!;
+  const rival2 = normalizeRecord({
+    id: '356f51b8-95b0-4fed-a970-2afb214b6b52',
+    owner_id: 'player-c',
+    owner_name: 'Ayşe Kaya',
+    business_name: 'İzmir Otel',
+    sector: 'otel',
+    lat: 38.4237,
+    lng: 27.1428,
+  })!;
+
+  const stats = computeWorldDbStats([ownRow, rival1, rival2], 'player-a', new Set([legacyId]));
+  assert.equal(stats.dbTotal, 3);
+  assert.equal(stats.rivalCount, 2);
+
+  // mergeWorldAndSeedRivals must exclude ownRow even when ownIds contains the legacy non-UUID ID
+  const merged = mergeWorldAndSeedRivals(
+    [ownRow, rival1, rival2],
+    [],
+    'player-other',
+    new Set([legacyId]),
+    new Set()
+  );
+  assert.equal(merged.length, 2);
+  assert.ok(merged.every((r) => r.id !== uuidA));
 });
 
 

@@ -160,8 +160,6 @@ import {
   applyRealtimeBusinessDelete,
   applyRealtimeBusinessPatch,
   applyRealtimeBusinessUpsert,
-  fetchAllWorldBusinesses,
-  findUnsyncedLocalBusinesses,
   formatOwnerDisplayName,
   generateSeedCityRivals,
   isRealPlayerBusiness,
@@ -169,10 +167,9 @@ import {
   ownedToRemoteRecord,
   publishBusinessToRoom,
   removeBusinessFromRoom,
-  subscribeToGlobalBusinesses,
-  syncPlayerBusinessesToWorld,
   updateBusinessInRoom,
   type RoomSyncStatus,
+  type WorldDbSyncSnapshot,
 } from './services/cityRoom';
 import {
   fetchAllBanks,
@@ -516,6 +513,18 @@ export default function App() {
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [roomRecords, setRoomRecords] = useState<RemoteBusinessRecord[]>([]);
   const [roomStatus, setRoomStatus] = useState<RoomSyncStatus>('connecting');
+  const [syncRefreshNonce, setSyncRefreshNonce] = useState(0);
+  const [worldDbStats, setWorldDbStats] = useState<{
+    dbTotal: number;
+    rivalCount: number;
+    error: string | null;
+    loading: boolean;
+  }>({
+    dbTotal: 0,
+    rivalCount: 0,
+    error: null,
+    loading: true,
+  });
 
   // v1.2.0 Live Corporate World State (Franchises, BIST + IPOs, Banks, Patron Chat)
   const [remoteFranchises, setRemoteFranchises] = useState<FranchiseBrand[]>(SEED_FRANCHISE_BRANDS);
@@ -582,9 +591,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v143',
-      title: 'Türkiye Mülk İmparatoru v1.4.3',
-      body: 'Google girişi kaldırıldı; kullanıcı adı, şifre ve zorunlu görünen isim ile hesap sistemi ve ayarlar menüsüne Ana Menüye Dön butonu eklendi.',
+      id: 'welcome-v145',
+      title: 'Türkiye Mülk İmparatoru v1.4.5',
+      body: 'Çok oyunculu harita işletme eşitlemesi eklendi. Tüm oyuncuların işletmeleri haritada canlı olarak kırmızı pin ve oyuncu ismiyle görüntüleniyor.',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -809,16 +818,20 @@ export default function App() {
     };
   }, [screen, activePlate]);
 
-  // Subscribe nationwide to Supabase Realtime (`public.businesses`) across all 81 provinces
+  // Centralized multiplayer map sync callbacks (driven by TurkeyMap single sync hub)
   const lastLiveAlertAtRef = useRef<number>(0);
   const lastSyncErrorRef = useRef<{ key: string; at: number }>({ key: '', at: 0 });
-  const lastPortfolioSyncSigRef = useRef<string>('');
   const serverWorldRecordsRef = useRef<RemoteBusinessRecord[]>([]);
 
   const reportSupabaseSyncError = useCallback(
     (context: string, errorMsg?: string, silent = false) => {
       const msg = (errorMsg ?? 'Bilinmeyen bağlantı hatası').trim();
       console.warn(`[Supabase Sync] ${context}:`, msg);
+      setWorldDbStats((prev) => ({
+        ...prev,
+        error: `${context}: ${msg}`,
+        loading: false,
+      }));
       if (silent) return;
       const key = `${context}:${msg}`;
       const nowTs = Date.now();
@@ -831,234 +844,89 @@ export default function App() {
     [pushNotification]
   );
 
-  const buildLocalRemoteRecords = useCallback((): RemoteBusinessRecord[] => {
-    try {
-      const currentEmpire = empireRef.current;
-      const currentUser = userRef.current;
-      if (!currentUser || currentEmpire.businesses.length === 0) return [];
-      const holdingName =
-        currentEmpire.playerIpo?.holdingName ||
-        currentEmpire.supermarketChain?.name ||
-        getCompanyTier(calculateNetWorth(currentEmpire, Date.now(), stockQuotesRef.current)).title;
+  const localSyncRecords = useMemo<RemoteBusinessRecord[]>(() => {
+    if (!user || empire.businesses.length === 0) return [];
+    const holdingName =
+      empire.playerIpo?.holdingName ||
+      empire.supermarketChain?.name ||
+      getCompanyTier(calculateNetWorth(empire, Date.now(), stockQuotesRef.current)).title;
 
-      return currentEmpire.businesses.map((biz) => {
-        const hourly = calculateBusinessHourlyIncome(
-          biz,
-          currentEmpire.activeEvent,
-          Date.now(),
-          currentEmpire.businesses,
-          currentEmpire
-        );
-        const valuation = calculateBusinessValuation(biz, currentEmpire.activeEvent, Date.now());
-        return ownedToRemoteRecord(biz, hourly, valuation, holdingName, {
-          id: currentUser.id,
-          name: currentUser.name,
-        });
+    return empire.businesses.map((biz) => {
+      const hourly = calculateBusinessHourlyIncome(
+        biz,
+        empire.activeEvent,
+        Date.now(),
+        empire.businesses,
+        empire
+      );
+      const valuation = calculateBusinessValuation(biz, empire.activeEvent, Date.now());
+      return ownedToRemoteRecord(biz, hourly, valuation, holdingName, {
+        id: user.id,
+        name: user.name,
       });
-    } catch (err) {
-      console.warn('[BackgroundSync] Yerel işletme kayıtları hazırlanamadı:', err);
-      return [];
-    }
+    });
+  }, [user, empire.businesses, empire.playerIpo, empire.supermarketChain, empire.activeEvent]);
+
+  const handleWorldSyncUpdate = useCallback((snapshot: WorldDbSyncSnapshot) => {
+    serverWorldRecordsRef.current = snapshot.records;
+    setRoomRecords(snapshot.records);
+    setRoomStatus(snapshot.status);
+    setWorldDbStats({
+      dbTotal: snapshot.dbTotal,
+      rivalCount: snapshot.rivalCount,
+      error: snapshot.error,
+      loading: snapshot.loading,
+    });
   }, []);
 
-  const syncMissingLocalBusinesses = useCallback(
-    async (remoteBaseline?: RemoteBusinessRecord[], silent = true) => {
-      try {
-        const localRecords = buildLocalRemoteRecords();
-        if (localRecords.length === 0) return;
-        const baseline = remoteBaseline ?? serverWorldRecordsRef.current;
-        const missingOrOutdated = findUnsyncedLocalBusinesses(localRecords, baseline);
-        if (missingOrOutdated.length === 0) return;
-
-        const res = await syncPlayerBusinessesToWorld(missingOrOutdated);
-        if (!res.ok) {
-          reportSupabaseSyncError(
-            `${missingOrOutdated.length} yerel işletme Supabase'e aktarılamadı`,
-            res.error,
-            silent
+  const handleRemoteInsert = useCallback(
+    (rec: RemoteBusinessRecord) => {
+      const currentUserId = userRef.current?.id;
+      if (rec.owner_id !== currentUserId && isRealPlayerBusiness(rec)) {
+        const nowTs = Date.now();
+        if (nowTs - lastLiveAlertAtRef.current > 4000) {
+          lastLiveAlertAtRef.current = nowTs;
+          pushNotification(
+            'Canlı Harita · Yeni Rakip Şube!',
+            `${rec.owner_name}, ${String(rec.city_plate).padStart(2, '0')} ${rec.city_name} ilinde "${rec.business_name}" açtı.`,
+            'event',
+            false
           );
-          return;
         }
-        serverWorldRecordsRef.current = missingOrOutdated.reduce(
-          (acc, rec) => applyRealtimeBusinessUpsert(acc, rec),
-          baseline
-        );
-        setRoomRecords((prev) =>
-          missingOrOutdated.reduce((acc, rec) => applyRealtimeBusinessUpsert(acc, rec), prev)
-        );
-      } catch (err) {
-        console.warn('[BackgroundSync] Yerel işletme senkronizasyonu sessizce atlandı:', err);
       }
     },
-    [buildLocalRemoteRecords, reportSupabaseSyncError]
+    [pushNotification]
   );
 
-  useEffect(() => {
-    if (screen !== 'playing') return;
-    let active = true;
-    let unsubscribe: (() => void) | null = null;
-    setRoomStatus('connecting');
-
-    const loadAllWorldAndSync = async () => {
-      try {
-        const { records, connected, error } = await fetchAllWorldBusinesses();
-        if (!active) return;
-
-        if (error) {
-          setRoomStatus('offline');
-          // Non-blocking startup: log silently to console and continue with local data
-          console.warn('[StartupSync] Ortak harita verileri okunamadı, yerel modda devam ediliyor:', error);
-        } else {
-          serverWorldRecordsRef.current = records;
-          setRoomRecords((prev) => {
-            // Merge fetched server truth (`select('*')`) with any pending local real records idempotently
-            let next = [...records];
-            for (const existing of prev) {
-              if (!next.some((r) => r.id === existing.id) && isRealPlayerBusiness(existing)) {
-                next = applyRealtimeBusinessUpsert(next, existing);
-              }
-            }
-            return next;
-          });
-          if (!connected) {
-            setRoomStatus('offline');
-          }
-        }
-
-        // Background backfill upsert for any local businesses missing from `public.businesses`
-        await syncMissingLocalBusinesses(records, true);
-      } catch (err) {
-        if (!active) return;
-        setRoomStatus('offline');
-        console.warn('[StartupSync] Dünya haritası senkronizasyonu başarısız, yerel veriyle devam:', err);
+  const handleRemoteUpdate = useCallback(
+    (rec: RemoteBusinessRecord) => {
+      const currentUserId = userRef.current?.id;
+      if (!currentUserId || rec.owner_id === currentUserId) return;
+      const ownBranch = empireRef.current.businesses.find((b) => b.id === rec.id);
+      if (ownBranch) {
+        const buyoutProceeds = Math.round(rec.valuation * 1.35);
+        setEmpire((prev) => ({
+          ...prev,
+          cash: prev.cash + buyoutProceeds,
+          businesses: prev.businesses.filter((b) => b.id !== rec.id),
+          lastSavedAt: Date.now(),
+        }));
+        pushNotification(
+          'Şubeniz Devralındı!',
+          `${rec.owner_name}, "${ownBranch.customName}" şubenizi satın aldı (+${formatTL(
+            buyoutProceeds
+          )}).`,
+          'finance',
+          true
+        );
       }
-    };
+    },
+    [pushNotification]
+  );
 
-    const cancelBg = runInBackground(
-      () => {
-        if (!active) return;
-        loadAllWorldAndSync();
-
-        try {
-          unsubscribe = subscribeToGlobalBusinesses({
-            onUpsert: (rec) => {
-              if (!active) return;
-              serverWorldRecordsRef.current = applyRealtimeBusinessUpsert(
-                serverWorldRecordsRef.current,
-                rec
-              );
-              setRoomRecords((prev) => applyRealtimeBusinessUpsert(prev, rec));
-            },
-            onPatch: (id, patch) => {
-              if (!active) return;
-              serverWorldRecordsRef.current = applyRealtimeBusinessPatch(
-                serverWorldRecordsRef.current,
-                id,
-                patch
-              );
-              setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, id, patch));
-            },
-            onInsert: (rec) => {
-              if (!active) return;
-              const currentUserId = userRef.current?.id;
-              if (rec.owner_id !== currentUserId && isRealPlayerBusiness(rec)) {
-                const nowTs = Date.now();
-                if (nowTs - lastLiveAlertAtRef.current > 4000) {
-                  lastLiveAlertAtRef.current = nowTs;
-                  pushNotification(
-                    'Canlı Harita · Yeni Rakip Şube!',
-                    `${rec.owner_name}, ${String(rec.city_plate).padStart(2, '0')} ${rec.city_name} ilinde "${rec.business_name}" açtı.`,
-                    'event',
-                    false
-                  );
-                }
-              }
-            },
-            onUpdate: (rec) => {
-              if (!active) return;
-              const currentUserId = userRef.current?.id;
-              if (!currentUserId || rec.owner_id === currentUserId) return;
-              // If another player acquired one of our own branches via buyout, reconcile portfolio & credit proceeds
-              const ownBranch = empireRef.current.businesses.find((b) => b.id === rec.id);
-              if (ownBranch) {
-                const buyoutProceeds = Math.round(rec.valuation * 1.35);
-                setEmpire((prev) => ({
-                  ...prev,
-                  cash: prev.cash + buyoutProceeds,
-                  businesses: prev.businesses.filter((b) => b.id !== rec.id),
-                  lastSavedAt: Date.now(),
-                }));
-                pushNotification(
-                  'Şubeniz Devralındı!',
-                  `${rec.owner_name}, "${ownBranch.customName}" şubenizi satın aldı (+${formatTL(
-                    buyoutProceeds
-                  )}).`,
-                  'finance',
-                  true
-                );
-              }
-            },
-            onDelete: (id) => {
-              if (!active) return;
-              serverWorldRecordsRef.current = applyRealtimeBusinessDelete(
-                serverWorldRecordsRef.current,
-                id
-              );
-              setRoomRecords((prev) => applyRealtimeBusinessDelete(prev, id));
-              setSelectedCompetitorId((cur) => (cur === id ? null : cur));
-            },
-            onStatus: (status) => {
-              if (!active) return;
-              setRoomStatus(status);
-            },
-            onError: (errMsg) => {
-              if (!active) return;
-              console.warn('[StartupSync] Canlı harita bağlantısı çevrimdışı:', errMsg);
-            },
-            onReconnect: () => {
-              if (!active) return;
-              loadAllWorldAndSync();
-            },
-          });
-        } catch (err) {
-          setRoomStatus('offline');
-          console.warn('[StartupSync] Realtime kanal kurulamadı, çevrimdışı modda devam:', err);
-        }
-      },
-      'world-businesses-startup-sync',
-      200
-    );
-
-    const handleOnline = () => {
-      if (!active) return;
-      loadAllWorldAndSync();
-    };
-    window.addEventListener('online', handleOnline);
-
-    return () => {
-      active = false;
-      cancelBg();
-      window.removeEventListener('online', handleOnline);
-      try {
-        unsubscribe?.();
-      } catch {
-        // ignore unsubscribe errors
-      }
-    };
-  }, [screen, pushNotification, syncMissingLocalBusinesses]);
-
-  // Also ensure pre-existing local businesses sync automatically in background once `user` or `empire` finishes hydrating
-  useEffect(() => {
-    if (screen !== 'playing' || !user || empire.businesses.length === 0) return;
-    const sig = `${user.id}:${empire.businesses.map((b) => `${b.id}@${b.level}`).join(',')}`;
-    if (lastPortfolioSyncSigRef.current === sig) return;
-    lastPortfolioSyncSigRef.current = sig;
-    return runInBackground(
-      () => syncMissingLocalBusinesses(undefined, true),
-      'portfolio-hydration-sync',
-      300
-    );
-  }, [screen, user, empire.businesses, syncMissingLocalBusinesses]);
+  const handleRemoteDelete = useCallback((id: string) => {
+    setSelectedCompetitorId((cur) => (cur === id ? null : cur));
+  }, []);
 
   // Persist empire state automatically
   useEffect(() => {
@@ -2954,8 +2822,11 @@ export default function App() {
             theme={settings.theme}
             mapStyle={settings.mapStyle}
             activePlate={activePlate}
+            currentUserId={user?.id}
             ownBusinesses={empire.businesses}
+            localSyncRecords={localSyncRecords}
             competitorBusinesses={competitorBusinesses}
+            syncRefreshNonce={syncRefreshNonce}
             selectedBusinessId={selectedBusinessId}
             selectedCompetitorId={selectedCompetitorId}
             droppedPin={droppedPin}
@@ -2966,14 +2837,19 @@ export default function App() {
             onMapClick={handleMapClick}
             onSelectOwnBusiness={handleSelectOwnBusiness}
             onSelectCompetitor={handleSelectCompetitor}
+            onWorldSyncUpdate={handleWorldSyncUpdate}
+            onRemoteInsert={handleRemoteInsert}
+            onRemoteUpdate={handleRemoteUpdate}
+            onRemoteDelete={handleRemoteDelete}
           />
 
-          {/* Top Clean Landscape HUD Overlay (Zero-Overlap: No "Topla" Button) */}
+          {/* Top Clean Landscape HUD Overlay + Live DB Sync Status Box */}
           <header
             aria-label="Oyun Durum Çubuğu"
             data-testid="top-hud"
-            className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex items-center justify-between gap-1.5 pl-[var(--hud-left-gap)] pr-[var(--hud-right-gap)] pt-[var(--hud-top-gap)]"
+            className="pointer-events-none fixed inset-x-0 top-0 z-[600] flex flex-col gap-1 pl-[var(--hud-left-gap)] pr-[var(--hud-right-gap)] pt-[var(--hud-top-gap)]"
           >
+            <div className="flex w-full items-center justify-between gap-1.5">
             {/* Left Economy & Quota Cluster — Clean 2-Row Layout, Zero Overlap */}
             <div
               data-testid="hud-left-cluster"
@@ -3195,16 +3071,54 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => {
-                  soundEngine.playClick();
-                  setScreen('menu');
-                }}
+                onClick={handleReturnToMainMenu}
                 aria-label="Ana Menü"
                 title="Ana Menü"
                 className="hidden h-9 items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 xl:flex whitespace-nowrap"
               >
                 <Home className="h-3.5 w-3.5 shrink-0" />
                 <span>Ana Menü</span>
+              </button>
+            </div>
+            </div>
+
+            {/* Compact Live Multiplayer DB Status Box (Top Bar Sub-Pill — Click to Refresh) */}
+            <div className="pointer-events-none flex w-full justify-center">
+              <button
+                type="button"
+                data-testid="map-db-status-box"
+                onClick={() => {
+                  soundEngine.playClick();
+                  setSyncRefreshNonce((n) => n + 1);
+                }}
+                title={
+                  worldDbStats.error
+                    ? worldDbStats.error
+                    : 'Canlı çok oyunculu harita veritabanı durumu — yenilemek için tıklayın'
+                }
+                className={`pointer-events-auto flex max-w-[min(92vw,420px)] items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono-num text-[10.5px] font-bold shadow-md backdrop-blur-sm transition-colors ${
+                  worldDbStats.error
+                    ? 'border-rose-300 bg-rose-600/95 text-white hover:bg-rose-700'
+                    : 'border-slate-200/95 bg-white/95 text-slate-800 hover:bg-slate-50 dark:border-slate-700/90 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    worldDbStats.error
+                      ? 'bg-white'
+                      : worldDbStats.loading
+                      ? 'bg-amber-400 animate-pulse'
+                      : 'bg-emerald-500 animate-pulse'
+                  }`}
+                />
+                <span className="truncate">
+                  {worldDbStats.error
+                    ? worldDbStats.error
+                    : worldDbStats.loading
+                    ? 'DB Eşitleniyor...'
+                    : `DB Toplam: ${worldDbStats.dbTotal} | Rakip: ${worldDbStats.rivalCount}`}
+                </span>
               </button>
             </div>
           </header>

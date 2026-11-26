@@ -3,17 +3,21 @@
 
 -- 1. 81 İl Canlı Harita İşletmeleri
 create table if not exists public.businesses (
-  id text primary key,
+  id uuid primary key,
   owner_id text not null,
   owner_name text not null,
+  company_name text not null default '',
+  name text not null default '',
+  business_name text not null,
+  sector text not null default 'kafe',
+  business_type text not null,
   city_plate integer not null check (city_plate >= 1 and city_plate <= 81),
   city_name text not null,
   district text not null default '',
-  business_name text not null,
-  business_type text not null,
   lat double precision not null,
   lng double precision not null,
   level integer not null default 1,
+  hourly_revenue numeric not null default 3600,
   hourly_income numeric not null default 3600,
   valuation numeric not null default 60000,
   created_at timestamptz not null default now()
