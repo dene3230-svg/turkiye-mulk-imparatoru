@@ -12,6 +12,8 @@ import {
   AlertCircle,
   BookOpen,
   Settings,
+  Home,
+  LogOut,
 } from 'lucide-react';
 import type { GameSettings, OtaCheckResult, UserProfile } from '../types/game';
 import { APP_BUILD_DATE, APP_VERSION } from '../services/otaUpdate';
@@ -28,6 +30,8 @@ interface SettingsModalProps {
   onCheckUpdates: () => void;
   onOpenUpdateModal: () => void;
   onReplayTutorial?: () => void;
+  onReturnToMainMenu?: () => void;
+  onSignOut?: () => void;
   onResetGame: () => void;
 }
 
@@ -42,6 +46,8 @@ export function SettingsModal({
   onCheckUpdates,
   onOpenUpdateModal,
   onReplayTutorial,
+  onReturnToMainMenu,
+  onSignOut,
   onResetGame,
 }: SettingsModalProps) {
   const [confirmReset, setConfirmReset] = useState(false);
@@ -246,13 +252,41 @@ export function SettingsModal({
 
             <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-2.5">
               <div>
-                <div className="text-sm font-bold text-white">Hesap & Rehber</div>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {user
-                    ? `${user.name} (${user.provider === 'google' ? 'Google OAuth' : 'Misafir'})`
-                    : 'Oturum açılmadı'}
+                <div className="text-sm font-bold text-white">Hesap & Navigasyon</div>
+                <p data-testid="settings-account-label" className="mt-0.5 text-xs text-slate-300">
+                  {user ? `${user.name} (@${user.username})` : 'Oturum açılmadı'}
                 </p>
               </div>
+
+              {onReturnToMainMenu && (
+                <button
+                  type="button"
+                  data-testid="settings-main-menu-btn"
+                  onClick={() => {
+                    onClose();
+                    onReturnToMainMenu();
+                  }}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 text-xs font-extrabold text-slate-950 shadow-xs transition hover:bg-amber-300"
+                >
+                  <Home className="h-4 w-4" />
+                  <span>Ana Menüye Dön</span>
+                </button>
+              )}
+
+              {onSignOut && (
+                <button
+                  type="button"
+                  data-testid="settings-signout-btn"
+                  onClick={() => {
+                    onClose();
+                    onSignOut();
+                  }}
+                  className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-bold text-amber-200 transition hover:bg-amber-500/20"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Hesaptan Çıkış Yap</span>
+                </button>
+              )}
 
               {onReplayTutorial && (
                 <button

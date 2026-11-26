@@ -21,8 +21,6 @@ import {
   Trophy,
   X,
 } from 'lucide-react';
-import { App as CapacitorApp } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
 
 import type {
   AdCampaignTierId,
@@ -144,13 +142,12 @@ import {
 } from './game/provinces81';
 import { validateLandCoordinate } from './game/waterShield';
 import {
-  createOrLoadGuestProfile,
   loadEmpireStateLocal,
+  loadStoredPlayerSession,
+  loginPlayerAccount,
+  registerPlayerAccount,
   saveEmpireStateLocal,
-  sessionToUserProfile,
-  signInWithGoogle,
   signOutAccount,
-  supabase,
 } from './lib/supabase';
 import {
   runInBackground,
@@ -326,7 +323,10 @@ function migrateSavedEmpire(
               ? legacy.customName
               : `${prov.name} Şubesi`,
           ownerId: (typeof legacy.ownerId === 'string' && legacy.ownerId) || owner.id,
-          ownerName: (typeof legacy.ownerName === 'string' && legacy.ownerName) || owner.name,
+          ownerName:
+            !legacy.ownerId || legacy.ownerId === owner.id
+              ? owner.name
+              : (typeof legacy.ownerName === 'string' && legacy.ownerName) || owner.name,
           blueprintId,
           cityPlate: plate,
           cityName: (typeof legacy.cityName === 'string' && legacy.cityName) || prov.name,
@@ -484,11 +484,12 @@ export default function App() {
     return new URLSearchParams(window.location.search).get('autostart') === '1';
   }, []);
 
-  const [screen, setScreen] = useState<ScreenState>(() => (autostart ? 'playing' : 'intro'));
-  const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
-  const [user, setUser] = useState<UserProfile | null>(() =>
-    autostart ? createOrLoadGuestProfile() : null
+  const [initialSession] = useState<UserProfile | null>(() => loadStoredPlayerSession());
+  const [screen, setScreen] = useState<ScreenState>(() =>
+    autostart ? (initialSession ? 'playing' : 'menu') : 'intro'
   );
+  const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
+  const [user, setUser] = useState<UserProfile | null>(() => initialSession);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -498,9 +499,12 @@ export default function App() {
 
   const [empire, setEmpire] = useState<EmpireState>(() => {
     const startPlate = loadSavedStartingCity();
-    const initialUser = autostart ? createOrLoadGuestProfile() : null;
-    if (initialUser) {
-      return migrateSavedEmpire(loadEmpireStateLocal(initialUser.id), initialUser, startPlate);
+    if (initialSession) {
+      return migrateSavedEmpire(
+        loadEmpireStateLocal(initialSession.id),
+        initialSession,
+        startPlate
+      );
     }
     return createInitialEmpireState(Date.now(), startPlate);
   });
@@ -578,9 +582,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v141',
-      title: 'Türkiye Mülk İmparatoru v1.4.1',
-      body: 'Gerçekçi Türkiye fiyat ve maliyet marjları, milyarlık banka kurulum şartı, firma tanınırlığı, hizmet kalitesine bağlı müşteri trafiği, sıkı banka kredi kuralları ve Ofisim bölümü eklendi!',
+      id: 'welcome-v143',
+      title: 'Türkiye Mülk İmparatoru v1.4.3',
+      body: 'Google girişi kaldırıldı; kullanıcı adı, şifre ve zorunlu görünen isim ile hesap sistemi ve ayarlar menüsüne Ana Menüye Dön butonu eklendi.',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -714,127 +718,7 @@ export default function App() {
     };
   }, [pushNotification]);
 
-  // Listen to Supabase Auth session & Capacitor OAuth deep link callback in non-blocking background
-  useEffect(() => {
-    let mounted = true;
-    let authUnsub: (() => void) | null = null;
-    let capHandle: { remove: () => Promise<void> } | null = null;
-
-    const cancelBg = runInBackground(
-      async () => {
-        try {
-          const sessionRes = await withSafeTimeout(
-            supabase.auth.getSession(),
-            3500,
-            { data: { session: null }, error: null },
-            'supabase.auth.getSession'
-          );
-          if (mounted && sessionRes?.data?.session) {
-            const profile = sessionToUserProfile(sessionRes.data.session);
-            const loaded = migrateSavedEmpire(
-              loadEmpireStateLocal(profile.id),
-              profile,
-              loadSavedStartingCity()
-            );
-            const focus = resolveInitialFocusTarget(loaded);
-            setUser(profile);
-            setEmpire(loaded);
-            setActivePlate(focus.cityPlate);
-            setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
-          }
-        } catch (err) {
-          console.warn('[Startup] Supabase oturum kontrolü başarısız, yerel modda devam ediliyor:', err);
-        }
-
-        try {
-          const { data: authSub } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (!mounted) return;
-            try {
-              if (session) {
-                const profile = sessionToUserProfile(session);
-                const loaded = migrateSavedEmpire(
-                  loadEmpireStateLocal(profile.id),
-                  profile,
-                  loadSavedStartingCity()
-                );
-                const focus = resolveInitialFocusTarget(loaded);
-                setUser(profile);
-                setEmpire(loaded);
-                setActivePlate(focus.cityPlate);
-                setFlyTarget({
-                  lat: focus.lat,
-                  lng: focus.lng,
-                  zoom: focus.zoom,
-                  nonce: Date.now(),
-                });
-                setScreen('playing');
-              }
-            } catch (err) {
-              console.warn('[Startup] Auth durum değişikliği işlenemedi:', err);
-            }
-          });
-          authUnsub = () => {
-            try {
-              authSub.subscription.unsubscribe();
-            } catch {
-              // ignore
-            }
-          };
-        } catch (err) {
-          console.warn('[Startup] Supabase Auth dinleyicisi kurulamadı:', err);
-        }
-
-        try {
-          if (Capacitor.isNativePlatform()) {
-            const handle = await withSafeTimeout(
-              CapacitorApp.addListener('appUrlOpen', async (event) => {
-                try {
-                  if (event.url?.includes('login-callback')) {
-                    const url = new URL(event.url);
-                    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
-                    const accessToken = hashParams.get('access_token');
-                    const refreshToken = hashParams.get('refresh_token');
-                    if (accessToken && refreshToken) {
-                      await withSafeTimeout(
-                        supabase.auth.setSession({
-                          access_token: accessToken,
-                          refresh_token: refreshToken,
-                        }),
-                        5000,
-                        null,
-                        'supabase.auth.setSession'
-                      );
-                    }
-                  }
-                } catch (err) {
-                  console.warn('[Startup] OAuth deep-link callback işlenemedi:', err);
-                }
-              }),
-              3000,
-              null,
-              'CapacitorApp.addListener'
-            );
-            if (mounted) {
-              capHandle = handle;
-            } else {
-              handle?.remove().catch(() => {});
-            }
-          }
-        } catch (err) {
-          console.warn('[Startup] Native deep-link dinleyicisi atlandı:', err);
-        }
-      },
-      'startup-supabase-auth',
-      150
-    );
-
-    return () => {
-      mounted = false;
-      cancelBg();
-      authUnsub?.();
-      capHandle?.remove().catch(() => {});
-    };
-  }, []);
+  // Session is restored synchronously from localStorage (tmi_player_session_v1) on startup without blocking UI.
 
   // Fetch global Supabase corporate tables (franchises, banks, player IPOs) in non-blocking background
   useEffect(() => {
@@ -1639,36 +1523,98 @@ export default function App() {
     setFlyTarget({ lat: focus.lat, lng: focus.lng, zoom: focus.zoom, nonce: Date.now() });
   }, []);
 
-  const handleGuestLogin = () => {
-    soundEngine.playClick();
-    setAuthError(null);
-    const guest = createOrLoadGuestProfile();
-    const loaded = migrateSavedEmpire(
-      loadEmpireStateLocal(guest.id),
-      guest,
-      startingCityPlate
-    );
-    setUser(guest);
-    setEmpire(loaded);
-    focusHeadquarters(loaded);
-    setScreen('playing');
-  };
+  const enterEmpireForUser = useCallback(
+    (profile: UserProfile) => {
+      const loaded = migrateSavedEmpire(
+        loadEmpireStateLocal(profile.id),
+        profile,
+        startingCityPlate
+      );
+      setUser(profile);
+      setEmpire(loaded);
+      focusHeadquarters(loaded);
+      setScreen('playing');
+    },
+    [focusHeadquarters, startingCityPlate]
+  );
 
-  const handleGoogleLogin = async () => {
+  const handleLoginAccount = async (username: string, password: string) => {
     soundEngine.playClick();
     setAuthLoading(true);
     setAuthError(null);
-    const res = await signInWithGoogle();
-    setAuthLoading(false);
-    if (res.error) {
-      setAuthError(res.error);
+    try {
+      const res = await loginPlayerAccount({ username, password });
+      if (!res.ok || !res.user) {
+        setAuthError(res.error ?? 'Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin.');
+        return;
+      }
+      enterEmpireForUser(res.user);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
+  const handleRegisterAccount = async (
+    username: string,
+    password: string,
+    displayName: string
+  ) => {
+    soundEngine.playClick();
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const res = await registerPlayerAccount({ username, password, displayName });
+      if (!res.ok || !res.user) {
+        setAuthError(res.error ?? 'Hesap oluşturulamadı. Lütfen bilgilerinizi kontrol edin.');
+        return;
+      }
+      enterEmpireForUser(res.user);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const closeAllInGameOverlays = useCallback(() => {
+    setSettingsOpen(false);
+    setNotifOpen(false);
+    setHubMenuOpen(false);
+    setBottomSheetGroup(null);
+    setActiveDrawer(null);
+    setDroppedPin(null);
+    setSelectedBusinessId(null);
+    setSelectedCompetitorId(null);
+    setInteriorBusinessId(null);
+    setHrModalOpen(false);
+    setHoldingModalOpen(false);
+    setRivalsModalOpen(false);
+    setBorsaModalOpen(false);
+    setBankingModalOpen(false);
+    setAccountingModalOpen(false);
+    setLeaderboardModalOpen(false);
+    setOfficeModalOpen(false);
+    setPatronChatOpen(false);
+    setCityPickerOpen(false);
+  }, []);
+
+  const handleReturnToMainMenu = useCallback(() => {
+    soundEngine.playClick();
+    if (user) {
+      saveEmpireStateLocal(user.id, empireRef.current);
+    }
+    closeAllInGameOverlays();
+    setScreen('menu');
+  }, [closeAllInGameOverlays, user]);
+
   const handleSignOut = async () => {
     soundEngine.playClick();
+    if (user) {
+      saveEmpireStateLocal(user.id, empireRef.current);
+    }
     await signOutAccount();
+    closeAllInGameOverlays();
+    setAuthError(null);
     setUser(null);
+    setEmpire(createInitialEmpireState(Date.now(), startingCityPlate));
     setScreen('menu');
   };
 
@@ -2732,8 +2678,8 @@ export default function App() {
     const msg: ChatMessage = {
       id: `msg-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       channel,
-      senderId: user?.id ?? 'guest',
-      senderName: user?.name ?? 'Misafir Yatırımcı',
+      senderId: user?.id ?? 'patron',
+      senderName: user?.name ?? 'Patron',
       senderBadge: empire.playerIpo
         ? `[${empire.playerIpo.ticker}]`
         : `Sv.${companyTier.level}`,
@@ -2819,12 +2765,12 @@ export default function App() {
   const handleReplayTutorial = () => {
     soundEngine.playClick();
     setSettingsOpen(false);
+    if (!user) {
+      setScreen('menu');
+      return;
+    }
     if (screen !== 'playing') {
-      if (!user) {
-        const guest = createOrLoadGuestProfile();
-        setUser(guest);
-        setEmpire(migrateSavedEmpire(loadEmpireStateLocal(guest.id), guest));
-      }
+      focusHeadquarters(empire);
       setScreen('playing');
     }
     setTutorialOpen(true);
@@ -2953,13 +2899,13 @@ export default function App() {
 
   const menuSavedCount = useMemo(() => {
     try {
+      if (!user) return 0;
       if (empire.businesses.length > 0) return empire.businesses.length;
-      const guest = createOrLoadGuestProfile();
-      return loadEmpireStateLocal(guest.id)?.businesses.length ?? 0;
+      return loadEmpireStateLocal(user.id)?.businesses.length ?? 0;
     } catch {
       return 0;
     }
-  }, [empire.businesses.length]);
+  }, [empire.businesses.length, user]);
 
   const handleIntroComplete = useCallback(() => {
     setScreen('menu');
@@ -2978,12 +2924,20 @@ export default function App() {
           user={user}
           authLoading={authLoading}
           authError={authError}
+          onClearAuthError={() => setAuthError(null)}
           startingCityPlate={startingCityPlate}
           onSelectStartingCity={handleSelectStartingCity}
-          onGuestLogin={handleGuestLogin}
-          onGoogleLogin={handleGoogleLogin}
+          onLogin={handleLoginAccount}
+          onRegister={handleRegisterAccount}
           onContinueLoggedIn={() => {
-            focusHeadquarters(empire);
+            if (!user) return;
+            const loaded = migrateSavedEmpire(
+              loadEmpireStateLocal(user.id),
+              user,
+              startingCityPlate
+            );
+            setEmpire(loaded);
+            focusHeadquarters(loaded);
             setScreen('playing');
           }}
           onSignOut={handleSignOut}
@@ -3890,7 +3844,7 @@ export default function App() {
         onOpenPatronChat={() => setPatronChatOpen(true)}
         onOpenGuide={handleReplayTutorial}
         onOpenSettings={() => setSettingsOpen(true)}
-        onGoMainMenu={() => setScreen('menu')}
+        onGoMainMenu={handleReturnToMainMenu}
         onClose={() => setHubMenuOpen(false)}
       />
 
@@ -3934,7 +3888,9 @@ export default function App() {
           setSettingsOpen(false);
           setOtaModalOpen(true);
         }}
-        onReplayTutorial={handleReplayTutorial}
+        onReplayTutorial={user ? handleReplayTutorial : undefined}
+        onReturnToMainMenu={screen === 'playing' ? handleReturnToMainMenu : undefined}
+        onSignOut={user ? handleSignOut : undefined}
         onResetGame={handleResetGame}
       />
 

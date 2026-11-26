@@ -116,6 +116,17 @@ create table if not exists public.patron_chat (
 
 create index if not exists idx_patron_chat_channel on public.patron_chat (channel, created_at desc);
 
+-- 7. Oyuncu Hesapları (Kullanıcı Adı, Şifre Özeti ve Zorunlu Görünen İsim)
+create table if not exists public.player_accounts (
+  id text primary key,
+  username text not null unique,
+  password_hash text not null,
+  display_name text not null,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_player_accounts_username on public.player_accounts (lower(username));
+
 -- RLS Politikaları
 alter table public.businesses enable row level security;
 alter table public.franchises enable row level security;
@@ -123,12 +134,13 @@ alter table public.banks enable row level security;
 alter table public.loans enable row level security;
 alter table public.ipo_listings enable row level security;
 alter table public.patron_chat enable row level security;
+alter table public.player_accounts enable row level security;
 
 do $$
 declare
   tbl text;
 begin
-  foreach tbl in array array['businesses', 'franchises', 'banks', 'loans', 'ipo_listings', 'patron_chat'] loop
+  foreach tbl in array array['businesses', 'franchises', 'banks', 'loans', 'ipo_listings', 'patron_chat', 'player_accounts'] loop
     execute format('drop policy if exists "Public read %I" on public.%I', tbl, tbl);
     execute format('create policy "Public read %I" on public.%I for select using (true)', tbl, tbl);
     execute format('drop policy if exists "Public insert %I" on public.%I', tbl, tbl);

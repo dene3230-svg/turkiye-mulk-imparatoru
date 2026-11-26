@@ -2,13 +2,13 @@ export type ThemeMode = 'light' | 'dark';
 
 export type ScreenState = 'intro' | 'menu' | 'playing';
 
-export type AuthProvider = 'guest' | 'google';
+export type AuthProvider = 'account';
 
 export interface UserProfile {
   id: string;
-  name: string;
-  email?: string;
-  avatarUrl?: string;
+  username: string;
+  name: string; // Always equals display_name (shown on map, chat, rankings & social)
+  displayName: string;
   provider: AuthProvider;
 }
 

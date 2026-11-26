@@ -68,6 +68,26 @@ export function safeStorageSetItem(
   }
 }
 
+export function safeStorageRemoveItem(
+  key: string,
+  storage?: Pick<Storage, 'removeItem'> | null
+): boolean {
+  try {
+    const target =
+      storage !== undefined
+        ? storage
+        : typeof window !== 'undefined'
+        ? window.localStorage
+        : null;
+    if (!target) return false;
+    target.removeItem(key);
+    return true;
+  } catch (err) {
+    console.warn(`[SafeStorage] "${key}" silinemedi:`, err);
+    return false;
+  }
+}
+
 export function safeReadStorageJson<T>(
   key: string,
   fallback: T,

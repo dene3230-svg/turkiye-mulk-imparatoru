@@ -1,10 +1,10 @@
 {
-  "version": "1.4.1",
-  "buildDate": "2026-11-25",
+  "version": "1.4.3",
+  "buildDate": "2026-11-26",
   "mandatory": false,
   "notes": [
+    "Google girişi kaldırıldı; kullanıcı adı, şifre ve zorunlu görünen isim ile hesap sistemi ve ayarlar menüsüne Ana Menüye Dön butonu eklendi",
     "Gerçekçi Türkiye fiyat ve maliyet marjları, milyarlık banka kurulum şartı, firma tanınırlığı, hizmet kalitesine bağlı müşteri trafiği, sıkı banka kredi kuralları ve Ofisim bölümü eklendi",
-    "Milyarlık Enerji Santrali, Holding Gökdeleni, B2B tedarik/kredi avantajları ve zararda eksi kasa simülasyonu devreye alındı",
     "Mobil cihazlarda açılış ekranı donma ve çökme sorunu giderildi"
   ]
 }

@@ -143,6 +143,16 @@ import {
 } from './strategyEngine.ts';
 import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
 import {
+  hashPassword,
+  loginPlayerAccountWithAdapter,
+  registerPlayerAccountWithAdapter,
+  validateLoginInput,
+  validateRegistrationInput,
+  verifyPassword,
+  type PlayerAccountRow,
+  type PlayerAccountsDbAdapter,
+} from '../lib/playerAuth.ts';
+import {
   safeJsonParse,
   safeReadStorageJson,
   withSafeTimeout,
@@ -594,11 +604,12 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.4.1');
+  assert.equal(APP_VERSION, '1.4.3');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
   assert.equal(compareSemver('1.4.0-fix', '1.4.1'), 1);
+  assert.equal(compareSemver('1.4.1', '1.4.3'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix2'), 1);
   assert.ok(getCompanyTier(BANK_MIN_NET_WORTH).level >= 7);
 });
@@ -1950,6 +1961,112 @@ test('v1.4.1 Ofisim System: 4 Office Tiers, Equipment Upgrades, Personal Assets,
   assert.ok(calculateOfficeBenefits(watchRes.state).officePrestige > calculateOfficeBenefits(plazaOk.state).officePrestige);
   // Personal asset preserves Net Worth (cash converted into owned luxury asset equity)
   assert.equal(calculateNetWorth(watchRes.state, now + 40), nwBeforeAsset);
+});
+
+test('v1.4.3 Account Validation, Salted Password Hashing & Supabase Adapter Register/Login Flow', async () => {
+  const emptyReg = validateRegistrationInput({ username: '', password: '', displayName: '' });
+  assert.equal(emptyReg.ok, false);
+
+  const badUsername = validateRegistrationInput({
+    username: 'Patron!#',
+    password: '1234',
+    displayName: 'Kemal Holding',
+  });
+  assert.equal(badUsername.ok, false);
+
+  const shortPass = validateRegistrationInput({
+    username: 'kemal34',
+    password: '123',
+    displayName: 'Kemal Holding',
+  });
+  assert.equal(shortPass.ok, false);
+
+  const missingDisplay = validateRegistrationInput({
+    username: 'kemal34',
+    password: '1234',
+    displayName: '   ',
+  });
+  assert.equal(missingDisplay.ok, false);
+
+  const emptyLogin = validateLoginInput({ username: '', password: '1234' });
+  assert.equal(emptyLogin.ok, false);
+
+  // Per-user salted PBKDF2 hashing never stores plaintext and verifies accurately
+  const hash1 = await hashPassword('gizli2026');
+  const hash2 = await hashPassword('gizli2026');
+  assert.notEqual(hash1, 'gizli2026');
+  assert.notEqual(hash1, hash2, 'Each account hash must use a unique random salt');
+  assert.equal(await verifyPassword('gizli2026', hash1), true);
+  assert.equal(await verifyPassword('yanlis99', hash1), false);
+
+  // In-memory Supabase player_accounts table adapter
+  const rows = new Map<string, PlayerAccountRow>();
+  const mockDb: PlayerAccountsDbAdapter = {
+    async findByUsername(username) {
+      return { row: rows.get(username) ?? null };
+    },
+    async createAccount(payload) {
+      if (rows.has(payload.username)) {
+        return { row: null, error: { code: '23505', message: 'duplicate key value' } };
+      }
+      const created: PlayerAccountRow = {
+        ...payload,
+        created_at: new Date().toISOString(),
+      };
+      rows.set(payload.username, created);
+      return { row: created };
+    },
+  };
+
+  // Register new account -> returns id (owner_id), username, and mandatory display_name
+  const regOk = await registerPlayerAccountWithAdapter(
+    { username: 'Patron34', password: 'sifre2026', displayName: 'Kemal Holding' },
+    mockDb,
+    false
+  );
+  assert.equal(regOk.ok, true);
+  assert.ok(regOk.user);
+  assert.equal(regOk.user.username, 'patron34');
+  assert.equal(regOk.user.name, 'Kemal Holding');
+  assert.equal(regOk.user.displayName, 'Kemal Holding');
+  assert.equal(regOk.user.provider, 'account');
+  assert.ok(regOk.user.id.length >= 10);
+
+  // Duplicate username MUST be rejected with Turkish warning
+  const dupReg = await registerPlayerAccountWithAdapter(
+    { username: 'patron34', password: 'baska123', displayName: 'Başka Patron' },
+    mockDb,
+    false
+  );
+  assert.equal(dupReg.ok, false);
+  assert.ok((dupReg.error ?? '').toLowerCase().includes('daha önce alınmış'));
+
+  // Login with wrong password -> rejected
+  const wrongLogin = await loginPlayerAccountWithAdapter(
+    { username: 'patron34', password: 'hatali_sifre' },
+    mockDb,
+    false
+  );
+  assert.equal(wrongLogin.ok, false);
+  assert.ok((wrongLogin.error ?? '').toLowerCase().includes('hatalı'));
+
+  // Login with nonexistent username -> rejected
+  const missingLogin = await loginPlayerAccountWithAdapter(
+    { username: 'olmayan_kullanici', password: 'sifre2026' },
+    mockDb,
+    false
+  );
+  assert.equal(missingLogin.ok, false);
+
+  // Login with correct credentials -> returns exact same id and display_name
+  const okLogin = await loginPlayerAccountWithAdapter(
+    { username: 'PATRON34', password: 'sifre2026' },
+    mockDb,
+    false
+  );
+  assert.equal(okLogin.ok, true);
+  assert.equal(okLogin.user?.id, regOk.user.id);
+  assert.equal(okLogin.user?.name, 'Kemal Holding');
 });
 
 
