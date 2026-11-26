@@ -51,6 +51,7 @@ import {
   BranchManagementModal,
   BranchSelectorModal,
 } from './BranchOperationsModals';
+import { HoldingReportsModal } from './HoldingReportsModal';
 import { OfficeInteriorPreview } from './OfficeInteriorPreview';
 
 /* ============================================================================
@@ -594,7 +595,6 @@ interface BusinessesWorkspaceProps {
   onOpenHr: (businessId?: string) => void;
   onOpenFranchise: () => void;
   onOpenRivals: () => void;
-  onOpenReports: () => void;
   onFocusBusinessOnMap: (businessId: string) => void;
   onEnterInterior: (businessId: string) => void;
   onCustomizeBranch: (
@@ -607,6 +607,8 @@ interface BusinessesWorkspaceProps {
   ) => boolean;
   onLaunchBranchMarketing: (businessId: string, tierId: AdCampaignTierId) => boolean;
   onUpgradeBranchFacility: (businessId: string, trackId: BranchUpgradeTrackId) => boolean;
+  onLaunchHoldingBulkAds: () => boolean;
+  onDistributeHoldingBonus: () => boolean;
 }
 
 function StatusDotsRow({
@@ -643,14 +645,15 @@ export function BusinessesWorkspace({
   onOpenHr,
   onOpenFranchise,
   onOpenRivals,
-  onOpenReports,
   onFocusBusinessOnMap,
   onEnterInterior,
   onCustomizeBranch,
   onLaunchBranchMarketing,
   onUpgradeBranchFacility,
+  onLaunchHoldingBulkAds,
+  onDistributeHoldingBonus,
 }: BusinessesWorkspaceProps) {
-  const [flowStep, setFlowStep] = useState<'overview' | 'select' | 'manage'>('overview');
+  const [flowStep, setFlowStep] = useState<'overview' | 'select' | 'manage' | 'reports'>('overview');
   const [selectorViewMode, setSelectorViewMode] = useState<'card' | 'list'>('card');
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(
     state.businesses[0]?.id ?? null
@@ -907,7 +910,7 @@ export function BusinessesWorkspace({
             <button
               type="button"
               data-testid="biz-open-reports-btn"
-              onClick={onOpenReports}
+              onClick={() => setFlowStep('reports')}
               className="flex min-h-[32px] shrink-0 items-center justify-center rounded-xl border border-sky-400/55 bg-sky-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-sky-100 transition-all hover:bg-sky-500/30 active:scale-[0.98] lg:min-h-[38px] lg:px-4 lg:text-xs"
             >
               RAPORLARI GÖR
@@ -1089,6 +1092,18 @@ export function BusinessesWorkspace({
           onCustomizeBranch={onCustomizeBranch}
           onLaunchMarketing={onLaunchBranchMarketing}
           onUpgradeFacility={onUpgradeBranchFacility}
+        />
+      )}
+
+      {/* ==================== TOPLAM DURUM VE RAPORLAR KARAR MERKEZİ ==================== */}
+      {flowStep === 'reports' && (
+        <HoldingReportsModal
+          state={state}
+          now={now}
+          onClose={() => setFlowStep('overview')}
+          onNavigateToBranch={openBranchManagement}
+          onLaunchBulkAds={onLaunchHoldingBulkAds}
+          onDistributeBulkBonus={onDistributeHoldingBonus}
         />
       )}
     </section>

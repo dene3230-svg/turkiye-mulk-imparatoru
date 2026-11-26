@@ -259,16 +259,23 @@ export function isBusinessUnderConstruction(business: OwnedBusiness): boolean {
 export function calculateDailyRentAndUtilities(business: OwnedBusiness): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
-  const levelScale = 1 + (business.level - 1) * 0.18;
-  const baseRent = Math.round(bp.dailyRentBase * business.landMultiplier * levelScale);
+  const safeLevel = Number.isFinite(business.level) ? Math.max(1, business.level) : 1;
+  const safeLandMult =
+    Number.isFinite(business.landMultiplier) && business.landMultiplier > 0
+      ? business.landMultiplier
+      : 1.0;
+  const levelScale = 1 + (safeLevel - 1) * 0.18;
+  const baseRent = Math.round(bp.dailyRentBase * safeLandMult * levelScale);
   if (isBusinessUnderConstruction(business)) {
     const constructionRent = Math.round(baseRent * 0.65);
+    const safeCost = Number.isFinite(business.purchaseCost) ? business.purchaseCost : bp.baseCost;
     const installment =
       business.constructionDailyInstallment ??
-      Math.round((business.purchaseCost * 0.025) / 100) * 100;
-    return constructionRent + installment;
+      Math.round((safeCost * 0.025) / 100) * 100;
+    const total = constructionRent + installment;
+    return Number.isFinite(total) ? Math.max(0, total) : 0;
   }
-  return baseRent;
+  return Number.isFinite(baseRent) ? Math.max(0, baseRent) : 0;
 }
 
 /** Extra budget required to hire a Double Shift Crew (-35% remaining construction days). */
@@ -405,7 +412,12 @@ export function calculateBusinessIncomePerSec(
   // v1.4.0: Businesses under construction / renovation generate 0 revenue until completed.
   if (isBusinessUnderConstruction(business)) return 0;
 
-  const levelMultiplier = 1 + (business.level - 1) * 0.45;
+  const safeLevel = Number.isFinite(business.level) ? Math.max(1, business.level) : 1;
+  const levelMultiplier = 1 + (safeLevel - 1) * 0.45;
+  const safeAffinity =
+    Number.isFinite(business.affinityMultiplier) && business.affinityMultiplier > 0
+      ? business.affinityMultiplier
+      : 1.0;
   const capLvl = Math.max(1, Math.min(10, Math.round(business.capacityLevel ?? 1)));
   const eqLvl = Math.max(1, Math.min(10, Math.round(business.equipmentLevel ?? 1)));
   const ambLvl = Math.max(1, Math.min(10, Math.round(business.ambianceLevel ?? 1)));
@@ -490,26 +502,27 @@ export function calculateBusinessIncomePerSec(
     }
   }
 
-  return Math.round(
+  const rawIncome =
     bp.baseIncomePerSec *
-      business.affinityMultiplier *
-      levelMultiplier *
-      facilityMultiplier *
-      staffMultiplier *
-      serviceTrafficMult *
-      brandDemandMult *
-      boostMultiplier *
-      adMultiplier *
-      blitzMultiplier *
-      avmSynergy *
-      parkingSynergy *
-      factorySynergy *
-      supermarketChainSynergy *
-      clonedChainSynergy *
-      franchiseGrossMult *
-      royaltyDeduction *
-      eventMultiplier
-  );
+    safeAffinity *
+    levelMultiplier *
+    facilityMultiplier *
+    staffMultiplier *
+    serviceTrafficMult *
+    brandDemandMult *
+    boostMultiplier *
+    adMultiplier *
+    blitzMultiplier *
+    avmSynergy *
+    parkingSynergy *
+    factorySynergy *
+    supermarketChainSynergy *
+    clonedChainSynergy *
+    franchiseGrossMult *
+    royaltyDeduction *
+    eventMultiplier;
+
+  return Number.isFinite(rawIncome) ? Math.max(0, Math.round(rawIncome)) : 0;
 }
 
 export function calculateBusinessHourlyIncome(

@@ -87,6 +87,10 @@ import {
   launchBranchMarketingCampaign,
   upgradeBranchFacility,
 } from './game/branchOpsEngine';
+import {
+  distributeHoldingStaffBonus,
+  launchHoldingWideAdCampaign,
+} from './game/holdingReportsEngine';
 import { ensureDynamicMissions } from './game/missionEngine';
 import {
   dismissStaffMember,
@@ -2196,6 +2200,44 @@ export default function App() {
     return true;
   };
 
+  const handleLaunchHoldingBulkAds = (): boolean => {
+    const res = launchHoldingWideAdCampaign(empire, Date.now());
+    if (!res.ok) {
+      if (res.error) {
+        pushNotification('Toplu Reklam Başlatılamadı', res.error, 'system', false);
+      }
+      return false;
+    }
+    soundEngine.playPurchase();
+    setEmpire(res.state);
+    pushNotification(
+      'Toplu Holding Reklamı Yayında',
+      `${res.affectedBranches ?? 0} aktif şubede 24 saatlik müşteri ve ciro artışı başlatıldı.`,
+      'milestone',
+      false
+    );
+    return true;
+  };
+
+  const handleDistributeHoldingBonus = (): boolean => {
+    const res = distributeHoldingStaffBonus(empire, Date.now());
+    if (!res.ok) {
+      if (res.error) {
+        pushNotification('Prim Dağıtılamadı', res.error, 'system', false);
+      }
+      return false;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Tüm Personele Prim Dağıtıldı',
+      'Çalışan yorgunluğu azaldı, ekip morali ve verimliliği yükseldi!',
+      'milestone',
+      false
+    );
+    return true;
+  };
+
   const handleHireStaffQuick = (businessId: string) => {
     const res = hireStaff(empire, businessId, Date.now());
     if (!res.ok) return;
@@ -3631,16 +3673,13 @@ export default function App() {
                   }}
                   onOpenFranchise={() => handleSelectManagementTab('franchise')}
                   onOpenRivals={() => handleSelectManagementTab('rivals')}
-                  onOpenReports={() => {
-                    soundEngine.playClick();
-                    closeAllInGameOverlays();
-                    setAccountingModalOpen(true);
-                  }}
                   onFocusBusinessOnMap={handleSelectOwnBusiness}
                   onEnterInterior={(id) => setInteriorBusinessId(id)}
                   onCustomizeBranch={handleCustomizeBranch}
                   onLaunchBranchMarketing={handleLaunchBranchMarketing}
                   onUpgradeBranchFacility={handleUpgradeBranchFacility}
+                  onLaunchHoldingBulkAds={handleLaunchHoldingBulkAds}
+                  onDistributeHoldingBonus={handleDistributeHoldingBonus}
                 />
               )}
 

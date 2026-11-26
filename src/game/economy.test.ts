@@ -164,6 +164,12 @@ import {
   upgradeBranchFacility,
 } from './branchOpsEngine.ts';
 import {
+  computeHoldingReportsSnapshot,
+  distributeHoldingStaffBonus,
+  launchHoldingWideAdCampaign,
+  scanSmartBranchAlerts,
+} from './holdingReportsEngine.ts';
+import {
   computeExecutiveDashboardMetrics,
   computeFinanceCommandMetrics,
 } from './dashboardMetrics.ts';
@@ -629,7 +635,7 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.5.5');
+  assert.equal(APP_VERSION, '1.5.7');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2519,6 +2525,155 @@ test('v1.5.5 3-Step İşletmeler Flow: Unlimited Branches (No Quota), 4-Card Met
   );
   assert.ok(postUpgradeIncome > postAdIncome, 'Facility upgrades must lift real branch income');
 });
+
+test('v1.5.7 Toplam Durum ve Raporlar Decision Center: Period Scaling, Expense Breakdown, Smart Alerts, Sector Donut & Bulk Actions', () => {
+  const now = 3_800_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 150_000_000;
+  const owner = { id: 'p-v157', name: 'Patron' };
+
+  const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Kadıköy Kafe', owner, [], now);
+  assert.equal(b1.ok, true, `Kadıköy Kafe purchase failed: ${b1.error}`);
+  const b2 = purchaseBusiness(b1.state, 'restoran', landPin(41.0522, 29.0267, 34), 'Beşiktaş Restoran', owner, [], now + 5);
+  assert.equal(b2.ok, true, `Beşiktaş Restoran purchase failed: ${b2.error}`);
+  const b3 = purchaseBusiness(b2.state, 'supermarket', landPin(41.0722, 29.0167, 34), 'Levent Market', owner, [], now + 10);
+  assert.equal(b3.ok, true, `Levent Market purchase failed: ${b3.error}`);
+  state = openAllBranches(b3.state);
+
+  // Give branches realistic staff & make Beşiktaş Restoran fatigued so operational warning triggers
+  state = {
+    ...state,
+    businesses: state.businesses.map((biz, idx) => {
+      const isFatigued = biz.customName === 'Beşiktaş Restoran';
+      return {
+      ...biz,
+      staffMorale: isFatigued ? 58 : 90,
+      maintenanceLevel: isFatigued ? 74 : 92,
+      stockLevel: 90,
+      staffCount: 2,
+      employees: [
+        {
+          id: `emp-${idx}-1`,
+          name: `Çalışan ${idx + 1}`,
+          role: 'calisan' as const,
+          roleTitle: 'Uzman',
+          stars: 4 as const,
+          speed: 78,
+          efficiency: 76,
+          leadership: 65,
+          hourlySalary: 95,
+          hireCost: 15_000,
+          hiredAt: now - 5000,
+        },
+        {
+          id: `emp-${idx}-2`,
+          name: `Müdür ${idx + 1}`,
+          role: 'sube_muduru' as const,
+          roleTitle: 'Şube Müdürü',
+          stars: 4 as const,
+          speed: 82,
+          efficiency: 84,
+          leadership: 86,
+          hourlySalary: 145,
+          hireCost: 30_000,
+          hiredAt: now - 5000,
+        },
+      ],
+      };
+    }),
+  };
+
+  // 1) Period filtering scales revenue & expense cleanly across 24h, 7d, 30d
+  const rep24h = computeHoldingReportsSnapshot(state, '24h', now);
+  const rep7d = computeHoldingReportsSnapshot(state, '7d', now);
+  const rep30d = computeHoldingReportsSnapshot(state, '30d', now);
+
+  assert.equal(rep24h.periodDays, 1);
+  assert.equal(rep7d.periodDays, 7);
+  assert.equal(rep30d.periodDays, 30);
+  assert.equal(rep7d.totalRevenue, rep24h.totalRevenue * 7);
+  assert.equal(rep30d.totalRevenue, rep24h.totalRevenue * 30);
+  assert.equal(rep7d.trendSeries.length, 7);
+
+  // 2) Expense breakdown sums to exactly 100%
+  const expSum =
+    rep24h.expenseBreakdown.personnelPct +
+    rep24h.expenseBreakdown.rentTaxPct +
+    rep24h.expenseBreakdown.supplyOpsPct;
+  assert.equal(expSum, 100, `Expense breakdown must sum to 100%, got ${expSum}`);
+  assert.ok(rep24h.expenseBreakdown.personnelCost > 0);
+  assert.ok(rep24h.expenseBreakdown.rentTaxCost > 0);
+  assert.ok(rep24h.expenseBreakdown.supplyOpsCost > 0);
+
+  // 3) Smart Alerts detect BOTH operational warning (fatigued Beşiktaş Restoran) & growth opportunity
+  assert.ok(
+    rep24h.alerts.some((a) => a.type === 'warning' && a.businessName === 'Beşiktaş Restoran'),
+    'Must flag fatigued Beşiktaş Restoran as operational warning'
+  );
+  assert.ok(
+    rep24h.alerts.some((a) => a.type === 'opportunity'),
+    'Must identify a high-performing branch as growth opportunity'
+  );
+
+  // 4) Sector donut slices sum to 100% across Kafe, Restoran, Market
+  assert.equal(rep24h.sectorSlices.length, 3);
+  const sectorPctSum = rep24h.sectorSlices.reduce((s, x) => s + x.sharePct, 0);
+  assert.equal(sectorPctSum, 100, `Sector distribution must sum to 100%, got ${sectorPctSum}`);
+
+  // 5) Bulk Holding Action 1: Launch Holding-Wide Ads across all 3 active branches
+  const cashBeforeAds = state.cash;
+  const brandBeforeAds = state.brandRecognition ?? 5;
+  const bulkAdsRes = launchHoldingWideAdCampaign(state, now + 100);
+  assert.equal(bulkAdsRes.ok, true);
+  assert.equal(bulkAdsRes.affectedBranches, 3);
+  assert.equal(bulkAdsRes.state.cash, cashBeforeAds - rep24h.bulkAdCost);
+  assert.ok((bulkAdsRes.state.brandRecognition ?? 0) > brandBeforeAds);
+  assert.ok(
+    bulkAdsRes.state.businesses.every((b) => b.activeAdCampaign?.label === 'Toplu Holding Kampanyası'),
+    'Every active branch must receive the holding-wide campaign'
+  );
+
+  // 6) Bulk Holding Action 2: Distribute Staff Bonus cuts fatigue & lifts morale + efficiency
+  const cashBeforeBonus = bulkAdsRes.state.cash;
+  const moraleBefore = bulkAdsRes.state.businesses[1].staffMorale ?? 0;
+  const effBefore = bulkAdsRes.state.businesses[1].employees![0].efficiency;
+  const bonusRes = distributeHoldingStaffBonus(bulkAdsRes.state, now + 200);
+  assert.equal(bonusRes.ok, true);
+  assert.equal(bonusRes.state.cash, cashBeforeBonus - rep24h.bulkBonusCost);
+  assert.ok((bonusRes.state.businesses[1].staffMorale ?? 0) > moraleBefore);
+  assert.ok(bonusRes.state.businesses[1].employees![0].efficiency > effBefore);
+
+  // 7) Optimum fallback: when all branches have 100 morale/stock/maint, >=3 staff & maxed capacity/equipment, alerts array is empty
+  const optimumState: EmpireState = {
+    ...bonusRes.state,
+    businesses: bonusRes.state.businesses.map((b) => ({
+      ...b,
+      staffMorale: 100,
+      maintenanceLevel: 100,
+      stockLevel: 100,
+      capacityLevel: 10,
+      equipmentLevel: 10,
+      employees: [
+        ...(b.employees ?? []),
+        {
+          id: `extra-${b.id}`,
+          name: 'Ekstra',
+          role: 'calisan' as const,
+          roleTitle: 'Uzman',
+          stars: 5 as const,
+          speed: 95,
+          efficiency: 95,
+          leadership: 90,
+          hourlySalary: 95,
+          hireCost: 20_000,
+          hiredAt: now,
+        },
+      ],
+    })),
+  };
+  assert.equal(scanSmartBranchAlerts(optimumState, now + 300).length, 0);
+});
+
 
 
 
