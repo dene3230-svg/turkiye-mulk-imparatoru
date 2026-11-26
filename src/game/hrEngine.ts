@@ -418,13 +418,16 @@ export function calculateStaffQualityMultiplier(
 
   if (employees.length > 0) {
     for (const emp of employees) {
-      const starBoost = STAR_EFFICIENCY_MULTIPLIER[emp.stars] - 1;
-      const skillBonus = ((emp.speed + emp.efficiency) / 200) * 0.12;
+      const starMult = STAR_EFFICIENCY_MULTIPLIER[emp.stars] ?? 1.06;
+      const starBoost = starMult - 1;
+      const speedVal = Number.isFinite(emp.speed) ? emp.speed : 70;
+      const effVal = Number.isFinite(emp.efficiency) ? emp.efficiency : 70;
+      const skillBonus = ((speedVal + effVal) / 200) * 0.12;
       employeeBonus += starBoost + skillBonus;
     }
   } else {
     // Fallback for legacy staffCount without detailed employee records
-    employeeBonus = business.staffCount * 0.14;
+    employeeBonus = (Number.isFinite(business.staffCount) ? business.staffCount : 0) * 0.14;
   }
 
   // Operational efficiency drops when stock or maintenance is low!

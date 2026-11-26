@@ -170,7 +170,7 @@ export function PinDropPanel({
     location.landStatus === 'water' ||
     location.landStatus === 'invalid';
   const isTooClose = !distanceCheck.allowed;
-  const isQuotaFull = ownBranchCount >= maxBranches;
+  const isQuotaFull = false;
   const isLevelLocked =
     !selectedFranchise && !chainCloneDraft && companyLevel < selectedBlueprint.minCompanyLevel;
   const canAfford = cash >= totalCost;
@@ -283,14 +283,8 @@ export function PinDropPanel({
                 Kara Doğrulandı · Arsa x{location.landMultiplier.toFixed(2)}
               </span>
             </span>
-            <span
-              className={`shrink-0 font-mono-num font-bold whitespace-nowrap ${
-                isQuotaFull
-                  ? 'text-red-600 dark:text-red-400'
-                  : 'text-slate-700 dark:text-slate-300'
-              }`}
-            >
-              Şube {ownBranchCount}/{maxBranches}
+            <span className="shrink-0 font-mono-num font-bold whitespace-nowrap text-slate-700 dark:text-slate-300">
+              {ownBranchCount} Aktif Şube
             </span>
           </div>
         )}

@@ -335,7 +335,23 @@ export interface OwnedBusiness {
   franchiseOwnerId?: string;
   franchiseRoyaltyRate?: number; // 0.10 .. 0.25
   pledgedLoanId?: string; // If currently pledged as collateral
+  // v1.5.5 Branch Customization & Facility Upgrades
+  brandColor?: string;
+  conceptIcon?: BranchConceptIconId;
+  capacityLevel?: number; // 1..10 Masa/Alan Kapasitesi
+  equipmentLevel?: number; // 1..10 Mutfak/Ekipman Altyapısı
+  ambianceLevel?: number; // 1..10 Konsept & Müşteri Deneyimi
 }
+
+export type BranchConceptIconId =
+  | 'coffee'
+  | 'utensils'
+  | 'store'
+  | 'building'
+  | 'crown'
+  | 'sparkles';
+
+export type BranchUpgradeTrackId = 'capacity' | 'equipment' | 'ambiance';
 
 export interface RemoteBusinessRecord {
   id: string;

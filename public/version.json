@@ -1,8 +1,9 @@
 {
-  "version": "1.5.2",
+  "version": "1.5.5",
   "buildDate": "2026-11-26",
   "mandatory": false,
   "notes": [
+    "İşletmeler sekmesi 3 adımlı yeni yönetim akışıyla (4 Kartlı Panel, Kart/Liste Şube Seçici ve Detaylı Şube Özelleştirme) güncellendi",
     "Finans, Bankalar & Borsa sekmesi 3 sütunlu gelişmiş komuta merkezi tasarımına güncellendi",
     "Ofisim & Prestij Yönetimi sekmesi yeni 3 sütunlu modern arayüzle eklendi",
     "Modern 3 sütunlu yatay yönetici kontrol paneli ve yeni minimalist arayüz tasarımı eklendi",

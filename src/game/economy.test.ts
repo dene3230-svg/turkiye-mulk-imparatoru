@@ -153,6 +153,17 @@ import {
 } from './strategyEngine.ts';
 import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
 import {
+  BRANCH_BRAND_COLORS,
+  BRANCH_MARKETING_CAMPAIGNS,
+  BRANCH_UPGRADE_TRACKS,
+  computeBusinessesOverviewMetrics,
+  customizeBranchIdentity,
+  getBranchFacilityLevel,
+  getBranchFacilityTotalMultiplier,
+  launchBranchMarketingCampaign,
+  upgradeBranchFacility,
+} from './branchOpsEngine.ts';
+import {
   computeExecutiveDashboardMetrics,
   computeFinanceCommandMetrics,
 } from './dashboardMetrics.ts';
@@ -618,7 +629,7 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.5.2');
+  assert.equal(APP_VERSION, '1.5.5');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2404,6 +2415,111 @@ test('v1.5.2 Finans, Bankalar & Borsa 3-Column Command Center: Credit Eligibilit
   assert.equal(postSettleFin.pendingDayEndCount, 0);
   assert.equal(postSettleFin.pendingDayEndNetCash, 0);
 });
+
+test('v1.5.5 3-Step İşletmeler Flow: Unlimited Branches (No Quota), 4-Card Metrics, Customization, Campaigns & Facility Upgrades', () => {
+  const now = 3_500_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 40_000_000;
+  const owner = { id: 'p-v155', name: 'Patron' };
+
+  // 1) Branch quota cap is completely removed: starter tier can open 4+ branches freely
+  const coords: Array<[number, number, string]> = [
+    [41.0422, 29.0067, 'Kadıköy Kafe'],
+    [41.0522, 29.0267, 'Beşiktaş Restoran'],
+    [41.0722, 29.0167, 'Levent Market'],
+    [41.0922, 29.0367, 'Maslak Kafe'],
+  ];
+  for (const [lat, lng, label] of coords) {
+    const res = purchaseBusiness(state, 'kafe', landPin(lat, lng, 34), label, owner, [], now);
+    assert.equal(res.ok, true, `Must allow unlimited branch creation for ${label}`);
+    state = res.state;
+  }
+  assert.equal(state.businesses.length, 4, 'Starter company must be allowed to exceed old 3-branch quota');
+
+  // Open all branches so revenue & service quality compute actively
+  state = openAllBranches(state);
+  const targetId = state.businesses[0].id;
+
+  // 2) Adım 1 overview metrics reflect active branches, revenue, quality, and team
+  const overview = computeBusinessesOverviewMetrics(state, now);
+  assert.equal(overview.totalBranches, 4);
+  assert.equal(overview.activeBranches, 4);
+  assert.ok(overview.totalDailyRevenue > 0);
+  assert.ok(overview.avgServiceQuality > 0);
+  assert.ok(overview.leadBranch !== null);
+
+  // 3) Adım 3 Col 1: Customize branch name, brand color, and concept icon
+  const badRename = customizeBranchIdentity(state, targetId, { customName: 'A' }, now + 10);
+  assert.equal(badRename.ok, false, 'Single-character name must be rejected');
+
+  const customRes = customizeBranchIdentity(
+    state,
+    targetId,
+    {
+      customName: 'Moda Sahil Kafe',
+      brandColor: BRANCH_BRAND_COLORS[1],
+      conceptIcon: 'crown',
+    },
+    now + 20
+  );
+  assert.equal(customRes.ok, true);
+  assert.equal(customRes.business?.customName, 'Moda Sahil Kafe');
+  assert.equal(customRes.business?.brandColor, BRANCH_BRAND_COLORS[1]);
+  assert.equal(customRes.business?.conceptIcon, 'crown');
+  state = customRes.state;
+
+  // 4) Adım 3 Col 2: Launch Lokal Broşür (₺5.000 / +%5 müşteri) & Sosyal Medya Reklamı (₺12.000 / +%15 müşteri)
+  assert.equal(BRANCH_MARKETING_CAMPAIGNS[0].cost, 5_000);
+  assert.equal(BRANCH_MARKETING_CAMPAIGNS[0].customerBoostPct, 5);
+  assert.equal(BRANCH_MARKETING_CAMPAIGNS[1].cost, 12_000);
+  assert.equal(BRANCH_MARKETING_CAMPAIGNS[1].customerBoostPct, 15);
+
+  const preAdCash = state.cash;
+  const preAdIncome = calculateBusinessIncomePerSec(
+    state.businesses[0],
+    null,
+    now + 25,
+    state.businesses,
+    state
+  );
+  const adRes = launchBranchMarketingCampaign(state, targetId, 'social', now + 30);
+  assert.equal(adRes.ok, true);
+  assert.equal(adRes.state.cash, preAdCash - 12_000);
+  assert.equal(adRes.state.businesses[0].activeAdCampaign?.tierId, 'social');
+  const postAdIncome = calculateBusinessIncomePerSec(
+    adRes.state.businesses[0],
+    null,
+    now + 35,
+    adRes.state.businesses,
+    adRes.state
+  );
+  assert.ok(postAdIncome > preAdIncome, 'Active branch ad campaign must lift revenue');
+  state = adRes.state;
+
+  // 5) Adım 3 Col 3: Facility upgrades increase track level, multiplier, and branch income
+  assert.equal(BRANCH_UPGRADE_TRACKS.length, 3);
+  const preMult = getBranchFacilityTotalMultiplier(state.businesses[0]);
+  assert.equal(preMult, 1);
+
+  const capUp = upgradeBranchFacility(state, targetId, 'capacity', now + 40);
+  assert.equal(capUp.ok, true);
+  assert.equal(getBranchFacilityLevel(capUp.business!, 'capacity'), 2);
+  const eqUp = upgradeBranchFacility(capUp.state, targetId, 'equipment', now + 50);
+  assert.equal(eqUp.ok, true);
+  assert.equal(getBranchFacilityLevel(eqUp.business!, 'equipment'), 2);
+
+  const postMult = getBranchFacilityTotalMultiplier(eqUp.business!);
+  assert.ok(postMult >= 1.4, `Expected combined facility multiplier >= 1.4, got ${postMult}`);
+  const postUpgradeIncome = calculateBusinessIncomePerSec(
+    eqUp.business!,
+    null,
+    now + 60,
+    eqUp.state.businesses,
+    eqUp.state
+  );
+  assert.ok(postUpgradeIncome > postAdIncome, 'Facility upgrades must lift real branch income');
+});
+
 
 
 

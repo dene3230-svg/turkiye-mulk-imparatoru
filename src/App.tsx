@@ -24,6 +24,8 @@ import {
 import type {
   AdCampaignTierId,
   BankRecord,
+  BranchConceptIconId,
+  BranchUpgradeTrackId,
   BusinessTypeId,
   ChainCloneDraft,
   ChatMessage,
@@ -80,6 +82,11 @@ import {
   tickEconomy,
   upgradeBusiness,
 } from './game/economy';
+import {
+  customizeBranchIdentity,
+  launchBranchMarketingCampaign,
+  upgradeBranchFacility,
+} from './game/branchOpsEngine';
 import { ensureDynamicMissions } from './game/missionEngine';
 import {
   dismissStaffMember,
@@ -2078,6 +2085,117 @@ export default function App() {
     );
   };
 
+  const handleCustomizeBranch = (
+    businessId: string,
+    updates: {
+      customName: string;
+      brandColor: string;
+      conceptIcon: BranchConceptIconId;
+    }
+  ): boolean => {
+    const res = customizeBranchIdentity(empire, businessId, updates, Date.now());
+    if (!res.ok || !res.business) {
+      if (res.error) {
+        pushNotification('Özelleştirme Hatası', res.error, 'system', false);
+      }
+      return false;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+
+    const patch = {
+      business_name: res.business.customName,
+    };
+    setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, res.business!.id, patch));
+    updateBusinessInRoom(res.business.id, patch).then((syncRes) => {
+      if (!syncRes.ok) {
+        reportSupabaseSyncError('Şube adı Supabase üzerinde güncellenemedi', syncRes.error);
+      }
+    });
+
+    pushNotification(
+      'Şube Özelleştirildi',
+      `${res.business.customName} kimliği ve konsepti kaydedildi.`,
+      'milestone',
+      false
+    );
+    return true;
+  };
+
+  const handleLaunchBranchMarketing = (
+    businessId: string,
+    tierId: AdCampaignTierId
+  ): boolean => {
+    const res = launchBranchMarketingCampaign(empire, businessId, tierId, Date.now());
+    if (!res.ok || !res.campaign) {
+      if (res.error) {
+        pushNotification('Reklam Başlatılamadı', res.error, 'system', false);
+      }
+      return false;
+    }
+    soundEngine.playPurchase();
+    setEmpire(res.state);
+    const biz = res.state.businesses.find((b) => b.id === businessId);
+    pushNotification(
+      'Reklam Kampanyası Yayında',
+      `${biz?.customName ?? 'Şube'} için ${res.campaign.label} başlatıldı (+%${Math.round(
+        res.campaign.customerBoost * 100
+      )} müşteri).`,
+      'milestone',
+      false
+    );
+    return true;
+  };
+
+  const handleUpgradeBranchFacility = (
+    businessId: string,
+    trackId: BranchUpgradeTrackId
+  ): boolean => {
+    const res = upgradeBranchFacility(empire, businessId, trackId, Date.now());
+    if (!res.ok || !res.business) {
+      if (res.error) {
+        pushNotification('Geliştirme Başarısız', res.error, 'system', false);
+      }
+      return false;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+
+    const hourly = calculateBusinessHourlyIncome(
+      res.business,
+      res.state.activeEvent,
+      Date.now(),
+      res.state.businesses,
+      res.state
+    );
+    const valuation = calculateBusinessValuation(res.business, res.state.activeEvent, Date.now());
+    const holdingLabel =
+      res.state.playerIpo?.holdingName ||
+      res.state.supermarketChain?.name ||
+      companyTier.title;
+    const ownerDisplay = user ? formatOwnerDisplayName(user.name, holdingLabel) : undefined;
+    const patch = {
+      level: res.business.level,
+      hourly_income: Math.round(hourly),
+      valuation: Math.round(valuation),
+      ...(ownerDisplay ? { owner_name: ownerDisplay } : {}),
+    };
+    setRoomRecords((prev) => applyRealtimeBusinessPatch(prev, res.business!.id, patch));
+    updateBusinessInRoom(res.business.id, patch).then((syncRes) => {
+      if (!syncRes.ok) {
+        reportSupabaseSyncError('Şube geliştirmesi Supabase üzerinde güncellenemedi', syncRes.error);
+      }
+    });
+
+    pushNotification(
+      'Şube Geliştirildi',
+      `${res.business.customName} altyapısı Sv. ${res.newLevel} oldu!`,
+      'milestone',
+      false
+    );
+    return true;
+  };
+
   const handleHireStaffQuick = (businessId: string) => {
     const res = hireStaff(empire, businessId, Date.now());
     if (!res.ok) return;
@@ -3493,12 +3611,11 @@ export default function App() {
                 />
               )}
 
-              {/* VIEW 4: İşletmeler Workspace */}
+              {/* VIEW 4: İşletmeler Workspace (3-Step Glassmorphism Operations Flow) */}
               {activeNav === 'businesses' && (
                 <BusinessesWorkspace
                   state={empire}
                   competitorBusinesses={competitorBusinesses}
-                  maxBranches={companyTier.maxBranches}
                   now={now}
                   onGoMapNewBranch={() => {
                     soundEngine.playClick();
@@ -3514,12 +3631,16 @@ export default function App() {
                   }}
                   onOpenFranchise={() => handleSelectManagementTab('franchise')}
                   onOpenRivals={() => handleSelectManagementTab('rivals')}
+                  onOpenReports={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setAccountingModalOpen(true);
+                  }}
                   onFocusBusinessOnMap={handleSelectOwnBusiness}
                   onEnterInterior={(id) => setInteriorBusinessId(id)}
-                  onInvestQuality={handleInvestBranchQuality}
-                  onUpgradeBusiness={handleUpgradeBusiness}
-                  onCloneBusiness={handleStartCloneBusiness}
-                  onRestockBusiness={handleRestockBusiness}
+                  onCustomizeBranch={handleCustomizeBranch}
+                  onLaunchBranchMarketing={handleLaunchBranchMarketing}
+                  onUpgradeBranchFacility={handleUpgradeBranchFacility}
                 />
               )}
 

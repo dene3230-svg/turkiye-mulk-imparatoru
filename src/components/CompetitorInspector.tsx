@@ -40,7 +40,7 @@ export function CompetitorInspector({
   const offer = calculateDynamicTakeoverOffer(competitor);
   const blitzCost = calculateCompetitiveBlitzCost(competitor);
 
-  const hasQuota = ownBranchCount < maxBranches;
+  const hasQuota = true;
   const canAffordTakeover = cash >= offer.price;
   const canTakeover = hasQuota && canAffordTakeover;
   const canBlitz = hasBranchInCity && !blitzActive && cash >= blitzCost;

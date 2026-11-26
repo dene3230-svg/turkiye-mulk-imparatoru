@@ -1,12 +1,13 @@
+import { useState } from 'react';
 import {
+  Activity,
+  BarChart3,
   Briefcase,
   Building2,
   CalendarCheck2,
   Car,
   FileSpreadsheet,
-  Hammer,
   Landmark,
-  Link2,
   Lock,
   MapPin,
   Presentation,
@@ -18,10 +19,13 @@ import {
   Swords,
   TrendingUp,
   UserCheck,
+  UserPlus,
   Users,
-  Wrench,
 } from 'lucide-react';
 import type {
+  AdCampaignTierId,
+  BranchConceptIconId,
+  BranchUpgradeTrackId,
   EmpireState,
   OfficeEquipmentId,
   OfficeTierId,
@@ -32,21 +36,21 @@ import {
   computeFinanceCommandMetrics,
   type ExecutiveDashboardMetrics,
 } from '../game/dashboardMetrics';
-import {
-  calculateBusinessHourlyIncome,
-  formatTL,
-  isBusinessUnderConstruction,
-} from '../game/economy';
+import { computeBusinessesOverviewMetrics } from '../game/branchOpsEngine';
+import { formatTL } from '../game/economy';
 import {
   OFFICE_EQUIPMENT_ITEMS,
   OFFICE_EQUIPMENT_MAX_LEVEL,
-  calculateBranchServiceQuality,
   calculatePersonalAssetsValuation,
   getNextOfficeTier,
   getOfficeEquipmentLevel,
   getOfficeEquipmentUpgradeCost,
   getOfficeTierById,
 } from '../game/officeEngine';
+import {
+  BranchManagementModal,
+  BranchSelectorModal,
+} from './BranchOperationsModals';
 import { OfficeInteriorPreview } from './OfficeInteriorPreview';
 
 /* ============================================================================
@@ -580,251 +584,513 @@ export function FinansWorkspace({
 }
 
 /* ============================================================================
-   2. İŞLETMELER WORKSPACE (Şubeler, Personel, Hizmet Kalitesi, Franchise, Rakipler)
+   2. İŞLETMELER WORKSPACE — ADIM 1 (4 Kartlı Panel) + ADIM 2 & ADIM 3 AKIŞI
    ============================================================================ */
 interface BusinessesWorkspaceProps {
   state: EmpireState;
   competitorBusinesses: RemoteBusinessRecord[];
-  maxBranches: number;
   now: number;
   onGoMapNewBranch: () => void;
   onOpenHr: (businessId?: string) => void;
   onOpenFranchise: () => void;
   onOpenRivals: () => void;
+  onOpenReports: () => void;
   onFocusBusinessOnMap: (businessId: string) => void;
   onEnterInterior: (businessId: string) => void;
-  onInvestQuality: (businessId: string) => void;
-  onUpgradeBusiness: (businessId: string) => void;
-  onCloneBusiness: (businessId: string) => void;
-  onRestockBusiness: (businessId: string) => void;
+  onCustomizeBranch: (
+    businessId: string,
+    updates: {
+      customName: string;
+      brandColor: string;
+      conceptIcon: BranchConceptIconId;
+    }
+  ) => boolean;
+  onLaunchBranchMarketing: (businessId: string, tierId: AdCampaignTierId) => boolean;
+  onUpgradeBranchFacility: (businessId: string, trackId: BranchUpgradeTrackId) => boolean;
+}
+
+function StatusDotsRow({
+  label,
+  filled,
+  colorClass,
+}: {
+  label: string;
+  filled: number;
+  colorClass: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-[9.5px] lg:text-xs">
+      <span className="truncate font-semibold text-slate-300">{label}</span>
+      <div className="flex shrink-0 items-center gap-1">
+        {[1, 2, 3, 4, 5].map((dot) => (
+          <span
+            key={dot}
+            className={`h-2 w-2 rounded-full lg:h-2.5 lg:w-2.5 ${
+              dot <= filled ? colorClass : 'bg-slate-700/90'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function BusinessesWorkspace({
   state,
   competitorBusinesses,
-  maxBranches,
   now,
   onGoMapNewBranch,
   onOpenHr,
   onOpenFranchise,
   onOpenRivals,
+  onOpenReports,
   onFocusBusinessOnMap,
   onEnterInterior,
-  onInvestQuality,
-  onUpgradeBusiness,
-  onCloneBusiness,
-  onRestockBusiness,
+  onCustomizeBranch,
+  onLaunchBranchMarketing,
+  onUpgradeBranchFacility,
 }: BusinessesWorkspaceProps) {
+  const [flowStep, setFlowStep] = useState<'overview' | 'select' | 'manage'>('overview');
+  const [selectorViewMode, setSelectorViewMode] = useState<'card' | 'list'>('card');
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(
+    state.businesses[0]?.id ?? null
+  );
+
+  const metrics = computeBusinessesOverviewMetrics(state, now);
+  const managedBranch =
+    state.businesses.find((b) => b.id === selectedBranchId) ?? state.businesses[0] ?? null;
+
+  const openBranchSelector = () => {
+    if (!selectedBranchId && state.businesses[0]) {
+      setSelectedBranchId(state.businesses[0].id);
+    }
+    setFlowStep('select');
+  };
+
+  const openBranchManagement = (businessId: string) => {
+    setSelectedBranchId(businessId);
+    setFlowStep('manage');
+  };
+
+  const visibleStaff = metrics.teamMembers.slice(0, 4);
+
   return (
     <section
       aria-label="İşletme ve Şube Yönetimi"
       data-testid="workspace-businesses"
-      className="panel-scroll h-full w-full p-3 lg:p-5"
+      className="panel-scroll flex h-full min-h-0 w-full flex-col gap-2 overflow-y-auto px-2.5 py-2 lg:gap-3 lg:px-5 lg:py-3.5"
     >
-      <div className="mx-auto max-w-6xl space-y-3">
-        {/* Top Action Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-700/70 bg-[#111B30]/85 px-3.5 py-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onOpenHr(state.businesses[0]?.id)}
-              className="flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/25 whitespace-nowrap"
-            >
-              <Users className="h-3.5 w-3.5" />
-              İK & Personel
-            </button>
-            <button
-              type="button"
-              onClick={onOpenFranchise}
-              className="flex items-center gap-1.5 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/25 whitespace-nowrap"
-            >
-              <Store className="h-3.5 w-3.5" />
-              Franchise & Bayilik
-            </button>
-            <button
-              type="button"
-              onClick={onOpenRivals}
-              className="flex items-center gap-1.5 rounded-xl border border-rose-400/40 bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-200 hover:bg-rose-500/25 whitespace-nowrap"
-            >
-              <Swords className="h-3.5 w-3.5" />
-              Rakip İşletmeler ({competitorBusinesses.length})
-            </button>
+      {/* ==================== TOP ACTION BAR (NO ŞUBE KOTASI!) ==================== */}
+      <div
+        data-testid="businesses-top-action-bar"
+        className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 rounded-2xl border border-slate-700/75 bg-[#101A30]/90 px-2.5 py-1.5 backdrop-blur-md lg:gap-2 lg:px-4 lg:py-2.5"
+      >
+        <div className="flex flex-wrap items-center gap-1.5 lg:gap-2">
+          <button
+            type="button"
+            data-testid="biz-top-hr-btn"
+            onClick={() => onOpenHr(state.businesses[0]?.id)}
+            className="flex items-center gap-1.5 rounded-xl border border-cyan-400/45 bg-cyan-500/15 px-2.5 py-1 text-[10px] font-bold text-cyan-200 transition-colors hover:bg-cyan-500/25 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
+          >
+            <Users className="h-3.5 w-3.5" />
+            İK & Personel
+          </button>
+          <button
+            type="button"
+            data-testid="biz-top-franchise-btn"
+            onClick={onOpenFranchise}
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-400/45 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-200 transition-colors hover:bg-emerald-500/25 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
+          >
+            <Store className="h-3.5 w-3.5" />
+            Franchise & Bayilik
+          </button>
+          <button
+            type="button"
+            data-testid="biz-top-rivals-btn"
+            onClick={onOpenRivals}
+            className="flex items-center gap-1.5 rounded-xl border border-rose-400/45 bg-rose-500/15 px-2.5 py-1 text-[10px] font-bold text-rose-200 transition-colors hover:bg-rose-500/25 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
+          >
+            <Swords className="h-3.5 w-3.5" />
+            Rakip İşletmeler ({competitorBusinesses.length})
+          </button>
+        </div>
+
+        <button
+          type="button"
+          data-testid="new-branch-on-map-btn"
+          onClick={onGoMapNewBranch}
+          className="flex items-center gap-1.5 rounded-xl border border-amber-400/75 bg-gradient-to-r from-amber-500/25 to-yellow-500/15 px-3 py-1 text-[10px] font-extrabold text-amber-100 shadow-[0_0_14px_rgba(245,158,11,0.2)] transition-all hover:brightness-115 whitespace-nowrap lg:px-4 lg:py-1.5 lg:text-xs"
+        >
+          <MapPin className="h-3.5 w-3.5 text-amber-300" />
+          Haritada Yeni Şube Kur
+        </button>
+      </div>
+
+      {/* ==================== 2x2 MANAGEMENT GRID (ADIM 1) ==================== */}
+      <div
+        data-testid="businesses-overview-grid"
+        className="grid shrink-0 grid-cols-1 gap-2 pb-2 min-[640px]:grid-cols-2 lg:min-h-0 lg:flex-1 lg:gap-3.5 lg:pb-0"
+      >
+        {/* CARD 1 (TOP-LEFT): İŞLETMELERİM */}
+        <div
+          data-testid="biz-card-my-branches"
+          className="flex flex-col justify-between rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-[#132642]/92 via-[#101C35]/94 to-[#0C1528]/96 p-2.5 shadow-[inset_0_1px_0_rgba(34,211,238,0.16)] backdrop-blur-md lg:min-h-0 lg:p-4"
+        >
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-500/15 text-cyan-300 lg:h-10 lg:w-10">
+                  <Store className="h-4 w-4 lg:h-5 lg:w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-[11px] font-extrabold tracking-wide text-white lg:text-sm">
+                    İŞLETMELERİM
+                  </h2>
+                  <p className="truncate text-[9px] text-slate-400 lg:text-[11px]">
+                    Kurulmuş aktif şubeleriniz ve operasyon özeti
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full border border-cyan-400/40 bg-cyan-500/15 px-2 py-0.5 font-mono-num text-[9.5px] font-extrabold text-cyan-200 lg:px-2.5 lg:text-xs">
+                {metrics.activeBranches} Aktif
+                {metrics.underConstructionBranches > 0
+                  ? ` · ${metrics.underConstructionBranches} İnşaat`
+                  : ''}
+              </span>
+            </div>
+
+            {/* Lead Branch Summary Box */}
+            <div className="rounded-xl border border-slate-700/70 bg-[#0B1427]/85 px-2.5 py-2 lg:px-3 lg:py-2.5">
+              {metrics.leadBranch ? (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[11px] font-extrabold text-white lg:text-sm">
+                      {metrics.leadBranch.name}{' '}
+                      <span className="font-mono-num text-cyan-300">
+                        (Sv. {metrics.leadBranch.level})
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-slate-400 lg:text-[11px]">
+                      Toplam {metrics.totalBranches} şube · Öncü: {metrics.leadBranch.sectorName}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right font-mono-num text-xs font-extrabold text-emerald-300 lg:text-sm">
+                    {formatTL(metrics.leadBranch.dailyRevenue, true)}
+                    <span className="ml-0.5 text-[9px] font-semibold text-slate-400">/gün</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[10px] text-slate-400 lg:text-xs">
+                  Henüz aktif şubeniz yok. Haritadan sınırsız sayıda yeni şube kurabilirsiniz.
+                </div>
+              )}
+
+              {/* Average Service Quality Bar */}
+              <div className="mt-2">
+                <div className="mb-1 flex items-center justify-between text-[9px] lg:text-[11px]">
+                  <span className="font-semibold text-slate-300">Ortalama Hizmet Kalitesi</span>
+                  <span className="font-mono-num font-extrabold text-cyan-300">
+                    %{metrics.avgQualityPct} ({metrics.avgServiceQuality.toFixed(1)}/5)
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800 lg:h-2">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all"
+                    style={{ width: `${Math.max(6, metrics.avgQualityPct)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <span className="font-mono-num text-xs font-bold text-slate-300">
-              Şube Kotası: {state.businesses.length}/{maxBranches}
-            </span>
+          <div className="mt-2">
             <button
               type="button"
-              data-testid="new-branch-on-map-btn"
-              onClick={onGoMapNewBranch}
-              className="flex items-center gap-1.5 rounded-xl border border-amber-400/60 bg-amber-400/20 px-3 py-1.5 text-xs font-extrabold text-amber-200 hover:bg-amber-400/30 whitespace-nowrap"
+              data-testid="biz-open-branch-selector-btn"
+              onClick={openBranchSelector}
+              className="flex min-h-[32px] w-full items-center justify-center rounded-xl border border-cyan-300/70 bg-gradient-to-r from-cyan-500/30 via-sky-500/25 to-emerald-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.22)] transition-all hover:brightness-115 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
             >
-              <MapPin className="h-3.5 w-3.5" />
-              Haritada Yeni Şube Kur
+              ŞUBELERİ GÖR / YÖNET
+            </button>
+            <p className="mt-1 text-center text-[8.5px] font-medium text-slate-400 lg:text-[10px]">
+              İsim Değiştir, Reklam Ver, Geliştir
+            </p>
+          </div>
+        </div>
+
+        {/* CARD 2 (TOP-RIGHT): İŞLETMELERİN TOPLAM DURUMU */}
+        <div
+          data-testid="biz-card-total-status"
+          className="flex flex-col justify-between rounded-2xl border border-sky-400/35 bg-gradient-to-br from-[#14233F]/92 via-[#101B33]/94 to-[#0C1427]/96 p-2.5 shadow-[inset_0_1px_0_rgba(56,189,248,0.14)] backdrop-blur-md lg:min-h-0 lg:p-4"
+        >
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-sky-400/45 bg-sky-500/15 text-sky-300 lg:h-10 lg:w-10">
+                <BarChart3 className="h-4 w-4 lg:h-5 lg:w-5" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-[11px] font-extrabold tracking-wide text-white lg:text-sm">
+                  İŞLETMELERİN TOPLAM DURUMU
+                </h2>
+                <p className="truncate text-[9px] text-slate-400 lg:text-[11px]">
+                  Genel ciro, hizmet kalitesi ve franchise göstergeleri
+                </p>
+              </div>
+            </div>
+
+            {/* 3 Summary KPI Figures */}
+            <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-slate-700/70 bg-[#0B1427]/85 p-2 lg:gap-2 lg:p-2.5">
+              <div className="min-w-0">
+                <div className="truncate text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
+                  Günlük Ciro
+                </div>
+                <div
+                  data-testid="biz-total-daily-revenue"
+                  className="mt-0.5 truncate font-mono-num text-[11px] font-extrabold text-emerald-300 lg:text-sm"
+                >
+                  {formatTL(metrics.totalDailyRevenue, true)}
+                </div>
+              </div>
+              <div className="min-w-0 border-x border-slate-800 px-1.5">
+                <div className="truncate text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
+                  Hizmet Kalitesi
+                </div>
+                <div className="mt-0.5 flex items-center gap-1 font-mono-num text-[11px] font-extrabold text-amber-300 lg:text-sm">
+                  <span>{metrics.avgServiceQuality.toFixed(1)}</span>
+                  <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
+                  Franchise Teklifi
+                </div>
+                <div className="mt-0.5 truncate font-mono-num text-[11px] font-extrabold text-cyan-200 lg:text-sm">
+                  {metrics.pendingFranchiseAppsCount} Bekleyen
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Progress Bars + Raporları Gör Button */}
+          <div className="mt-2 flex items-end justify-between gap-2.5">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div>
+                <div className="flex justify-between text-[9px] lg:text-[11px]">
+                  <span className="truncate text-slate-300">Müşteri Memnuniyeti</span>
+                  <span className="font-mono-num font-bold text-emerald-300">
+                    %{metrics.customerSatisfactionPct}
+                  </span>
+                </div>
+                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                    style={{ width: `${Math.max(5, metrics.customerSatisfactionPct)}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[9px] lg:text-[11px]">
+                  <span className="truncate text-slate-300">Marka Tanınırlığı</span>
+                  <span className="font-mono-num font-bold text-amber-300">
+                    %{metrics.brandRecognitionPct}
+                  </span>
+                </div>
+                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-yellow-300"
+                    style={{ width: `${Math.max(5, metrics.brandRecognitionPct)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              data-testid="biz-open-reports-btn"
+              onClick={onOpenReports}
+              className="flex min-h-[32px] shrink-0 items-center justify-center rounded-xl border border-sky-400/55 bg-sky-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-sky-100 transition-all hover:bg-sky-500/30 active:scale-[0.98] lg:min-h-[38px] lg:px-4 lg:text-xs"
+            >
+              RAPORLARI GÖR
             </button>
           </div>
         </div>
 
-        {/* Owned Businesses Grid */}
-        {state.businesses.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-700 bg-[#111B30]/70 p-8 text-center">
-            <Building2 className="mx-auto h-10 w-10 text-cyan-400/70" />
-            <h3 className="mt-3 text-base font-extrabold text-white">Henüz Kurulmuş Şubeniz Yok</h3>
-            <p className="mx-auto mt-1 max-w-md text-xs text-slate-400">
-              Türkiye haritasında istediğiniz il ve caddeye pin bırakarak ilk işletmenizi kurun, personel atayın ve hizmet kalitenizi yükselterek müşteri trafiğini artırın.
-            </p>
-            <button
-              type="button"
-              onClick={onGoMapNewBranch}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-xs font-extrabold text-cyan-100 hover:bg-cyan-500/30"
-            >
-              <MapPin className="h-4 w-4" />
-              Haritaya Git ve İlk İşletmeni Kur
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {state.businesses.map((biz) => {
-              const underConst = isBusinessUnderConstruction(biz);
-              const quality = calculateBranchServiceQuality(
-                biz,
-                state.cityManagers ?? [],
-                state.businesses
-              );
-              const hourly = underConst
-                ? 0
-                : calculateBusinessHourlyIncome(
-                    biz,
-                    state.activeEvent,
-                    now,
-                    state.businesses,
-                    state
-                  );
-              return (
-                <div
-                  key={biz.id}
-                  className="flex flex-col justify-between rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-3.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="truncate text-sm font-extrabold text-white">
-                          {biz.customName}
-                        </h3>
-                        <span className="shrink-0 font-mono-num text-[11px] font-bold text-cyan-300">
-                          Sv.{biz.level}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        {biz.cityName} · {biz.districtName} · {(biz.employees ?? []).length} Personel
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      {underConst ? (
-                        <span className="inline-flex items-center gap-1 font-mono-num text-xs font-bold text-amber-300">
-                          <Hammer className="h-3.5 w-3.5" />
-                          {biz.constructionDaysRemaining} Gün
-                        </span>
-                      ) : (
-                        <div className="font-mono-num text-xs font-extrabold text-emerald-300">
-                          {formatTL(hourly * 24, true)}/gün
-                        </div>
-                      )}
-                      <div className="mt-0.5 flex items-center justify-end gap-1 font-mono-num text-[11px] text-amber-300">
-                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                        {quality.stars.toFixed(1)} · Trafik %{quality.customerTrafficPct}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Quality / Stock / Maintenance Bars */}
-                  <div className="mt-2.5 grid grid-cols-2 gap-2 text-[10px] text-slate-300">
-                    <div>
-                      <div className="flex justify-between">
-                        <span>Stok</span>
-                        <span className="font-mono-num">%{Math.round(biz.stockLevel)}</span>
-                      </div>
-                      <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                        <div
-                          className="h-full bg-cyan-400"
-                          style={{ width: `${Math.max(4, Math.round(biz.stockLevel))}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between">
-                        <span>Hijyen & Bakım</span>
-                        <span className="font-mono-num">%{Math.round(biz.maintenanceLevel)}</span>
-                      </div>
-                      <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                        <div
-                          className="h-full bg-emerald-400"
-                          style={{ width: `${Math.max(4, Math.round(biz.maintenanceLevel))}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-800 pt-2.5">
-                    <button
-                      type="button"
-                      onClick={() => onOpenHr(biz.id)}
-                      className="flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/25"
-                    >
-                      <Users className="h-3 w-3" /> Personel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onInvestQuality(biz.id)}
-                      className="flex items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-bold text-amber-200 hover:bg-amber-500/25"
-                    >
-                      <Sparkles className="h-3 w-3" /> Kalite
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onRestockBusiness(biz.id)}
-                      className="flex items-center gap-1 rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-700"
-                    >
-                      <Wrench className="h-3 w-3" /> İkmal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onUpgradeBusiness(biz.id)}
-                      className="rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/25"
-                    >
-                      Yükselt
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onCloneBusiness(biz.id)}
-                      className="flex items-center gap-1 rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/15 px-2.5 py-1 text-[11px] font-bold text-fuchsia-200 hover:bg-fuchsia-500/25"
-                    >
-                      <Link2 className="h-3 w-3" /> Çoğalt
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onEnterInterior(biz.id)}
-                      className="rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-700"
-                    >
-                      İç Mekan
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onFocusBusinessOnMap(biz.id)}
-                      className="rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-700"
-                    >
-                      Harita
-                    </button>
-                  </div>
+        {/* CARD 3 (BOTTOM-LEFT): PERSONELLER / EKİP LİSTESİ */}
+        <div
+          data-testid="biz-card-staff-list"
+          className="flex flex-col justify-between rounded-2xl border border-indigo-400/35 bg-gradient-to-br from-[#162040]/92 via-[#111933]/94 to-[#0C1327]/96 p-2.5 shadow-[inset_0_1px_0_rgba(129,140,248,0.14)] backdrop-blur-md lg:min-h-0 lg:p-4"
+        >
+          <div className="space-y-2 lg:min-h-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-400/45 bg-indigo-500/15 text-indigo-300 lg:h-10 lg:w-10">
+                  <Users className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
-              );
-            })}
+                <div className="min-w-0">
+                  <h2 className="text-[11px] font-extrabold tracking-wide text-white lg:text-sm">
+                    PERSONELLER / EKİP LİSTESİ
+                  </h2>
+                  <p className="truncate text-[9px] text-slate-400 lg:text-[11px]">
+                    Şubelerdeki aktif çalışanlar ve görev durumları
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 font-mono-num text-[10px] font-bold text-indigo-200 lg:text-xs">
+                {metrics.totalStaffCount} Kişi
+              </span>
+            </div>
+
+            {/* Compact Staff Rows */}
+            <div className="space-y-1 rounded-xl border border-slate-700/70 bg-[#0B1326]/85 p-2">
+              {visibleStaff.length === 0 ? (
+                <div className="py-2 text-center text-[10px] text-slate-400 lg:text-xs">
+                  Henüz atanmış personel bulunmuyor. İK menüsünden ekip kurabilirsiniz.
+                </div>
+              ) : (
+                visibleStaff.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-[#101C36]/75 px-2 py-1 text-[9.5px] lg:px-2.5 lg:py-1.5 lg:text-xs"
+                  >
+                    <div className="min-w-0 flex-1 truncate">
+                      <span className="font-bold text-white">{member.name}</span>
+                      <span className="ml-1 text-slate-400">({member.roleTitle})</span>
+                    </div>
+                    <span className="shrink-0 font-mono-num font-bold text-cyan-300">
+                      Sv.{member.level}
+                    </span>
+                    <span
+                      className={`shrink-0 font-bold ${
+                        member.status === 'Çalışıyor' ? 'text-emerald-300' : 'text-amber-300'
+                      }`}
+                    >
+                      {member.status}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        )}
+
+          <button
+            type="button"
+            data-testid="biz-open-hr-payroll-btn"
+            onClick={() => onOpenHr(state.businesses[0]?.id)}
+            className="mt-2 flex min-h-[32px] w-full items-center justify-center rounded-xl border border-indigo-400/55 bg-indigo-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-indigo-100 transition-all hover:bg-indigo-500/30 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
+          >
+            İK & MAAŞ YÖNETİMİ
+          </button>
+        </div>
+
+        {/* CARD 4 (BOTTOM-RIGHT): PERSONEL DURUMU & VERİMLİLİK */}
+        <div
+          data-testid="biz-card-staff-efficiency"
+          className="flex flex-col justify-between rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-[#122738]/92 via-[#101D32]/94 to-[#0B1426]/96 p-2.5 shadow-[inset_0_1px_0_rgba(16,185,129,0.14)] backdrop-blur-md lg:min-h-0 lg:p-4"
+        >
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-emerald-400/45 bg-emerald-500/15 text-emerald-300 lg:h-10 lg:w-10">
+                <Activity className="h-4 w-4 lg:h-5 lg:w-5" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-[11px] font-extrabold tracking-wide text-white lg:text-sm">
+                  PERSONEL DURUMU & VERİMLİLİK
+                </h2>
+                <p className="truncate text-[9px] text-slate-400 lg:text-[11px]">
+                  Boşta kadro, yorulma seviyesi ve performans puanları
+                </p>
+              </div>
+            </div>
+
+            {/* Split Metrics + Colored Dot Indicators */}
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-700/70 bg-[#0B1427]/85 p-2 lg:gap-3 lg:p-2.5">
+              <div className="space-y-1 text-[9.5px] lg:text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Boşta Personel:</span>
+                  <span className="font-mono-num font-extrabold text-white">
+                    {metrics.idleStaffCount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Yorulma Seviyesi:</span>
+                  <span
+                    className={`font-mono-num font-extrabold ${
+                      metrics.fatiguePct >= 60 ? 'text-rose-400' : 'text-amber-300'
+                    }`}
+                  >
+                    %{metrics.fatiguePct}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Ortalama Verim:</span>
+                  <span className="font-mono-num font-extrabold text-emerald-300">
+                    %{metrics.avgEfficiencyPct}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1 border-l border-slate-800 pl-2 lg:pl-3">
+                <StatusDotsRow
+                  label="Başarım"
+                  filled={metrics.performanceDots}
+                  colorClass="bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.55)]"
+                />
+                <StatusDotsRow
+                  label="Moral"
+                  filled={metrics.moraleDots}
+                  colorClass="bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.55)]"
+                />
+                <StatusDotsRow
+                  label="Verimlilik"
+                  filled={metrics.efficiencyDots}
+                  colorClass="bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.55)]"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            data-testid="biz-hire-train-staff-btn"
+            onClick={() => onOpenHr(state.businesses[0]?.id)}
+            className="mt-2 flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-400/55 bg-emerald-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-emerald-100 transition-all hover:bg-emerald-500/30 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            YENİ PERSONEL AL / EĞİT
+          </button>
+        </div>
       </div>
+
+      {/* ==================== ADIM 2: ŞUBE SEÇİMİ MODALI ==================== */}
+      {flowStep === 'select' && (
+        <BranchSelectorModal
+          state={state}
+          now={now}
+          viewMode={selectorViewMode}
+          selectedBranchId={selectedBranchId}
+          onChangeViewMode={setSelectorViewMode}
+          onSelectBranch={setSelectedBranchId}
+          onManageBranch={openBranchManagement}
+          onFocusOnMap={onFocusBusinessOnMap}
+          onEnterInterior={onEnterInterior}
+          onGoMapNewBranch={onGoMapNewBranch}
+          onClose={() => setFlowStep('overview')}
+        />
+      )}
+
+      {/* ==================== ADIM 3: ŞUBE YÖNETİM & ÖZELLEŞTİRME MODALI ==================== */}
+      {flowStep === 'manage' && managedBranch && (
+        <BranchManagementModal
+          state={state}
+          business={managedBranch}
+          now={now}
+          onBackToSelector={() => setFlowStep('select')}
+          onClose={() => setFlowStep('overview')}
+          onCustomizeBranch={onCustomizeBranch}
+          onLaunchMarketing={onLaunchBranchMarketing}
+          onUpgradeFacility={onUpgradeBranchFacility}
+        />
+      )}
     </section>
   );
 }

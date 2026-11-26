@@ -406,6 +406,12 @@ export function calculateBusinessIncomePerSec(
   if (isBusinessUnderConstruction(business)) return 0;
 
   const levelMultiplier = 1 + (business.level - 1) * 0.45;
+  const capLvl = Math.max(1, Math.min(10, Math.round(business.capacityLevel ?? 1)));
+  const eqLvl = Math.max(1, Math.min(10, Math.round(business.equipmentLevel ?? 1)));
+  const ambLvl = Math.max(1, Math.min(10, Math.round(business.ambianceLevel ?? 1)));
+  const facilityMultiplier = Number(
+    (1 + (capLvl - 1) * 0.15 + (eqLvl - 1) * 0.25 + (ambLvl - 1) * 0.12).toFixed(3)
+  );
   const automation = resolveBusinessAutomation(
     business,
     stateContext?.cityManagers ?? [],
@@ -488,6 +494,7 @@ export function calculateBusinessIncomePerSec(
     bp.baseIncomePerSec *
       business.affinityMultiplier *
       levelMultiplier *
+      facilityMultiplier *
       staffMultiplier *
       serviceTrafficMult *
       brandDemandMult *
@@ -740,13 +747,6 @@ export function purchaseBusiness(
 
   const netWorth = calculateNetWorth(state, now);
   const tier = getCompanyTier(netWorth);
-  if (state.businesses.length >= tier.maxBranches) {
-    return {
-      state,
-      ok: false,
-      error: `Şube kotanız doldu (${state.businesses.length}/${tier.maxBranches}). Şirket seviyenizi yükselterek yeni şube açabilirsiniz.`,
-    };
-  }
   if (!franchiseBrand && tier.level < bp.minCompanyLevel) {
     return {
       state,
@@ -892,15 +892,6 @@ export function takeoverCompetitorBusiness(
   }
 
   const bp = getBlueprintById(target.business_type) ?? BUSINESS_BLUEPRINTS[0];
-  const netWorth = calculateNetWorth(state, now);
-  const tier = getCompanyTier(netWorth);
-  if (state.businesses.length >= tier.maxBranches) {
-    return {
-      state,
-      ok: false,
-      error: `Devralma için boş şube kotası gerekiyor (${state.businesses.length}/${tier.maxBranches}).`,
-    };
-  }
 
   const mult =
     customMultiplier !== undefined
