@@ -93,9 +93,11 @@ import {
 } from './game/holdingReportsEngine';
 import { ensureDynamicMissions } from './game/missionEngine';
 import {
+  assignFirstCandidateForRole,
   dismissStaffMember,
   generateCandidatePool,
   hireCandidateFromPool,
+  promoteBranchEmployee,
   refreshCandidatePool,
   resolveBusinessAutomation,
   restockAndMaintainBusiness,
@@ -2245,20 +2247,51 @@ export default function App() {
     setEmpire(res.state);
   };
 
-  // --- v1.2.0 HR & 5-Tier Automation Handlers ---
+  // --- v1.5.8 HR & Strict Branch Staffing Handlers ---
   const handleHireCandidate = (
     candidateId: string,
     businessId: string | null,
     cityPlate: number
-  ) => {
+  ): { ok: boolean; error?: string } => {
     const res = hireCandidateFromPool(empire, candidateId, businessId, cityPlate, Date.now());
     if (!res.ok) {
       if (res.error) pushNotification('İşe Alım Başarısız', res.error, 'system', false);
-      return;
+      return { ok: false, error: res.error };
     }
     soundEngine.playUpgrade();
     setEmpire(res.state);
     pushNotification('Yeni Personel / Yönetici Atandı', 'Kadro ve otomasyon güncellendi.', 'milestone', false);
+    return { ok: true };
+  };
+
+  const handleAssignRoleSlot = (
+    businessId: string,
+    role: 'calisan' | 'mudur_yardimcisi' | 'sube_muduru'
+  ): { ok: boolean; error?: string } => {
+    const res = assignFirstCandidateForRole(empire, businessId, role, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Atama Başarısız', res.error, 'system', false);
+      return { ok: false, error: res.error };
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification('Kadro Ataması Tamamlandı', 'Şube kadrosu ve bordro güncellendi.', 'milestone', false);
+    return { ok: true };
+  };
+
+  const handlePromoteStaff = (
+    businessId: string,
+    staffId: string
+  ): { ok: boolean; error?: string } => {
+    const res = promoteBranchEmployee(empire, businessId, staffId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Terfi Başarısız', res.error, 'system', false);
+      return { ok: false, error: res.error };
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification('Personel Terfi Etti', 'Yeni yetki ve verimlilik artışı aktif edildi.', 'milestone', false);
+    return { ok: true };
   };
 
   const handleDismissStaff = (staffId: string, businessId?: string) => {
@@ -2269,15 +2302,16 @@ export default function App() {
     }
   };
 
-  const handleRefreshCandidatePool = () => {
+  const handleRefreshCandidatePool = (): { ok: boolean; error?: string } => {
     const targetBiz = empire.businesses.find((b) => b.id === hrTargetBusinessId);
     const res = refreshCandidatePool(empire, targetBiz?.blueprintId ?? 'kafe', Date.now());
     if (!res.ok) {
       if (res.error) pushNotification('Havuz Yenilenemedi', res.error, 'system', false);
-      return;
+      return { ok: false, error: res.error };
     }
     soundEngine.playClick();
     setEmpire(res.state);
+    return { ok: true };
   };
 
   const handleRestockBusiness = (businessId: string) => {
@@ -3841,6 +3875,9 @@ export default function App() {
         onSelectManagementTab={handleSelectManagementTab}
         onToggleGmAutoAds={handleToggleGmAutoAds}
         onHireCandidate={handleHireCandidate}
+        onAssignRoleSlot={handleAssignRoleSlot}
+        onPromoteStaff={handlePromoteStaff}
+        onDistributeBulkBonus={handleDistributeHoldingBonus}
         onDismissStaff={handleDismissStaff}
         onRefreshPool={handleRefreshCandidatePool}
         onRestockBusiness={handleRestockBusiness}

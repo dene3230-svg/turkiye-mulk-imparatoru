@@ -14,6 +14,10 @@ import { canOfficeHireRole } from './officeEngine';
 export const MAX_BRANCH_WORKERS = 4;
 export const MAX_BRANCH_ASSISTANT_MANAGERS = 1;
 export const MAX_BRANCH_MANAGERS = 1;
+export const MAX_BRANCH_TOTAL_SLOTS =
+  MAX_BRANCH_WORKERS + MAX_BRANCH_ASSISTANT_MANAGERS + MAX_BRANCH_MANAGERS; // 6 slot
+
+export const BRANCH_LIMIT_ERROR_TEXT = 'Bu şubede azami çalışan/müdür sınırına ulaşıldı!';
 
 // v1.4.0 Türkiye Güncel Asgari Ücret & İşveren SGK Maliyet Tabanı (2025/2026)
 export const TURKEY_MIN_WAGE_MONTHLY_NET = 22_104;
@@ -173,6 +177,63 @@ export function getBranchStaffSlots(business: OwnedBusiness): BranchStaffSlots {
     branchManagers,
     maxBranchManagers: MAX_BRANCH_MANAGERS,
   };
+}
+
+export function getBranchTotalStaffCount(business: OwnedBusiness): number {
+  const slots = getBranchStaffSlots(business);
+  return slots.workers + slots.assistantManagers + slots.branchManagers;
+}
+
+export function checkBranchRoleSlotAvailable(
+  business: OwnedBusiness,
+  role: StaffRole
+): { ok: boolean; current: number; max: number; error?: string } {
+  const slots = getBranchStaffSlots(business);
+  if (role === 'calisan') {
+    if (slots.workers >= slots.maxWorkers) {
+      return {
+        ok: false,
+        current: slots.workers,
+        max: slots.maxWorkers,
+        error: `${BRANCH_LIMIT_ERROR_TEXT} (${slots.workers}/${slots.maxWorkers} Çalışan)`,
+      };
+    }
+    return { ok: true, current: slots.workers, max: slots.maxWorkers };
+  }
+  if (role === 'mudur_yardimcisi') {
+    if (slots.assistantManagers >= slots.maxAssistantManagers) {
+      return {
+        ok: false,
+        current: slots.assistantManagers,
+        max: slots.maxAssistantManagers,
+        error: `${BRANCH_LIMIT_ERROR_TEXT} (${slots.assistantManagers}/${slots.maxAssistantManagers} Müdür Yrd.)`,
+      };
+    }
+    return { ok: true, current: slots.assistantManagers, max: slots.maxAssistantManagers };
+  }
+  if (role === 'sube_muduru') {
+    if (slots.branchManagers >= slots.maxBranchManagers) {
+      return {
+        ok: false,
+        current: slots.branchManagers,
+        max: slots.maxBranchManagers,
+        error: `${BRANCH_LIMIT_ERROR_TEXT} (${slots.branchManagers}/${slots.maxBranchManagers} Şube Müdürü)`,
+      };
+    }
+    return { ok: true, current: slots.branchManagers, max: slots.maxBranchManagers };
+  }
+  return { ok: true, current: 0, max: 1 };
+}
+
+export function formatCandidateSalaryLabel(
+  candidate: Pick<StaffCandidate, 'role' | 'stars' | 'dailyWage' | 'dailyEmployerSgk' | 'hourlySalary'>
+): string {
+  if (candidate.role === 'calisan' && candidate.stars <= 2) {
+    return 'Asgari Ücret';
+  }
+  const wage = getStaffDailyCost(candidate);
+  const roundedMonthly = Math.round(wage.monthlyGrossSalary / 500) * 500;
+  return `₺${roundedMonthly.toLocaleString('tr-TR')}/ay`;
 }
 
 export const STAR_EFFICIENCY_MULTIPLIER: Record<1 | 2 | 3 | 4 | 5, number> = {
@@ -586,27 +647,12 @@ export function hireCandidateFromPool(
   if (!biz) {
     return { state, ok: false, error: 'Atama yapılacak işletme seçilmedi.' };
   }
-  const slots = getBranchStaffSlots(biz);
-
-  if (candidate.role === 'mudur_yardimcisi' && slots.assistantManagers >= slots.maxAssistantManagers) {
+  const slotCheck = checkBranchRoleSlotAvailable(biz, candidate.role);
+  if (!slotCheck.ok) {
     return {
       state,
       ok: false,
-      error: `Kadro Dolu (${slots.assistantManagers}/${slots.maxAssistantManagers} Müd. Yrd.). Şube başına en fazla 1 Müdür Yardımcısı alınabilir.`,
-    };
-  }
-  if (candidate.role === 'sube_muduru' && slots.branchManagers >= slots.maxBranchManagers) {
-    return {
-      state,
-      ok: false,
-      error: `Kadro Dolu (${slots.branchManagers}/${slots.maxBranchManagers} Şube Müdürü). Şube başına en fazla 1 Şube Müdürü alınabilir.`,
-    };
-  }
-  if (candidate.role === 'calisan' && slots.workers >= slots.maxWorkers) {
-    return {
-      state,
-      ok: false,
-      error: `Kadro Dolu (${slots.workers}/${slots.maxWorkers} Çalışan). Bu şubeye en fazla 4 çalışan alınabilir.`,
+      error: slotCheck.error ?? BRANCH_LIMIT_ERROR_TEXT,
     };
   }
 
@@ -675,6 +721,123 @@ export function dismissStaffMember(
           staffCount: Math.max(0, filtered.length),
         };
       }),
+      lastSavedAt: now,
+    },
+  };
+}
+
+export function assignFirstCandidateForRole(
+  state: EmpireState,
+  businessId: string,
+  role: 'calisan' | 'mudur_yardimcisi' | 'sube_muduru',
+  now = Date.now()
+): HrActionResult {
+  const biz = state.businesses.find((b) => b.id === businessId);
+  if (!biz) {
+    return { state, ok: false, error: 'Atama yapılacak işletme seçilmedi.' };
+  }
+  const slotCheck = checkBranchRoleSlotAvailable(biz, role);
+  if (!slotCheck.ok) {
+    return {
+      state,
+      ok: false,
+      error: slotCheck.error ?? BRANCH_LIMIT_ERROR_TEXT,
+    };
+  }
+  const matching = (state.candidatePool ?? [])
+    .filter((c) => c.role === role)
+    .sort((a, b) => a.hireCost - b.hireCost);
+  if (matching.length === 0) {
+    return {
+      state,
+      ok: false,
+      error: `Havuzda uygun ${ROLE_META[role].label} adayı yok. "HAVUZU YENİLE" ile yeni aday çekin.`,
+    };
+  }
+  const affordable = matching.find((c) => state.cash >= c.hireCost) ?? matching[0];
+  return hireCandidateFromPool(state, affordable.id, biz.id, biz.cityPlate, now);
+}
+
+export function getPromotionInfo(role: StaffRole): {
+  nextRole: 'mudur_yardimcisi' | 'sube_muduru' | null;
+  cost: number;
+  label: string;
+} {
+  if (role === 'calisan') {
+    return { nextRole: 'mudur_yardimcisi', cost: 18_000, label: 'Müdür Yrd. Terfi' };
+  }
+  if (role === 'mudur_yardimcisi') {
+    return { nextRole: 'sube_muduru', cost: 38_000, label: 'Şube Müd. Terfi' };
+  }
+  return { nextRole: null, cost: 0, label: 'En Üst Şube Rolü' };
+}
+
+export function promoteBranchEmployee(
+  state: EmpireState,
+  businessId: string,
+  staffId: string,
+  now = Date.now()
+): HrActionResult {
+  const biz = state.businesses.find((b) => b.id === businessId);
+  if (!biz) {
+    return { state, ok: false, error: 'İşletme bulunamadı.' };
+  }
+  const target = (biz.employees ?? []).find((e) => e.id === staffId);
+  if (!target) {
+    return { state, ok: false, error: 'Personel bulunamadı.' };
+  }
+  const promo = getPromotionInfo(target.role);
+  if (!promo.nextRole) {
+    return { state, ok: false, error: 'Bu personel şube içi en yüksek kademededir.' };
+  }
+  const slotCheck = checkBranchRoleSlotAvailable(biz, promo.nextRole);
+  if (!slotCheck.ok) {
+    return {
+      state,
+      ok: false,
+      error: slotCheck.error ?? BRANCH_LIMIT_ERROR_TEXT,
+    };
+  }
+  if (state.cash < promo.cost) {
+    return {
+      state,
+      ok: false,
+      error: `Terfi eğitimi için ₺${promo.cost.toLocaleString('tr-TR')} gereklidir.`,
+    };
+  }
+
+  const nextStars = Math.min(5, target.stars + 1) as 1 | 2 | 3 | 4 | 5;
+  const nextWage = calculateRoleWageBreakdown(promo.nextRole, nextStars);
+
+  return {
+    ok: true,
+    state: {
+      ...state,
+      cash: state.cash - promo.cost,
+      businesses: state.businesses.map((b) =>
+        b.id === businessId
+          ? {
+              ...b,
+              employees: (b.employees ?? []).map((emp) =>
+                emp.id === staffId
+                  ? {
+                      ...emp,
+                      role: promo.nextRole!,
+                      roleTitle: ROLE_META[promo.nextRole!].label,
+                      stars: nextStars,
+                      speed: Math.min(99, emp.speed + 6),
+                      efficiency: Math.min(99, emp.efficiency + 8),
+                      leadership: Math.min(99, emp.leadership + 12),
+                      hourlySalary: nextWage.hourlyTotalCost,
+                      dailyWage: nextWage.dailyGrossWage,
+                      dailyEmployerSgk: nextWage.dailyEmployerSgk,
+                      monthlyGrossSalary: nextWage.monthlyGrossSalary,
+                    }
+                  : emp
+              ),
+            }
+          : b
+      ),
       lastSavedAt: now,
     },
   };

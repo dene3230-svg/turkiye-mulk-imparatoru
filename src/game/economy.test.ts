@@ -52,17 +52,25 @@ import {
 } from './provinces81.ts';
 import { checkLocalWaterShield, evaluateNominatimReverse } from './waterShield.ts';
 import {
+  BRANCH_LIMIT_ERROR_TEXT,
   MAX_BRANCH_ASSISTANT_MANAGERS,
   MAX_BRANCH_MANAGERS,
+  MAX_BRANCH_TOTAL_SLOTS,
   MAX_BRANCH_WORKERS,
   ROLE_WAGE_MULTIPLIER,
   TURKEY_EMPLOYER_SGK_RATE,
   TURKEY_MIN_WAGE_MONTHLY_GROSS,
   TURKEY_MIN_WAGE_MONTHLY_NET,
+  assignFirstCandidateForRole,
   calculateRoleWageBreakdown,
+  checkBranchRoleSlotAvailable,
+  dismissStaffMember,
+  formatCandidateSalaryLabel,
   generateCandidatePool,
   getBranchStaffSlots,
+  getBranchTotalStaffCount,
   hireCandidateFromPool,
+  promoteBranchEmployee,
   resolveBusinessAutomation,
 } from './hrEngine.ts';
 import {
@@ -635,7 +643,7 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.5.7');
+  assert.equal(APP_VERSION, '1.5.8');
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2673,6 +2681,98 @@ test('v1.5.7 Toplam Durum ve Raporlar Decision Center: Period Scaling, Expense B
   };
   assert.equal(scanSmartBranchAlerts(optimumState, now + 300).length, 0);
 });
+
+test('v1.5.8 İK & Personel Yönetimi: Strict Branch Limits (4 Çalışan, 1 Müdür Yrd., 1 Şube Müdürü = 6 Slot), Slot Assign, Promotion Guard & Salary Labels', () => {
+  const now = 3_900_000;
+  let state = createInitialEmpireState(now, 32); // Isparta
+  state.cash = 25_000_000;
+  const owner = { id: 'p-v158', name: 'Patron' };
+
+  const b1 = purchaseBusiness(state, 'kafe', landPin(37.7648, 30.5566, 32), 'Isparta Merkez Kafe', owner, [], now);
+  assert.equal(b1.ok, true);
+  state = openAllBranches(b1.state);
+  const bizId = state.businesses[0].id;
+
+  // Populate rich candidate pool with workers, assistant managers, and branch managers
+  state = {
+    ...state,
+    candidatePool: [
+      ...generateCandidatePool(101, 'kafe'),
+      ...generateCandidatePool(202, 'kafe'),
+    ],
+  };
+
+  assert.equal(MAX_BRANCH_TOTAL_SLOTS, 6);
+  assert.equal(getBranchTotalStaffCount(state.businesses[0]), 0);
+
+  // 1) Assign 4 Çalışan via empty-slot ATA helper -> 5th Çalışan MUST be blocked with exact alert text
+  for (let i = 1; i <= 4; i += 1) {
+    const res = assignFirstCandidateForRole(state, bizId, 'calisan', now + i * 10);
+    assert.equal(res.ok, true, `Worker #${i} assignment should succeed: ${res.error}`);
+    state = res.state;
+  }
+  assert.equal(getBranchStaffSlots(state.businesses[0]).workers, 4);
+
+  const worker5Res = assignFirstCandidateForRole(state, bizId, 'calisan', now + 50);
+  assert.equal(worker5Res.ok, false, '5th worker must be strictly rejected');
+  assert.ok(
+    (worker5Res.error ?? '').includes(BRANCH_LIMIT_ERROR_TEXT),
+    `Expected exact limit error, got: ${worker5Res.error}`
+  );
+
+  // Also direct hireCandidateFromPool for a 5th worker must be rejected with exact text
+  const extraWorker = state.candidatePool.find((c) => c.role === 'calisan');
+  assert.ok(extraWorker, 'Pool must still contain a worker candidate');
+  const directWorker5 = hireCandidateFromPool(state, extraWorker!.id, bizId, 32, now + 55);
+  assert.equal(directWorker5.ok, false);
+  assert.ok((directWorker5.error ?? '').includes(BRANCH_LIMIT_ERROR_TEXT));
+
+  // 2) Assign 1 Müdür Yrd. & 1 Şube Müdürü -> 2nd of either MUST be strictly blocked
+  const amRes = assignFirstCandidateForRole(state, bizId, 'mudur_yardimcisi', now + 60);
+  assert.equal(amRes.ok, true, `Assistant manager assignment failed: ${amRes.error}`);
+  state = amRes.state;
+  const am2Res = assignFirstCandidateForRole(state, bizId, 'mudur_yardimcisi', now + 70);
+  assert.equal(am2Res.ok, false);
+  assert.ok((am2Res.error ?? '').includes(BRANCH_LIMIT_ERROR_TEXT));
+
+  const bmRes = assignFirstCandidateForRole(state, bizId, 'sube_muduru', now + 80);
+  assert.equal(bmRes.ok, true, `Branch manager assignment failed: ${bmRes.error}`);
+  state = bmRes.state;
+  const bm2Res = assignFirstCandidateForRole(state, bizId, 'sube_muduru', now + 90);
+  assert.equal(bm2Res.ok, false);
+  assert.ok((bm2Res.error ?? '').includes(BRANCH_LIMIT_ERROR_TEXT));
+
+  assert.equal(getBranchTotalStaffCount(state.businesses[0]), 6);
+  assert.equal(checkBranchRoleSlotAvailable(state.businesses[0], 'calisan').ok, false);
+  assert.equal(checkBranchRoleSlotAvailable(state.businesses[0], 'mudur_yardimcisi').ok, false);
+  assert.equal(checkBranchRoleSlotAvailable(state.businesses[0], 'sube_muduru').ok, false);
+
+  // 3) Promotion while management slot is full must be blocked with exact limit error
+  const firstWorker = state.businesses[0].employees!.find((e) => e.role === 'calisan')!;
+  const blockedPromo = promoteBranchEmployee(state, bizId, firstWorker.id, now + 100);
+  assert.equal(blockedPromo.ok, false);
+  assert.ok((blockedPromo.error ?? '').includes(BRANCH_LIMIT_ERROR_TEXT));
+
+  // 4) Dismiss Assistant Manager -> opens 0/1 slot -> promoting a worker succeeds cleanly
+  const currentAm = state.businesses[0].employees!.find((e) => e.role === 'mudur_yardimcisi')!;
+  const dismissRes = dismissStaffMember(state, currentAm.id, bizId, now + 110);
+  assert.equal(dismissRes.ok, true);
+  state = dismissRes.state;
+  assert.equal(getBranchStaffSlots(state.businesses[0]).assistantManagers, 0);
+
+  const promoRes = promoteBranchEmployee(state, bizId, firstWorker.id, now + 120);
+  assert.equal(promoRes.ok, true, `Promotion should succeed when Müd. Yrd. slot is open: ${promoRes.error}`);
+  state = promoRes.state;
+  assert.equal(getBranchStaffSlots(state.businesses[0]).assistantManagers, 1);
+  assert.equal(getBranchStaffSlots(state.businesses[0]).workers, 3);
+
+  // 5) Salary labels format 1-2 star workers as Asgari Ücret and managers as ₺.../ay
+  const starterWorker = { role: 'calisan' as const, stars: 1 as const, hourlySalary: 45 };
+  const seniorManager = { role: 'sube_muduru' as const, stars: 4 as const, hourlySalary: 120 };
+  assert.equal(formatCandidateSalaryLabel(starterWorker), 'Asgari Ücret');
+  assert.ok(formatCandidateSalaryLabel(seniorManager).endsWith('/ay'));
+});
+
 
 
 
