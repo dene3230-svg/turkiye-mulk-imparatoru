@@ -21,11 +21,35 @@ export interface WorldDbSyncSnapshot {
 const BROADCAST_CHANNEL_NAME = 'tmi-world-businesses-v1';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Runtime schema cache so optional alias columns (e.g. `name` if table uses `business_name`)
-// are stripped automatically without repeating failed requests.
+export const WORLD_POLL_INTERVAL_MS = 10_000;
+export const DELETED_BUSINESS_MARKER = '__DELETED__';
+
+const DELETED_BUSINESS_TOMBSTONE_PATCH = {
+  lat: 0,
+  lng: 0,
+  level: 0,
+  hourly_income: 0,
+  hourly_revenue: 0,
+  valuation: 0,
+  business_name: DELETED_BUSINESS_MARKER,
+  business_type: '__deleted__',
+  sector: '__deleted__',
+} as const;
+
+export function isDeletedBusinessRow(row: Record<string, unknown> | null | undefined): boolean {
+  if (!row || typeof row !== 'object') return false;
+  const bName = String(row.business_name ?? row.name ?? '').trim();
+  const bType = String(row.business_type ?? row.sector ?? row.type ?? '').trim().toLowerCase();
+  const lat = Number(row.lat ?? row.latitude);
+  const lng = Number(row.lng ?? row.longitude);
+  if (bName === DELETED_BUSINESS_MARKER || bType === '__deleted__') return true;
+  if (Number.isFinite(lat) && Number.isFinite(lng) && lat === 0 && lng === 0) return true;
+  return false;
+}
+
+// Runtime schema cache so optional alias columns are stripped automatically if any DB differs
 const missingBusinessesColumns = new Set<string>();
 let businessesTableUnavailable = false;
-let businessesWriteDisabled = false;
 
 function isBusinessesTableMissingError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -427,6 +451,9 @@ export function formatSupabaseError(err: unknown, fallback = 'Supabase bağlant�
 }
 
 export function normalizeRecord(row: Record<string, unknown>): RemoteBusinessRecord | null {
+  if (isDeletedBusinessRow(row)) {
+    return null;
+  }
   const id = String(row.id ?? '').trim();
   const rawLat = row.lat ?? row.latitude;
   const rawLng = row.lng ?? row.longitude;
@@ -518,9 +545,9 @@ export function ownedToRemoteRecord(
 }
 
 /**
- * Builds the canonical `public.businesses` upsert row including all required fields:
- * `id, owner_id, owner_name, company_name, name, sector, level, hourly_revenue, lat, lng`
- * alongside compatible columns (`business_name, business_type, hourly_income, valuation, city_plate, city_name, district`).
+ * Builds the exact `public.businesses` upsert row matching all 16 writable columns in Supabase:
+ * `id, owner_id, owner_name, company_name, city_plate (text), city_name, district,
+ *  business_name, business_type, sector, lat, lng, level, hourly_income, hourly_revenue, valuation`.
  */
 export function buildBusinessesUpsertPayload(rec: RemoteBusinessRecord): Record<string, unknown> {
   const parsed = parseOwnerAndHolding(rec.owner_name, rec.company_name);
@@ -546,19 +573,18 @@ export function buildBusinessesUpsertPayload(rec: RemoteBusinessRecord): Record<
     owner_id: (rec.owner_id ?? '').trim() || 'unknown-player',
     owner_name: parsed.playerName || 'Patron',
     company_name: rec.company_name?.trim() || parsed.holdingName || parsed.playerName || 'Girişim',
-    name: safeBusinessName,
-    business_name: safeBusinessName,
-    sector: safeSector,
-    business_type: safeSector,
-    level: safeLevel,
-    hourly_revenue: safeHourly,
-    hourly_income: safeHourly,
-    valuation: safeValuation,
-    city_plate: safePlate,
+    city_plate: String(safePlate),
     city_name: safeCityName,
     district: safeDistrict,
+    business_name: safeBusinessName,
+    business_type: safeSector,
+    sector: safeSector,
     lat: safeLat,
     lng: safeLng,
+    level: safeLevel,
+    hourly_income: safeHourly,
+    hourly_revenue: safeHourly,
+    valuation: safeValuation,
   };
 }
 
@@ -582,7 +608,7 @@ function stripMissingColumnsFromRow(
 async function upsertBusinessesWithSchemaFallback(
   records: RemoteBusinessRecord[]
 ): Promise<{ ok: boolean; error?: string }> {
-  if (businessesTableUnavailable || businessesWriteDisabled) {
+  if (businessesTableUnavailable) {
     return { ok: false };
   }
   const baseRows = records.map(buildBusinessesUpsertPayload);
@@ -607,12 +633,9 @@ async function upsertBusinessesWithSchemaFallback(
       continue;
     }
 
-    // Schema constraint / RLS / 400 mismatch: silence repeated writes this session and continue locally
-    businessesWriteDisabled = true;
-    return { ok: false, error: formatSupabaseError(error, 'Yerel mod aktif') };
+    return { ok: false, error: formatSupabaseError(error, 'Supabase kayıt hatası') };
   }
 
-  businessesWriteDisabled = true;
   return { ok: false };
 }
 
@@ -670,7 +693,7 @@ export async function fetchCityBusinesses(
     const { data, error } = await supabase
       .from('businesses')
       .select('*')
-      .eq('city_plate', cityPlate)
+      .eq('city_plate', String(cityPlate))
       .limit(250);
 
     if (error) {
@@ -716,7 +739,7 @@ export function subscribeToGlobalBusinesses(callbacks: {
 
   try {
     channel = supabase
-      .channel('world-businesses-live')
+      .channel(`world-businesses-live-${Math.random().toString(36).slice(2, 8)}`)
       .on(
         'postgres_changes',
         {
@@ -725,7 +748,12 @@ export function subscribeToGlobalBusinesses(callbacks: {
           table: 'businesses',
         },
         (payload) => {
-          const rec = normalizeRecord((payload.new ?? {}) as Record<string, unknown>);
+          const raw = (payload.new ?? {}) as Record<string, unknown>;
+          if (isDeletedBusinessRow(raw)) {
+            if (raw.id) callbacks.onDelete(String(raw.id));
+            return;
+          }
+          const rec = normalizeRecord(raw);
           if (!rec) return;
           callbacks.onUpsert(rec);
           callbacks.onInsert?.(rec);
@@ -739,7 +767,13 @@ export function subscribeToGlobalBusinesses(callbacks: {
           table: 'businesses',
         },
         (payload) => {
-          const rec = normalizeRecord((payload.new ?? {}) as Record<string, unknown>);
+          const raw = (payload.new ?? {}) as Record<string, unknown>;
+          if (isDeletedBusinessRow(raw)) {
+            const delId = raw.id ?? (payload.old as { id?: string } | null)?.id;
+            if (delId) callbacks.onDelete(String(delId));
+            return;
+          }
+          const rec = normalizeRecord(raw);
           if (!rec) return;
           callbacks.onUpsert(rec);
           callbacks.onUpdate?.(rec);
@@ -883,10 +917,9 @@ export async function updateBusinessInRoom(
   if (patch.valuation !== undefined) dbPatch.valuation = Math.max(0, Math.round(patch.valuation));
   if (patch.business_name !== undefined) {
     dbPatch.business_name = patch.business_name;
-    dbPatch.name = patch.business_name;
   }
 
-  if (businessesTableUnavailable || businessesWriteDisabled) {
+  if (businessesTableUnavailable) {
     return { ok: false };
   }
 
@@ -907,10 +940,8 @@ export async function updateBusinessInRoom(
         missingBusinessesColumns.add(missingCol);
         continue;
       }
-      businessesWriteDisabled = true;
-      return { ok: false };
+      return { ok: false, error: formatSupabaseError(error, 'Şube güncellenemedi') };
     }
-    businessesWriteDisabled = true;
     return { ok: false };
   } catch {
     return { ok: false };
@@ -924,48 +955,132 @@ export async function removeBusinessFromRoom(
   postLocalBusinessBroadcast({ type: 'delete', id: uuidId });
   if (businessesTableUnavailable) return { ok: false };
   try {
-    const { error } = await supabase.from('businesses').delete().eq('id', uuidId);
-    if (error) {
-      if (isBusinessesTableMissingError(error)) {
-        businessesTableUnavailable = true;
-      }
+    // 1) Attempt real hard DELETE first
+    const { data: deletedRows, error } = await supabase
+      .from('businesses')
+      .delete()
+      .eq('id', uuidId)
+      .select('id');
+
+    if (error && isBusinessesTableMissingError(error)) {
+      businessesTableUnavailable = true;
       return { ok: false };
     }
+
+    if (!error && Array.isArray(deletedRows) && deletedRows.length > 0) {
+      return { ok: true };
+    }
+
+    // 2) If RLS silently returned 0 deleted rows, apply a real UPDATE tombstone so the pin
+    // disappears immediately across all clients via Supabase Realtime UPDATE and 10s polling.
+    const tombstonePatch = stripMissingColumnsFromRow(
+      { ...DELETED_BUSINESS_TOMBSTONE_PATCH },
+      missingBusinessesColumns
+    );
+    const { error: patchError } = await supabase
+      .from('businesses')
+      .update(tombstonePatch)
+      .eq('id', uuidId);
+
+    if (patchError) {
+      return { ok: false, error: formatSupabaseError(patchError, 'Şube silinemedi') };
+    }
     return { ok: true };
-  } catch {
-    return { ok: false };
+  } catch (err) {
+    return { ok: false, error: formatSupabaseError(err, 'Şube silinemedi') };
   }
 }
 
 /**
  * Deletes all businesses belonging to the resetting player from Supabase `public.businesses`
- * and broadcasts local tab deletion events so old pins never remain on the shared world map.
+ * (real DELETE by owner_id & business IDs, with automatic RLS-safe UPDATE tombstone fallback)
+ * and broadcasts local tab deletion events so old pins vanish immediately across all players.
  */
 export async function deletePlayerBusinessesFromRoom(
   ownerId: string,
   businessIds: string[] = []
-): Promise<void> {
+): Promise<{ ok: boolean; deletedCount: number; tombstonedCount: number }> {
   const uniqueUuids = Array.from(
     new Set(businessIds.filter(Boolean).map((id) => ensureUuidForBusinessId(id)))
   );
   for (const uuid of uniqueUuids) {
     postLocalBusinessBroadcast({ type: 'delete', id: uuid });
   }
-  if (businessesTableUnavailable) return;
+  if (businessesTableUnavailable) {
+    return { ok: false, deletedCount: 0, tombstonedCount: 0 };
+  }
+
+  let deletedCount = 0;
+  let tombstonedCount = 0;
 
   try {
     const cleanOwner = String(ownerId ?? '').trim();
+
+    // 1) Real hard DELETE by owner_id
     if (cleanOwner) {
-      const { error } = await supabase.from('businesses').delete().eq('owner_id', cleanOwner);
+      const { data: delByOwner, error } = await supabase
+        .from('businesses')
+        .delete()
+        .eq('owner_id', cleanOwner)
+        .select('id');
       if (error && isBusinessesTableMissingError(error)) {
         businessesTableUnavailable = true;
-        return;
+        return { ok: false, deletedCount: 0, tombstonedCount: 0 };
+      }
+      if (Array.isArray(delByOwner)) {
+        deletedCount += delByOwner.length;
+        for (const row of delByOwner) {
+          if (row?.id) postLocalBusinessBroadcast({ type: 'delete', id: String(row.id) });
+        }
       }
     }
+
+    // 2) Real hard DELETE by explicit business UUIDs (covers any legacy/mismatched owner rows)
     if (uniqueUuids.length > 0) {
-      await supabase.from('businesses').delete().in('id', uniqueUuids);
+      const { data: delByIds } = await supabase
+        .from('businesses')
+        .delete()
+        .in('id', uniqueUuids)
+        .select('id');
+      if (Array.isArray(delByIds)) {
+        deletedCount += delByIds.length;
+      }
     }
+
+    // 3) Verify if any rows survived due to RLS DELETE policy; if so, tombstone via real UPDATE
+    // so every connected player receives a Realtime UPDATE delete event immediately!
+    const tombstonePatch = stripMissingColumnsFromRow(
+      { ...DELETED_BUSINESS_TOMBSTONE_PATCH },
+      missingBusinessesColumns
+    );
+
+    if (cleanOwner) {
+      const { data: updatedByOwner } = await supabase
+        .from('businesses')
+        .update(tombstonePatch)
+        .eq('owner_id', cleanOwner)
+        .select('id');
+      if (Array.isArray(updatedByOwner)) {
+        tombstonedCount += updatedByOwner.length;
+        for (const row of updatedByOwner) {
+          if (row?.id) postLocalBusinessBroadcast({ type: 'delete', id: String(row.id) });
+        }
+      }
+    }
+
+    if (uniqueUuids.length > 0) {
+      const { data: updatedByIds } = await supabase
+        .from('businesses')
+        .update(tombstonePatch)
+        .in('id', uniqueUuids)
+        .select('id');
+      if (Array.isArray(updatedByIds)) {
+        tombstonedCount += updatedByIds.length;
+      }
+    }
+
+    return { ok: true, deletedCount, tombstonedCount };
   } catch {
-    // silent fallback in offline/demo mode
+    return { ok: false, deletedCount, tombstonedCount };
   }
 }

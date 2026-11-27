@@ -658,8 +658,8 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.7.2');
-  assert.equal(compareSemver('1.7.1', '1.7.2'), 1);
+  assert.equal(APP_VERSION, '1.7.3');
+  assert.equal(compareSemver('1.7.2', '1.7.3'), 1);
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2156,10 +2156,14 @@ test('v1.4.5 Unified Multiplayer Map Sync: deterministic UUID mapping, canonical
   assert.equal(payload.owner_id, 'player-a');
   assert.equal(payload.owner_name, 'Ahmet Yılmaz');
   assert.equal(payload.company_name, 'Yılmaz Holding');
-  assert.equal(payload.name, 'Kadıköy Kafe');
+  assert.equal(payload.business_name, 'Kadıköy Kafe');
+  assert.equal('name' in payload, false, 'Must not send nonexistent name column to public.businesses');
+  assert.equal(payload.city_plate, '34', 'city_plate must be text string matching public.businesses schema');
   assert.equal(payload.sector, 'kafe');
+  assert.equal(payload.business_type, 'kafe');
   assert.equal(payload.level, 3);
   assert.equal(payload.hourly_revenue, 14500);
+  assert.equal(payload.hourly_income, 14500);
   assert.equal(payload.lat, 40.9909);
   assert.equal(payload.lng, 29.0293);
 

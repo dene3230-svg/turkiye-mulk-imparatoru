@@ -42,6 +42,13 @@ import {
   signLeaseContract,
   terminateLeaseContract,
 } from './quickActionsEngine';
+import {
+  buildBusinessesUpsertPayload,
+  DELETED_BUSINESS_MARKER,
+  isDeletedBusinessRow,
+  normalizeRecord,
+  WORLD_POLL_INTERVAL_MS,
+} from '../services/cityRoom';
 import { resolvePinLocation } from './provinces81';
 import type { EmpireState, HiredStaff, PinLocationInfo, RemoteBusinessRecord } from '../types/game';
 
@@ -583,4 +590,53 @@ test('10. v1.7.2 City Genel Müdür gives -35% wear & -20% repair discount (no f
     competitorBusinesses: rivals,
   });
   assert.ok(incWithRivals < incSolo, 'Active regional rivals must reduce live branch revenue');
+});
+
+test('11. v1.7.3 Supabase public.businesses schema parity, tombstone delete filtering & 10s silent polling', () => {
+  assert.equal(WORLD_POLL_INTERVAL_MS, 10_000, 'Background competitor polling must be 10 seconds');
+
+  const payload = buildBusinessesUpsertPayload({
+    id: 'biz-schema-check',
+    owner_id: 'owner-173',
+    owner_name: 'Patron · Test Holding',
+    company_name: 'Test Holding',
+    city_plate: 32,
+    city_name: 'Isparta',
+    district: 'Merkez',
+    business_name: 'Gül Kafe',
+    business_type: 'kafe',
+    lat: 37.7648,
+    lng: 30.5566,
+    level: 2,
+    hourly_income: 8500,
+    valuation: 240_000,
+    created_at: new Date().toISOString(),
+  });
+
+  // Exact 16 writable columns of public.businesses (no nonexistent "name" column!)
+  assert.equal('name' in payload, false);
+  assert.equal(payload.business_name, 'Gül Kafe');
+  assert.equal(payload.city_plate, '32');
+  assert.equal(typeof payload.city_plate, 'string');
+  assert.equal(payload.business_type, 'kafe');
+  assert.equal(payload.sector, 'kafe');
+  assert.equal(payload.hourly_income, 8500);
+  assert.equal(payload.hourly_revenue, 8500);
+
+  // Deleted/tombstoned rows must be recognized and filtered out cleanly from map/polling
+  const tombstonedRow = {
+    id: payload.id,
+    owner_id: 'owner-173',
+    owner_name: 'Patron',
+    business_name: DELETED_BUSINESS_MARKER,
+    business_type: '__deleted__',
+    sector: '__deleted__',
+    lat: 0,
+    lng: 0,
+    level: 0,
+    hourly_income: 0,
+    valuation: 0,
+  };
+  assert.equal(isDeletedBusinessRow(tombstonedRow), true);
+  assert.equal(normalizeRecord(tombstonedRow), null);
 });

@@ -666,9 +666,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v172',
-      title: 'Mülk İmparatorluğu v1.7.2',
-      body: 'Kademeli vergi sistemi, gerçekçi kiralık mülk getirileri, Genel Müdür bakım dengesi ve tam mat koyu arayüz aktif.',
+      id: 'welcome-v173',
+      title: 'Mülk İmparatorluğu v1.7.3',
+      body: 'Supabase şema uyumu, canlı harita Realtime + 10 sn senkronizasyon ve tam sıfırlama veritabanı temizliği aktif.',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -1086,6 +1086,16 @@ export default function App() {
         if (result.hardcoreSettlement) {
           const hs = result.hardcoreSettlement;
           if (hs.foreclosedBranchName) {
+            const remainingIds = new Set(result.state.businesses.map((b) => b.id));
+            const foreclosedBranches = prev.businesses.filter((b) => !remainingIds.has(b.id));
+            for (const fb of foreclosedBranches) {
+              setRoomRecords((cur) => applyRealtimeBusinessDelete(cur, fb.id));
+              serverWorldRecordsRef.current = applyRealtimeBusinessDelete(
+                serverWorldRecordsRef.current,
+                fb.id
+              );
+              void removeBusinessFromRoom(fb.id);
+            }
             pushNotification(
               'Otomatik Haciz Uygulandı!',
               `3 gün üst üste eksi kasa nedeniyle "${hs.foreclosedBranchName}" şubesi haczedilip tasfiye edildi.`,
@@ -3215,15 +3225,20 @@ export default function App() {
     setHrTargetBusinessId(null);
     setChainCloneDraft(null);
     setPreselectedFranchise(null);
-    setRoomRecords((prev) =>
-      prev.filter((r) => (ownerId ? r.owner_id !== ownerId : true) && !prevIdSet.has(r.id))
-    );
+    const stripOwnRecords = (list: RemoteBusinessRecord[]) =>
+      list.filter((r) => (ownerId ? r.owner_id !== ownerId : true) && !prevIdSet.has(r.id));
+    setRoomRecords(stripOwnRecords);
+    serverWorldRecordsRef.current = stripOwnRecords(serverWorldRecordsRef.current);
     focusHeadquarters(fresh);
     if (user) {
       saveEmpireStateLocal(user.id, fresh);
-      void deletePlayerBusinessesFromRoom(user.id, previousOwnIds);
+      void deletePlayerBusinessesFromRoom(user.id, previousOwnIds).finally(() => {
+        setSyncRefreshNonce((n) => n + 1);
+      });
     } else if (previousOwnIds.length > 0) {
-      void deletePlayerBusinessesFromRoom('', previousOwnIds);
+      void deletePlayerBusinessesFromRoom('', previousOwnIds).finally(() => {
+        setSyncRefreshNonce((n) => n + 1);
+      });
     }
     pushNotification(
       'İmparatorluk Sıfırlandı',

@@ -1,11 +1,10 @@
 {
-  "version": "1.7.2",
+  "version": "1.7.3",
   "buildDate": "2026-11-27",
   "mandatory": false,
   "notes": [
-    "Çifte vergi hatası giderildi, raporlar ve kiralık mülk dengesi düzeltildi, tüm alt paneller mat koyu temaya eşitlendi",
-    "Genel Müdür bakım indirimi (%20) ve %35 yıpranma azaltımı dengelendi; rakip şubeler bölgesel pazar doygunluğuna dahil edildi",
-    "Genel Bakış Gider Kırılımı barı gerçek oransal genişlik ve alt lejant ile yenilendi",
-    "Tam oyun sıfırlamada tüm modallar ve Supabase işletme kayıtları temizlenir; eksik/uyumsuz Supabase tabloları sessiz yerel moda geçer"
+    "Supabase public.businesses tablo şeması ve veri tipleri birebir eşitlendi; 400 yazma/silme hataları giderildi",
+    "Şube kurma, kapatma, haciz ve Oyunu Sıfırla işlemlerinde Supabase veritabanı kayıtları gerçek sorgularla güncellenip temizlenir",
+    "Harita için Supabase Realtime (INSERT/UPDATE/DELETE) aboneliği ve 10 saniyelik sessiz arka plan rakip yenileme (polling) aktif edildi"
   ]
 }

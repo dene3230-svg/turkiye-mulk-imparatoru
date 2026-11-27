@@ -27,6 +27,7 @@ import {
   parseOwnerAndHolding,
   subscribeToGlobalBusinesses,
   syncPlayerBusinessesToWorld,
+  WORLD_POLL_INTERVAL_MS,
   type RoomSyncStatus,
   type WorldDbSyncSnapshot,
 } from '../services/cityRoom';
@@ -183,6 +184,24 @@ export function TurkeyMap({
     });
   };
 
+  // Silent read-only background refresh (used by 10s fallback polling & visibility resume)
+  const pollWorldCompetitorsNowRef = useRef<(() => Promise<void>) | null>(null);
+  pollWorldCompetitorsNowRef.current = async () => {
+    const fetchRes = await fetchAllWorldBusinesses();
+    if (fetchRes.error) {
+      syncErrorRef.current = fetchRes.error;
+      roomStatusRef.current = 'offline';
+    } else if (fetchRes.connected) {
+      dbRecordsRef.current = fetchRes.records;
+      syncErrorRef.current = null;
+      if (roomStatusRef.current !== 'live') {
+        roomStatusRef.current = 'live';
+      }
+    }
+    emitSnapshot(false);
+  };
+
+  // Full sync (upserts changed local player portfolio -> fetches full world snapshot)
   const syncWorldNowRef = useRef<(() => Promise<void>) | null>(null);
   syncWorldNowRef.current = async () => {
     let latestError: string | null = null;
@@ -212,17 +231,22 @@ export function TurkeyMap({
     emitSnapshot(false);
   };
 
-  // Mount-level single unified sync + Realtime subscription + 15s fallback poll
+  // Mount-level single unified sync + Realtime subscription (INSERT/UPDATE/DELETE) + 10s silent fallback poll
   useEffect(() => {
     let active = true;
     emitSnapshot(true);
 
-    const runSync = async () => {
+    const runFullSync = async () => {
       if (!active) return;
       await syncWorldNowRef.current?.();
     };
 
-    runSync();
+    const runSilentPoll = async () => {
+      if (!active) return;
+      await pollWorldCompetitorsNowRef.current?.();
+    };
+
+    runFullSync();
 
     const unsubscribe = subscribeToGlobalBusinesses({
       onUpsert: (rec) => {
@@ -257,23 +281,31 @@ export function TurkeyMap({
       },
       onReconnect: () => {
         if (!active) return;
-        runSync();
+        runFullSync();
       },
     });
 
+    // Silent 10-second fallback polling in case Realtime WebSocket drops
     const pollTimer = window.setInterval(() => {
-      if (active) runSync();
-    }, 15_000);
+      if (active) runSilentPoll();
+    }, WORLD_POLL_INTERVAL_MS);
 
     const handleOnline = () => {
-      if (active) runSync();
+      if (active) runFullSync();
+    };
+    const handleVisibilityChange = () => {
+      if (active && document.visibilityState === 'visible') {
+        runSilentPoll();
+      }
     };
     window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       active = false;
       window.clearInterval(pollTimer);
       window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsubscribe();
     };
   }, []);
