@@ -13,6 +13,7 @@ import {
   BANK_MIN_POOL_CAPITAL,
 } from './catalog';
 import { calculateOfficeBenefits } from './officeEngine';
+import { calculateStrictCreditLimit } from './hardcoreEconomyEngine';
 
 export const CREDIT_SCORE_MIN = 0;
 export const CREDIT_SCORE_MAX = 1900;
@@ -182,7 +183,9 @@ export function evaluateLoanEligibility(
 ): LoanEligibilityResult {
   const tier = getCreditTier(state.creditScore);
   const officeBenefits = calculateOfficeBenefits(state);
-  const effectiveMaxLoan = Math.round(tier.maxLoanAmount * officeBenefits.loanLimitMultiplier);
+  const tierMaxLoan = Math.round(tier.maxLoanAmount * officeBenefits.loanLimitMultiplier);
+  const strictLimit = calculateStrictCreditLimit(state, collateralValuation);
+  const effectiveMaxLoan = Math.min(tierMaxLoan, strictLimit.strictMaxLoan);
   const effectiveInterestRate = calculateEffectiveInterestRate(
     bank.baseInterestRate,
     state.creditScore,

@@ -26,6 +26,13 @@ import {
   calculateDailyRentalIncome,
   calculateRentalPropertiesValuation,
 } from './quickActionsEngine';
+import {
+  calculateHqBureaucracyDailyCost,
+  calculateProgressiveDailyCorporateTax,
+  calculateStrictCreditLimit,
+  getCompletedMegaProjectsDailyIncome,
+  getMegaProjectSupplyDiscountBonus,
+} from './hardcoreEconomyEngine';
 
 export type AccountCardId = 'cash' | 'credit' | 'investments' | 'expenses';
 export type OperationCardId = 'businesses' | 'office' | 'growth';
@@ -133,6 +140,18 @@ export interface ExecutiveDashboardMetrics {
   companyLevel: number;
   companyTitle: string;
   tierProgressPct: number;
+  // v1.7.1 Hardcore Economy & Endgame Metrics
+  progressiveTaxBracketPct: number;
+  dailyCorporateTaxEstimate: number;
+  dailyHqBureaucracyCost: number;
+  inflationIndex: number;
+  negativeCashStreakDays: number;
+  pendingRaiseCount: number;
+  hasActiveCrisis: boolean;
+  activeMegaProjectsCount: number;
+  completedMegaProjectsDailyIncome: number;
+  prestigeMarketTier: number;
+  strictCreditLimit: number;
 }
 
 function safeNum(value: unknown, fallback = 0): number {
@@ -254,12 +273,36 @@ export function computeExecutiveDashboardMetrics(
   }
 
   const dailyRentalIncome = calculateDailyRentalIncome(state);
-  dailyEstimatedRevenue += dailyRentalIncome;
+  const completedMegaProjectsDailyIncome = getCompletedMegaProjectsDailyIncome(state);
+  dailyEstimatedRevenue += dailyRentalIncome + completedMegaProjectsDailyIncome;
+
+  const currentInflation = Math.max(1.0, safeNum(state.inflationIndex, 1.0));
+  const megaSupplyBonus = getMegaProjectSupplyDiscountBonus(state);
+  dailyRentUtilities = Math.round(dailyRentUtilities * currentInflation);
+  dailyEstimatedSupply = Math.round(
+    dailyEstimatedSupply * currentInflation * Math.max(0.5, 1 - megaSupplyBonus)
+  );
 
   const dailyPayrollWithSgk = computeDailyPayrollWithSgk(state);
+  const dailyHqBureaucracyCost = calculateHqBureaucracyDailyCost(businesses.length);
+  const preTaxDailyNet =
+    dailyEstimatedRevenue -
+    (dailyPayrollWithSgk + dailyRentUtilities + dailyEstimatedSupply + dailyHqBureaucracyCost);
+  const taxEstimate = calculateProgressiveDailyCorporateTax(
+    preTaxDailyNet,
+    state.prestigeMarketTier ?? 0
+  );
+  const dailyCorporateTaxEstimate = taxEstimate.taxAmount;
+
   const dailyOperatingExpenses = Math.max(
     0,
-    Math.round(dailyPayrollWithSgk + dailyRentUtilities + dailyEstimatedSupply)
+    Math.round(
+      dailyPayrollWithSgk +
+        dailyRentUtilities +
+        dailyEstimatedSupply +
+        dailyHqBureaucracyCost +
+        dailyCorporateTaxEstimate
+    )
   );
 
   const avgServiceQuality =
@@ -267,7 +310,7 @@ export function computeExecutiveDashboardMetrics(
   const serviceQualityPct =
     operationalCount > 0 ? Math.max(5, Math.min(100, Math.round((avgServiceQuality / 5) * 100))) : 0;
 
-  // Loans & credit limit
+  // Loans & strict credit limit (7-day average net profit + collateral)
   const activeLoans = (state.activeLoans ?? []).filter(
     (l) => l.status === 'active' || l.status === 'garnishing'
   );
@@ -276,9 +319,11 @@ export function computeExecutiveDashboardMetrics(
     0
   );
   const creditTier = getCreditTier(safeCreditScore);
-  const availableCreditLimit = Math.round(
+  const tierMaxLimit = Math.round(
     safeNum(creditTier.maxLoanAmount, 0) * safeNum(officeBenefits.loanLimitMultiplier, 1)
   );
+  const strictLimitInfo = calculateStrictCreditLimit(state, businessValuationsTotal);
+  const availableCreditLimit = Math.min(tierMaxLimit, strictLimitInfo.strictMaxLoan);
 
   // Stock portfolio & personal assets
   const quoteByTicker = new Map((quotes ?? []).map((q) => [q.ticker, q]));
@@ -545,6 +590,17 @@ export function computeExecutiveDashboardMetrics(
     companyLevel: companyTier.level,
     companyTitle: companyTier.title,
     tierProgressPct,
+    progressiveTaxBracketPct: taxEstimate.bracketPct,
+    dailyCorporateTaxEstimate,
+    dailyHqBureaucracyCost,
+    inflationIndex: Number(currentInflation.toFixed(2)),
+    negativeCashStreakDays: Math.max(0, Math.round(safeNum(state.negativeCashStreakDays, 0))),
+    pendingRaiseCount: (state.pendingRaiseRequests ?? []).length,
+    hasActiveCrisis: Boolean(state.activeCrisisEvent),
+    activeMegaProjectsCount: (state.megaProjects ?? []).length,
+    completedMegaProjectsDailyIncome,
+    prestigeMarketTier: Math.max(0, Math.round(safeNum(state.prestigeMarketTier, 0))),
+    strictCreditLimit: strictLimitInfo.strictMaxLoan,
   };
 }
 

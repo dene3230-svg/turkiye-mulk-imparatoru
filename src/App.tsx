@@ -262,6 +262,22 @@ import {
   type AccountCardId,
   type OperationCardId,
 } from './game/dashboardMetrics';
+import {
+  CrisisDecisionModal,
+  RaiseRequestsModal,
+  StrategicHubModal,
+} from './components/StrategicEconomyModals';
+import {
+  claimBoardContractReward,
+  executePrestigeIpoExpansion,
+  performBranchMaintenance,
+  resolveOperationalCrisis,
+  resolveRaiseRequest,
+  startMegaProject,
+  syncBranchMenuPricesToInflation,
+  upgradeBranchEquipment,
+} from './game/hardcoreEconomyEngine';
+import type { MegaProjectId } from './types/game';
 
 type ExecutiveNavId = 'overview' | 'map' | 'finance' | 'businesses' | 'office';
 
@@ -652,6 +668,9 @@ export default function App() {
   const [storeModalOpen, setStoreModalOpen] = useState(false);
   const [overviewReportsOpen, setOverviewReportsOpen] = useState(false);
   const [overviewManagedBranchId, setOverviewManagedBranchId] = useState<string | null>(null);
+  const [crisisModalOpen, setCrisisModalOpen] = useState(false);
+  const [raiseModalOpen, setRaiseModalOpen] = useState(false);
+  const [strategicHubOpen, setStrategicHubOpen] = useState(false);
 
   const [activeNav, setActiveNav] = useState<ExecutiveNavId>('overview');
   const [selectedAccountId, setSelectedAccountId] = useState<AccountCardId>('cash');
@@ -1088,6 +1107,51 @@ export default function App() {
           setGameSpeed(1);
           setDaySimAutoStopAlert(result.daySimAutoStop);
           soundEngine.playNotification();
+        }
+
+        if (result.hardcoreSettlement) {
+          const hs = result.hardcoreSettlement;
+          if (hs.foreclosedBranchName) {
+            pushNotification(
+              'Otomatik Haciz Uygulandı!',
+              `3 gün üst üste eksi kasa nedeniyle "${hs.foreclosedBranchName}" şubesi haczedilip tasfiye edildi.`,
+              'finance',
+              true
+            );
+          }
+          if (hs.inflationWaveTriggered) {
+            pushNotification(
+              'Periyodik Enflasyon Dalgası',
+              `Tedarik ve kira maliyetleri arttı (Endeks: x${hs.inflationIndex.toFixed(2)}). Şube YÖNET ekranından fiyatlarınızı güncelleyin.`,
+              'event',
+              true
+            );
+          }
+          if (hs.newRaiseRequestsCount > 0) {
+            pushNotification(
+              'Personel Zam Talebi Geldi',
+              `${hs.newRaiseRequestsCount} personel 15 günlük kıdem/enflasyon zammı talep etti.`,
+              'system',
+              true
+            );
+          }
+          if (hs.newCrisisTriggered && hs.activeCrisisEvent) {
+            pushNotification(
+              `Acil Kriz: ${hs.activeCrisisEvent.title}`,
+              hs.activeCrisisEvent.description,
+              'event',
+              true
+            );
+          }
+          for (const doneProj of hs.completedMegaProjectNames) {
+            soundEngine.playUpgrade();
+            pushNotification(
+              'Mega Proje Tamamlandı!',
+              `${doneProj} inşaatı bitti ve günlük net gelir üretmeye başladı!`,
+              'milestone',
+              true
+            );
+          }
         }
 
         if (result.dayEndSummary) {
@@ -2240,6 +2304,133 @@ export default function App() {
       false
     );
     return true;
+  };
+
+  const handlePerformBranchMaintenance = (businessId: string) => {
+    const res = performBranchMaintenance(empire, businessId);
+    if (!res.ok) {
+      if (res.error) pushNotification('Bakım Yapılamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Şube Bakımı Tamamlandı',
+      `Kondisyon %${res.newCondition} seviyesine çıkarıldı (-${formatTL(res.cost ?? 0, true)}).`,
+      'system',
+      false
+    );
+  };
+
+  const handleRenewBranchEquipment = (businessId: string) => {
+    const res = upgradeBranchEquipment(empire, businessId);
+    if (!res.ok) {
+      if (res.error) pushNotification('Ekipman Yenilenemedi', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Ekipman Yenilendi',
+      `Ekipman Sv. ${res.nextLevel} oldu ve şube kondisyonu %100 yenilendi.`,
+      'milestone',
+      false
+    );
+  };
+
+  const handleSyncBranchPrices = (businessId: string) => {
+    const res = syncBranchMenuPricesToInflation(empire, businessId);
+    if (!res.ok) {
+      if (res.error) pushNotification('Fiyat Güncellenemedi', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playClick();
+    setEmpire(res.state);
+    pushNotification(
+      'Menü Fiyatları Güncellendi',
+      `Şube fiyatları güncel enflasyon endeksine (x${res.nextIndex?.toFixed(2)}) uyarlandı.`,
+      'finance',
+      false
+    );
+  };
+
+  const handleResolveCrisis = (choiceId: string) => {
+    const currentDay = Math.max(1, Math.floor((empire.gameMinutes ?? 540) / 1440) + 1);
+    const res = resolveOperationalCrisis(empire, choiceId, currentDay);
+    if (!res.ok) {
+      if (res.error) pushNotification('Kriz Kararı Uygulanamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playClick();
+    setEmpire(res.state);
+    setCrisisModalOpen(false);
+    pushNotification('Operasyonel Kriz Yönetildi', res.summary, 'event', false);
+  };
+
+  const handleResolveRaiseRequest = (requestId: string, decision: 'approve' | 'reject') => {
+    const currentDay = Math.max(1, Math.floor((empire.gameMinutes ?? 540) / 1440) + 1);
+    const res = resolveRaiseRequest(empire, requestId, decision, currentDay);
+    if (!res.ok) return;
+    soundEngine.playClick();
+    setEmpire(res.state);
+    pushNotification(
+      decision === 'approve' ? 'Zam Talebi Onaylandı' : 'Zam Talebi Reddedildi',
+      res.summary,
+      'system',
+      false
+    );
+  };
+
+  const handleStartMegaProject = (projectId: MegaProjectId) => {
+    const currentDay = Math.max(1, Math.floor((empire.gameMinutes ?? 540) / 1440) + 1);
+    const res = startMegaProject(empire, projectId, currentDay);
+    if (!res.ok) {
+      if (res.error) pushNotification('Mega Proje Başlatılamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Mega Proje İnşaatı Başladı',
+      `${res.project?.name} temeli atıldı (${res.project?.totalDays} oyun günü sürecek).`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleClaimBoardContract = (contractId: string) => {
+    const currentDay = Math.max(1, Math.floor((empire.gameMinutes ?? 540) / 1440) + 1);
+    const res = claimBoardContractReward(empire, contractId, currentDay);
+    if (!res.ok) {
+      if (res.error) pushNotification('Ödül Alınamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    if (res.rewardCash) spawnCashPopup(res.rewardCash);
+    pushNotification(
+      'Yönetim Kurulu Kontrat Ödülü Alındı',
+      `+${formatTL(res.rewardCash ?? 0, true)} kasaya aktarıldı ve yeni kontrat açıldı.`,
+      'milestone',
+      false
+    );
+  };
+
+  const handleTriggerPrestigeIpo = () => {
+    const res = executePrestigeIpoExpansion(empire, netWorth);
+    if (!res.ok) {
+      if (res.error) pushNotification('Halka Arz Prestiji Kilitli', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    if (res.ipoCashBonus) spawnCashPopup(res.ipoCashBonus);
+    pushNotification(
+      `Halka Arz & Yeni Pazar Kademe ${res.nextTier}!`,
+      `+${formatTL(res.ipoCashBonus ?? 0, true)} halka arz sermayesi ve kalıcı prestij geliri eklendi.`,
+      'milestone',
+      true
+    );
   };
 
   const handleLaunchHoldingBulkAds = (): boolean => {
@@ -3565,6 +3756,18 @@ export default function App() {
                     soundEngine.playClick();
                     setSettingsOpen(true);
                   }}
+                  onOpenCrisis={() => {
+                    soundEngine.playClick();
+                    setCrisisModalOpen(true);
+                  }}
+                  onOpenRaiseRequests={() => {
+                    soundEngine.playClick();
+                    setRaiseModalOpen(true);
+                  }}
+                  onOpenStrategicHub={() => {
+                    soundEngine.playClick();
+                    setStrategicHubOpen(true);
+                  }}
                 />
               )}
 
@@ -3824,6 +4027,9 @@ export default function App() {
                   onUpgradeBranchFacility={handleUpgradeBranchFacility}
                   onLaunchHoldingBulkAds={handleLaunchHoldingBulkAds}
                   onDistributeHoldingBonus={handleDistributeHoldingBonus}
+                  onPerformBranchMaintenance={handlePerformBranchMaintenance}
+                  onRenewBranchEquipment={handleRenewBranchEquipment}
+                  onSyncBranchPrices={handleSyncBranchPrices}
                 />
               )}
 
@@ -4289,9 +4495,40 @@ export default function App() {
               onCustomizeBranch={handleCustomizeBranch}
               onLaunchMarketing={handleLaunchBranchMarketing}
               onUpgradeFacility={handleUpgradeBranchFacility}
+              onPerformMaintenance={handlePerformBranchMaintenance}
+              onRenewEquipment={handleRenewBranchEquipment}
+              onSyncPrices={handleSyncBranchPrices}
             />
           );
         })()}
+
+      {crisisModalOpen && empire.activeCrisisEvent && (
+        <CrisisDecisionModal
+          crisis={empire.activeCrisisEvent}
+          cash={empire.cash}
+          onResolve={handleResolveCrisis}
+          onClose={() => setCrisisModalOpen(false)}
+        />
+      )}
+
+      {raiseModalOpen && (
+        <RaiseRequestsModal
+          requests={empire.pendingRaiseRequests ?? []}
+          onResolve={handleResolveRaiseRequest}
+          onClose={() => setRaiseModalOpen(false)}
+        />
+      )}
+
+      {strategicHubOpen && (
+        <StrategicHubModal
+          state={empire}
+          netWorth={netWorth}
+          onStartMegaProject={handleStartMegaProject}
+          onClaimBoardContract={handleClaimBoardContract}
+          onTriggerPrestigeIpo={handleTriggerPrestigeIpo}
+          onClose={() => setStrategicHubOpen(false)}
+        />
+      )}
 
       <LeaderboardModal
         open={leaderboardModalOpen}

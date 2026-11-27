@@ -1,11 +1,12 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "buildDate": "2026-11-27",
   "mandatory": false,
   "notes": [
-    "Tüm arayüzler mat koyu tasarıma geçirildi, 30 sn/gün zaman kontrolü ve yeni yönetim modülleri eklendi",
-    "Giriş ekranı, yükleme ekranı, harita, finans, işletmeler, ofisim, ayarlar ve tüm modallar #181F29 / #222B38 mat arduvaz sisteminde birleştirildi",
-    "Zaman akışı yalnızca Duraklat (⏸) ve Normal Hız (▶ — 30 sn = 1 gün) ile ince gün ilerleme çubuğu olarak sabitlendi",
-    "Reklam & Tanıtım, Kiralık İlanları, Franchise, Teklifler, Yatırımlar & Borsa, Banka, 6 slotlu Personel ve Günlük Raporlar modülleri tam entegre edildi"
+    "Kademeli kurumlar vergisi (%15-%42) ve 5. şubeden itibaren Merkez Yönetim & Denetim gideri eklendi",
+    "Şube kondisyonu (%2-%4 günlük yıpranma), %25 altı faaliyet durdurma, Bakım Yap, Ekipman Yenile ve Enflasyon fiyat güncelleme mekaniği eklendi",
+    "Müdürsüz şubede %55 verim sınırı, 15 günlük personel zam talepleri (%30 verim / istifa riski) ve operasyonel kriz karar kartları eklendi",
+    "Eksi kasada günlük %5 gecikme cezası, 3 gün üst üste otomatik haciz ve 7 günlük kâr + teminat bazlı kredi limiti getirildi",
+    "Mega Projeler (15-30 gün), Yönetim Kurulu Kontratları ve Halka Arz (IPO) / Yeni Pazar Prestij sistemi entegre edildi"
   ]
 }

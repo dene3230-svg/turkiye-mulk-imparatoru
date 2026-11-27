@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import {
+  AlertTriangle,
   ArrowRight,
   Building2,
   CheckCircle2,
@@ -10,6 +11,7 @@ import {
   Handshake,
   Home,
   Hotel,
+  Landmark,
   Megaphone,
   MessageSquare,
   Monitor,
@@ -17,6 +19,7 @@ import {
   Settings,
   ShoppingBag,
   TrendingUp,
+  UserCheck,
   Users,
   Utensils,
   Car,
@@ -30,6 +33,12 @@ import {
   ensureDailyOffersForDay,
 } from '../game/quickActionsEngine';
 import { getBlueprintById } from '../game/catalog';
+import {
+  CONDITION_SUSPEND_THRESHOLD,
+  CONDITION_WARNING_THRESHOLD,
+  FORECLOSURE_STREAK_DAYS,
+  hasBranchManager,
+} from '../game/hardcoreEconomyEngine';
 
 export type QuickActionId =
   | 'ads'
@@ -50,6 +59,9 @@ interface ExecutiveDashboardProps {
   onManageBranch: (businessId: string) => void;
   onDiscoverBranches: () => void;
   onOpenSettings: () => void;
+  onOpenCrisis?: () => void;
+  onOpenRaiseRequests?: () => void;
+  onOpenStrategicHub?: () => void;
 }
 
 function buildSmoothCurvePath(points: Array<{ x: number; y: number }>): string {
@@ -192,26 +204,35 @@ export function ExecutiveDashboard({
   onManageBranch,
   onDiscoverBranches,
   onOpenSettings,
+  onOpenCrisis,
+  onOpenRaiseRequests,
+  onOpenStrategicHub,
 }: ExecutiveDashboardProps) {
   const dailyRevenue = Math.max(0, Math.round(metrics.dailyEstimatedRevenue));
   const monthlyProjected = Math.round(dailyRevenue * 30);
   const dailyExpenses = Math.max(0, Math.round(metrics.dailyOperatingExpenses));
   const dailyNetProfit = dailyRevenue - dailyExpenses;
 
-  // Expense breakdown percentages (Personel / Kira-Vergi / Tedarik)
+  // Expense breakdown percentages (Personel / Kira-Vergi / Tedarik / Merkez Yönetim)
+  const rentAndTaxCost = metrics.dailyRentUtilities + (metrics.dailyCorporateTaxEstimate ?? 0);
+  const hqBureaucracyCost = Math.max(0, metrics.dailyHqBureaucracyCost ?? 0);
   const expSum = Math.max(
     1,
-    metrics.dailyPayrollWithSgk + metrics.dailyRentUtilities + metrics.dailyEstimatedSupply
+    metrics.dailyPayrollWithSgk + rentAndTaxCost + metrics.dailyEstimatedSupply + hqBureaucracyCost
   );
   const hasRealExpense =
-    metrics.dailyPayrollWithSgk + metrics.dailyRentUtilities + metrics.dailyEstimatedSupply > 0;
+    metrics.dailyPayrollWithSgk + rentAndTaxCost + metrics.dailyEstimatedSupply + hqBureaucracyCost > 0;
   const staffPct = hasRealExpense
     ? Math.round((metrics.dailyPayrollWithSgk / expSum) * 100)
     : 45;
   const rentPct = hasRealExpense
-    ? Math.round((metrics.dailyRentUtilities / expSum) * 100)
+    ? Math.round((rentAndTaxCost / expSum) * 100)
     : 30;
-  const supplyPct = Math.max(0, 100 - staffPct - rentPct);
+  const hqPct =
+    hasRealExpense && hqBureaucracyCost > 0
+      ? Math.max(6, Math.round((hqBureaucracyCost / expSum) * 100))
+      : 0;
+  const supplyPct = Math.max(0, 100 - staffPct - rentPct - hqPct);
 
   // Live subtitles for right-column Quick Action tiles
   const currentMin = state.gameMinutes ?? 540;
@@ -322,10 +343,56 @@ export function ExecutiveDashboard({
           data-testid="overview-main-column"
           className="flex flex-col gap-3 min-[760px]:col-span-8 min-[1024px]:min-h-0 lg:gap-4"
         >
-          <div className="flex shrink-0 items-center justify-between">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold tracking-wider text-slate-100 lg:text-lg">
               GENEL BAKIŞ
             </h2>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {metrics.negativeCashStreakDays > 0 && (
+                <span
+                  data-testid="foreclosure-warning-badge"
+                  className="inline-flex items-center gap-1 rounded-xl border border-[#B86B5E]/60 bg-[#B86B5E]/15 px-2.5 py-1 text-[11px] font-semibold text-[#B86B5E]"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span>
+                    Haciz Riski {metrics.negativeCashStreakDays}/{FORECLOSURE_STREAK_DAYS} Gün
+                  </span>
+                </span>
+              )}
+              {metrics.hasActiveCrisis && onOpenCrisis && (
+                <button
+                  type="button"
+                  data-testid="overview-crisis-btn"
+                  onClick={onOpenCrisis}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#B86B5E]/60 bg-[#222B38] px-2.5 py-1 text-[11px] font-semibold text-[#B86B5E] hover:bg-[#2A3545]"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span>Kriz Kararı</span>
+                </button>
+              )}
+              {metrics.pendingRaiseCount > 0 && onOpenRaiseRequests && (
+                <button
+                  type="button"
+                  data-testid="overview-raises-btn"
+                  onClick={onOpenRaiseRequests}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#C8AE7D]/55 bg-[#222B38] px-2.5 py-1 text-[11px] font-semibold text-[#C8AE7D] hover:bg-[#2A3545]"
+                >
+                  <UserCheck className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span>Zam Talebi ({metrics.pendingRaiseCount})</span>
+                </button>
+              )}
+              {onOpenStrategicHub && (
+                <button
+                  type="button"
+                  data-testid="overview-strategic-hub-btn"
+                  onClick={onOpenStrategicHub}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#334155] bg-[#222B38] px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:border-slate-400 hover:bg-[#2A3545]"
+                >
+                  <Landmark className="h-3.5 w-3.5 text-[#C8AE7D]" strokeWidth={1.5} />
+                  <span>Mega Projeler & Prestij</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* CARD 1: HOLDİNG MALİ DURUMU */}
@@ -334,8 +401,31 @@ export function ExecutiveDashboard({
             className="flex min-h-0 flex-[1.25] flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-3.5 lg:p-5"
           >
             <div>
-              <div className="text-[11px] font-semibold tracking-wider text-slate-400 lg:text-xs">
-                HOLDİNG MALİ DURUMU
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] font-semibold tracking-wider text-slate-400 lg:text-xs">
+                  HOLDİNG MALİ DURUMU
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] font-medium">
+                  <span
+                    data-testid="progressive-tax-badge"
+                    className="rounded-lg border border-[#334155] bg-[#181F29] px-2 py-0.5 font-mono-num text-slate-300"
+                  >
+                    Vergi Dilimi: %{metrics.progressiveTaxBracketPct}
+                  </span>
+                  {metrics.inflationIndex > 1.0 && (
+                    <span
+                      data-testid="inflation-index-badge"
+                      className="rounded-lg border border-[#C8AE7D]/45 bg-[#181F29] px-2 py-0.5 font-mono-num text-[#C8AE7D]"
+                    >
+                      Enflasyon: x{metrics.inflationIndex.toFixed(2)}
+                    </span>
+                  )}
+                  {metrics.prestigeMarketTier > 0 && (
+                    <span className="rounded-lg border border-[#7A9E7E]/45 bg-[#181F29] px-2 py-0.5 font-mono-num text-[#7A9E7E]">
+                      Prestij K.{metrics.prestigeMarketTier}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2">
                 <div className="text-sm font-medium text-slate-200 lg:text-[17px]">
@@ -404,25 +494,35 @@ export function ExecutiveDashboard({
                 >
                   <div
                     className="flex items-center justify-center truncate bg-[#7E96B0] px-2 text-[#181F29] font-semibold transition-all"
-                    style={{ width: `${Math.max(18, staffPct)}%` }}
+                    style={{ width: `${Math.max(16, staffPct)}%` }}
                     title={`Personel %${staffPct}`}
                   >
                     <span className="truncate whitespace-nowrap">Personel %{staffPct}</span>
                   </div>
                   <div
                     className="flex items-center justify-center truncate bg-[#3E4C5E] px-2 transition-all"
-                    style={{ width: `${Math.max(18, rentPct)}%` }}
+                    style={{ width: `${Math.max(16, rentPct)}%` }}
                     title={`Kira/Vergi %${rentPct}`}
                   >
                     <span className="truncate whitespace-nowrap">Kira/Vergi %{rentPct}</span>
                   </div>
                   <div
                     className="flex items-center justify-center truncate bg-[#B86B5E] px-2 transition-all"
-                    style={{ width: `${Math.max(18, supplyPct)}%` }}
+                    style={{ width: `${Math.max(16, supplyPct)}%` }}
                     title={`Tedarik %${supplyPct}`}
                   >
                     <span className="truncate whitespace-nowrap">Tedarik %{supplyPct}</span>
                   </div>
+                  {hqPct > 0 && (
+                    <div
+                      data-testid="expense-hq-bureaucracy-segment"
+                      className="flex items-center justify-center truncate bg-[#C8AE7D] px-2 font-semibold text-[#181F29] transition-all"
+                      style={{ width: `${Math.max(14, hqPct)}%` }}
+                      title={`Merkez Yönetim & Denetim Gideri: ${formatTL(hqBureaucracyCost)}/gün (%${hqPct})`}
+                    >
+                      <span className="truncate whitespace-nowrap">Merkez %{hqPct}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -469,18 +569,32 @@ export function ExecutiveDashboard({
                       ) * 24
                     );
 
-                const barColor =
-                  efficiencyPct >= 75
-                    ? 'bg-[#7A9E7E]'
-                    : efficiencyPct >= 50
-                    ? 'bg-[#C8AE7D]'
-                    : 'bg-[#B86B5E]';
+                const conditionPct = Math.max(
+                  0,
+                  Math.min(100, Math.round(biz.maintenanceLevel ?? 100))
+                );
+                const isSuspended =
+                  Boolean(biz.suspendedForMaintenance) ||
+                  conditionPct < CONDITION_SUSPEND_THRESHOLD;
+                const isCondWarn = !isSuspended && conditionPct < CONDITION_WARNING_THRESHOLD;
+                const unmanaged = !hasBranchManager(biz);
+                const effectiveEfficiencyPct = isSuspended
+                  ? 0
+                  : unmanaged
+                  ? Math.min(55, efficiencyPct)
+                  : efficiencyPct;
+
+                const barColor = isSuspended
+                  ? 'bg-[#B86B5E]'
+                  : isCondWarn
+                  ? 'bg-[#C8AE7D]'
+                  : 'bg-[#7A9E7E]';
 
                 return (
                   <div
                     key={biz.id}
                     data-testid={`overview-branch-${biz.id}`}
-                    className="flex min-w-[162px] max-w-[196px] flex-1 flex-col justify-between rounded-[14px] border border-[#334155] bg-[#1C2430] p-2.5 lg:p-3"
+                    className="flex min-w-[166px] max-w-[202px] flex-1 flex-col justify-between rounded-[14px] border border-[#334155] bg-[#1C2430] p-2.5 lg:p-3"
                   >
                     <div>
                       <div className="flex items-start gap-2">
@@ -492,29 +606,46 @@ export function ExecutiveDashboard({
                             {biz.customName}
                           </div>
                           <div className="text-[10.5px] text-slate-400">
-                            (Sv. {biz.level})
+                            (Sv. {biz.level}) {unmanaged ? '· Müd. Yok' : ''}
                           </div>
                         </div>
                       </div>
 
-                      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-300">
-                        <Users className="h-3.5 w-3.5 text-[#C8AE7D]" strokeWidth={1.5} />
-                        <span className="font-mono-num">{staffAssigned} / 6 Personel</span>
+                      <div className="mt-1.5 flex items-center justify-between gap-1 text-[10.5px] text-slate-300">
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5 text-[#C8AE7D]" strokeWidth={1.5} />
+                          <span className="font-mono-num">{staffAssigned}/6</span>
+                        </span>
+                        <span className="font-mono-num text-slate-400">
+                          {underConst ? 'İnşaat' : `Verim %${effectiveEfficiencyPct}`}
+                        </span>
                       </div>
 
                       <div className="mt-1.5 space-y-1">
-                        <div className="flex items-center justify-between text-[10.5px] text-slate-400">
-                          <span>{underConst ? 'İnşaat Halinde' : `%${efficiencyPct} Verim`}</span>
-                          {underConst && (
-                            <span className="font-mono-num text-[#C8AE7D]">
-                              {biz.constructionDaysRemaining}g
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span
+                            className={
+                              isSuspended
+                                ? 'font-bold text-[#B86B5E]'
+                                : isCondWarn
+                                ? 'text-[#C8AE7D]'
+                                : 'text-slate-400'
+                            }
+                          >
+                            {underConst
+                              ? `Kalan ${biz.constructionDaysRemaining}g`
+                              : isSuspended
+                              ? 'DURDU · BAKIM'
+                              : `Kondisyon %${conditionPct}`}
+                          </span>
                         </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#2C3647]">
+                        <div
+                          data-testid={`overview-branch-condition-bar-${biz.id}`}
+                          className="h-1.5 w-full overflow-hidden rounded-full bg-[#2C3647]"
+                        >
                           <div
                             className={`h-full rounded-full ${barColor}`}
-                            style={{ width: `${underConst ? 25 : efficiencyPct}%` }}
+                            style={{ width: `${underConst ? 25 : Math.max(4, conditionPct)}%` }}
                           />
                         </div>
                       </div>

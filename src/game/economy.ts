@@ -94,6 +94,16 @@ import {
   calculateRentalPropertiesValuation,
   generateDailyOffersForDay,
 } from './quickActionsEngine';
+import {
+  CONDITION_SUSPEND_THRESHOLD,
+  calculateInflationMarginFactor,
+  calculateRegionalSaturationFactor,
+  getBranchManagementEfficiencyCap,
+  getConditionPerformanceMultiplier,
+  getMegaProjectSupplyDiscountBonus,
+  processHardcoreDailySettlement,
+  type HardcoreDailySettlementResult,
+} from './hardcoreEconomyEngine';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
@@ -430,12 +440,20 @@ export function calculateBusinessIncomePerSec(
   > & {
     brandRecognition?: number;
     activeHoldingPromo?: EmpireState['activeHoldingPromo'];
+    inflationIndex?: number;
+    prestigeMarketTier?: number;
+    permanentPrestigeBonusPct?: number;
   }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
   // v1.4.0: Businesses under construction / renovation generate 0 revenue until completed.
   if (isBusinessUnderConstruction(business)) return 0;
+  // v1.7.1: Branches with condition < 25% are temporarily suspended until repaired.
+  const conditionLevel = business.maintenanceLevel ?? 100;
+  if (business.suspendedForMaintenance || conditionLevel < CONDITION_SUSPEND_THRESHOLD) {
+    return 0;
+  }
 
   const safeLevel = Number.isFinite(business.level) ? Math.max(1, business.level) : 1;
   const levelMultiplier = 1 + (safeLevel - 1) * 0.45;
@@ -533,6 +551,28 @@ export function calculateBusinessIncomePerSec(
     }
   }
 
+  // v1.7.1: Condition degradation (<60%), Manager 55% cap (unless managed or executive-overseen),
+  // Regional market saturation, Inflation price lag & IPO Prestige permanent bonus
+  const currentGameDay = Math.max(1, Math.floor(currentGameMin / 1440) + 1);
+  const conditionMult = getConditionPerformanceMultiplier(conditionLevel);
+  const mgmtCapInfo = getBranchManagementEfficiencyCap(business, currentGameDay);
+  const managementCapMult =
+    mgmtCapInfo.reason === 'raise_rejected'
+      ? mgmtCapInfo.capMultiplier
+      : automation.fullAutomation
+      ? 1.0
+      : mgmtCapInfo.capMultiplier;
+  const saturationMult = calculateRegionalSaturationFactor(
+    business,
+    allOwnBusinesses ?? [business],
+    stateContext?.prestigeMarketTier ?? 0
+  ).multiplier;
+  const inflationRevMult = calculateInflationMarginFactor(
+    business,
+    stateContext?.inflationIndex ?? 1.0
+  ).revenueMultiplier;
+  const prestigeRevMult = 1 + Math.max(0, stateContext?.permanentPrestigeBonusPct ?? 0) / 100;
+
   const rawIncome =
     bp.baseIncomePerSec *
     safeAffinity *
@@ -551,7 +591,12 @@ export function calculateBusinessIncomePerSec(
     clonedChainSynergy *
     franchiseGrossMult *
     royaltyDeduction *
-    eventMultiplier;
+    eventMultiplier *
+    conditionMult *
+    managementCapMult *
+    saturationMult *
+    inflationRevMult *
+    prestigeRevMult;
 
   return Number.isFinite(rawIncome) ? Math.max(0, Math.round(rawIncome)) : 0;
 }
@@ -567,6 +612,9 @@ export function calculateBusinessHourlyIncome(
   > & {
     brandRecognition?: number;
     activeHoldingPromo?: EmpireState['activeHoldingPromo'];
+    inflationIndex?: number;
+    prestigeMarketTier?: number;
+    permanentPrestigeBonusPct?: number;
   }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
@@ -1026,6 +1074,7 @@ export interface TickResult {
   accountantAutoPay: Omit<AccountantAutoPayResult, 'state'>;
   ceoActionsLog: string[];
   newTaxBillAmount: number;
+  hardcoreSettlement?: HardcoreDailySettlementResult | null;
 }
 
 /**
@@ -1144,6 +1193,7 @@ export function tickEconomy(
       },
       ceoActionsLog: [],
       newTaxBillAmount: 0,
+      hardcoreSettlement: null,
     };
   }
 
@@ -1222,10 +1272,8 @@ export function tickEconomy(
         nextStock = Math.max(15, nextStock - safeDt * 0.22);
       }
 
-      if (automation.autoMaintenance) {
+      if (automation.autoMaintenance && automation.managerRole === 'genel_mudur') {
         nextMaint = 100;
-      } else {
-        nextMaint = Math.max(20, nextMaint - safeDt * 0.16);
       }
 
       // Morale degrades faster if understaffed (0-1 worker) or neglected; recovers with manager & quality investment
@@ -1288,19 +1336,23 @@ export function tickEconomy(
         Math.max(1, cityBranchCountByPlate.get(b.cityPlate) ?? 1)
     );
     const branchStaffWagesTotal = Math.round((ownStaffDaily + sharedCityDaily) * daysPassed);
-    const branchRentAndUtil = Math.round(calculateDailyRentAndUtilities(b) * daysPassed);
+    const currentInflation = Math.max(1.0, state.inflationIndex ?? 1.0);
+    const branchRentAndUtil = Math.round(
+      calculateDailyRentAndUtilities(b) * currentInflation * daysPassed
+    );
 
     let branchGross = 0;
     let branchSupply = 0;
     if (!wasUnderConstruction) {
       branchGross = Math.round((b.dailyAccruedGross ?? 0) + earned);
       const supplyRatio = bp?.baseCogsRatio ?? 0.44;
-      const rawSupply = Math.round(branchGross * supplyRatio);
+      const rawSupply = Math.round(branchGross * supplyRatio * currentInflation);
       const chainStatus = getChainStatusForBusiness(b, state.businesses);
       let discountPct =
         automation.bulkSupplyDiscount +
         chainStatus.supplyDiscount +
-        officeBenefits.supplyDiscountRate;
+        officeBenefits.supplyDiscountRate +
+        getMegaProjectSupplyDiscountBonus(state);
       if (hasFactorySupplySynergy(b, state.businesses)) {
         discountPct += FACTORY_SUPPLY_DISCOUNT;
       }
@@ -1564,26 +1616,97 @@ export function tickEconomy(
       : state.dailyOffers;
   const nextDailyOffersDay = daysPassed > 0 ? nextTotalDay : state.dailyOffersDay;
 
+  // v1.7.1 Hardcore Daily Settlement (progressive tax, HQ overhead, 2-4% condition wear,
+  // 20-day inflation, 15-day raise requests, operational crises, 5% late penalty & 3-day foreclosure,
+  // mega projects & board contracts)
+  let hardcoreSettlement: HardcoreDailySettlementResult | null = null;
+  let finalBusinesses = cleanedBusinesses;
+  let hardcoreCashDelta = 0;
+  let nextInflationIndex = state.inflationIndex ?? 1.0;
+  let nextLastInflationDay = state.lastInflationDay ?? 0;
+  let nextPendingRaises = state.pendingRaiseRequests ?? [];
+  let nextLastRaiseDay = state.lastRaiseCheckDay ?? 0;
+  let nextActiveCrisis = state.activeCrisisEvent ?? null;
+  let nextLastCrisisDay = state.lastCrisisDay ?? 0;
+  let nextNegCashStreak = state.negativeCashStreakDays ?? 0;
+  let nextTotalLatePenalties = state.totalLatePenaltiesPaid ?? 0;
+  let nextForeclosedCount = state.foreclosedBranchesCount ?? 0;
+  let nextMegaProjects = state.megaProjects ?? [];
+  let nextBoardContracts = state.boardContracts ?? [];
+  let extraBrandBonus = 0;
+
+  if (daysPassed > 0) {
+    const projectedCashBeforeHardcore =
+      state.cash +
+      autoCollectedAtMidnight +
+      dividendPaid +
+      passiveRoyaltyGain +
+      dailyRentalIncomeSettled;
+    const dailyNetBeforeTax = dayEndSummary?.dailyNetCashFlow ?? 0;
+    hardcoreSettlement = processHardcoreDailySettlement({
+      state,
+      businesses: cleanedBusinesses,
+      projectedCashBeforeHardcore,
+      daysPassed,
+      currentDay: nextTotalDay,
+      dailyGrossRevenue,
+      dailyNetBeforeTax,
+    });
+    finalBusinesses = hardcoreSettlement.businesses;
+    hardcoreCashDelta = hardcoreSettlement.cashDelta;
+    nextInflationIndex = hardcoreSettlement.inflationIndex;
+    nextLastInflationDay = hardcoreSettlement.lastInflationDay;
+    nextPendingRaises = hardcoreSettlement.pendingRaiseRequests;
+    nextLastRaiseDay = hardcoreSettlement.lastRaiseCheckDay;
+    nextActiveCrisis = hardcoreSettlement.activeCrisisEvent;
+    nextLastCrisisDay = hardcoreSettlement.lastCrisisDay;
+    nextNegCashStreak = hardcoreSettlement.negativeCashStreakDays;
+    nextTotalLatePenalties += hardcoreSettlement.dailyLatePenalty;
+    nextForeclosedCount = hardcoreSettlement.foreclosedBranchesCount;
+    nextMegaProjects = hardcoreSettlement.megaProjects;
+    nextBoardContracts = hardcoreSettlement.boardContracts;
+    extraBrandBonus = hardcoreSettlement.brandBonusEarned;
+
+    if (dayEndSummary) {
+      dayEndSummary = {
+        ...dayEndSummary,
+        dailyCorporateTax: hardcoreSettlement.dailyCorporateTax,
+        corporateTaxBracketPct: hardcoreSettlement.corporateTaxBracketPct,
+        dailyHqBureaucracyCost: hardcoreSettlement.dailyHqBureaucracyCost,
+        dailyLatePenalty: hardcoreSettlement.dailyLatePenalty,
+        megaProjectIncome: hardcoreSettlement.megaProjectIncome,
+      };
+      if (nextPendingDayEndReports.length > 0 && nextPendingDayEndReports[0].id === dayEndSummary.id) {
+        nextPendingDayEndReports[0] = dayEndSummary;
+      }
+      if (nextDayEndHistory.length > 0 && nextDayEndHistory[0].id === dayEndSummary.id) {
+        nextDayEndHistory[0] = dayEndSummary;
+      }
+    }
+  }
+
   // v1.4.1: Operating losses can push company treasury into negative balance (eksi kasa)!
   let preLoanState: EmpireState = {
     ...state,
     gameMinutes: nextMinutes,
     creditScore: nextCreditScore,
-    brandRecognition: brandUpdate.nextBrand,
+    brandRecognition: Math.min(100, Number((brandUpdate.nextBrand + extraBrandBonus).toFixed(1))),
     cash:
       state.cash +
       autoCollectedAtMidnight +
       dividendPaid +
       passiveRoyaltyGain +
-      dailyRentalIncomeSettled,
+      dailyRentalIncomeSettled +
+      hardcoreCashDelta,
     totalEarnedLifetime:
       state.totalEarnedLifetime +
       Math.max(0, autoCollectedAtMidnight) +
       dividendPaid +
       passiveRoyaltyGain +
-      dailyRentalIncomeSettled,
+      dailyRentalIncomeSettled +
+      Math.max(0, hardcoreSettlement?.megaProjectIncome ?? 0),
     franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
-    businesses: cleanedBusinesses,
+    businesses: finalBusinesses,
     competitiveBlitzes: activeBlitzes,
     pendingTaxes: nextPendingTaxes,
     pendingDayEndReports: nextPendingDayEndReports,
@@ -1593,6 +1716,17 @@ export function tickEconomy(
     dailyOffers: nextDailyOffers,
     dailyOffersDay: nextDailyOffersDay,
     activeEvent,
+    inflationIndex: nextInflationIndex,
+    lastInflationDay: nextLastInflationDay,
+    pendingRaiseRequests: nextPendingRaises,
+    lastRaiseCheckDay: nextLastRaiseDay,
+    activeCrisisEvent: nextActiveCrisis,
+    lastCrisisDay: nextLastCrisisDay,
+    negativeCashStreakDays: nextNegCashStreak,
+    totalLatePenaltiesPaid: nextTotalLatePenalties,
+    foreclosedBranchesCount: nextForeclosedCount,
+    megaProjects: nextMegaProjects,
+    boardContracts: nextBoardContracts,
     lastSavedAt: now,
   };
 
@@ -1686,6 +1820,7 @@ export function tickEconomy(
     },
     ceoActionsLog,
     newTaxBillAmount,
+    hardcoreSettlement,
   };
 }
 

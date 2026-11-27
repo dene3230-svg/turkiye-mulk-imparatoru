@@ -281,6 +281,12 @@ export interface DayEndSummary {
   monthlyClosing: MonthlyClosingSummary | null;
   branchLines: DayEndBranchLine[];
   collected: boolean;
+  // v1.7.1 Progressive corporate tax, HQ bureaucracy overhead & late penalties
+  dailyCorporateTax?: number;
+  corporateTaxBracketPct?: number;
+  dailyHqBureaucracyCost?: number;
+  dailyLatePenalty?: number;
+  megaProjectIncome?: number;
 }
 
 export interface MonthlyClosingSummary {
@@ -341,6 +347,10 @@ export interface OwnedBusiness {
   capacityLevel?: number; // 1..10 Masa/Alan Kapasitesi
   equipmentLevel?: number; // 1..10 Mutfak/Ekipman Altyapısı
   ambianceLevel?: number; // 1..10 Konsept & Müşteri Deneyimi
+  // v1.7.1 Depreciation, inflation price sync & morale penalties
+  priceAdjustmentIndex?: number; // Default 1.0; must track EmpireState.inflationIndex to preserve margin
+  suspendedForMaintenance?: boolean; // True when maintenanceLevel < 25% -> 0 revenue until repaired
+  moralePenaltyUntilDay?: number; // Set when a wage raise request is rejected -> caps branch efficiency to 30%
 }
 
 export type BranchConceptIconId =
@@ -832,6 +842,21 @@ export interface EmpireState {
   claimedMissionIds: string[];
   completedMissionsCount: number;
   activeEvent: MarketEvent | null;
+  // v1.7.1 Hardcore Economy & Endgame Systems
+  inflationIndex?: number; // Starts at 1.0, rises every 20 game days
+  lastInflationDay?: number;
+  lastRaiseCheckDay?: number;
+  pendingRaiseRequests?: WageRaiseRequest[];
+  activeCrisisEvent?: OperationalCrisisEvent | null;
+  lastCrisisDay?: number;
+  negativeCashStreakDays?: number; // 3 consecutive days -> foreclosure on lowest-profit branch
+  totalLatePenaltiesPaid?: number;
+  foreclosedBranchesCount?: number;
+  megaProjects?: MegaProjectState[];
+  boardContracts?: BoardContract[];
+  prestigeMarketTier?: number; // 0 = Base, 1+ = Post-IPO / New Market expansion
+  ipoPrestigeCount?: number;
+  permanentPrestigeBonusPct?: number; // Permanent revenue/brand bonus from IPO prestiges
   lastSavedAt: number;
 }
 
@@ -908,3 +933,103 @@ export interface OtaCheckResult {
   fallbackLocal?: boolean;
   error?: string;
 }
+
+// ── v1.7.1 Realistic Economy & Endgame Replayability Types ───────────────────
+
+export interface ProgressiveTaxResult {
+  bracketPct: number; // 15, 25, 35, 42 (+ prestige modifier)
+  baseBracketPct: number;
+  prestigeTaxSurchargePct: number;
+  taxAmount: number;
+  effectiveRatePct: number;
+  bracketLabel: string;
+}
+
+export interface WageRaiseRequest {
+  id: string;
+  businessId: string;
+  businessName: string;
+  staffId: string;
+  staffName: string;
+  role: StaffRole;
+  currentDailyWage: number;
+  requestedRaisePct: number; // e.g. 15..28
+  proposedDailyWage: number;
+  createdOnDay: number;
+  reason: string;
+}
+
+export type OperationalCrisisType =
+  | 'equipment_failure'
+  | 'tax_health_audit'
+  | 'supplier_hike'
+  | 'nearby_rival_opened';
+
+export interface CrisisChoiceOption {
+  id: string;
+  label: string;
+  description: string;
+  cost: number;
+  effectSummary: string;
+  tone: 'positive' | 'warning' | 'danger';
+}
+
+export interface OperationalCrisisEvent {
+  id: string;
+  type: OperationalCrisisType;
+  title: string;
+  description: string;
+  targetBusinessId?: string;
+  targetBusinessName?: string;
+  createdOnDay: number;
+  choices: CrisisChoiceOption[];
+}
+
+export type MegaProjectId = 'mega_avm' | 'grand_otel' | 'holding_gokdeleni' | 'lojistik_merkezi';
+
+export interface MegaProjectDef {
+  id: MegaProjectId;
+  name: string;
+  categoryLabel: string;
+  description: string;
+  capitalCost: number;
+  buildDays: number; // 15..30 game days
+  dailyNetIncome: number;
+  prestigeBonus: number;
+  brandBonus: number;
+  supplyDiscountBonus: number;
+}
+
+export interface MegaProjectState {
+  projectId: MegaProjectId;
+  name: string;
+  status: 'constructing' | 'completed';
+  startedOnDay: number;
+  totalDays: number;
+  daysRemaining: number;
+  capitalInvested: number;
+  dailyNetIncome: number;
+  completedOnDay?: number;
+}
+
+export type BoardContractKind =
+  | 'maintain_profit_margin'
+  | 'approve_franchises'
+  | 'keep_high_condition'
+  | 'grow_daily_revenue';
+
+export interface BoardContract {
+  id: string;
+  kind: BoardContractKind;
+  title: string;
+  description: string;
+  targetValue: number;
+  currentProgress: number;
+  startDay: number;
+  deadlineDay: number;
+  rewardCash: number;
+  rewardBrand: number;
+  rewardXp: number;
+  status: 'active' | 'completed' | 'claimed' | 'failed';
+}
+

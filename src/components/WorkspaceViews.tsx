@@ -609,6 +609,9 @@ interface BusinessesWorkspaceProps {
   onUpgradeBranchFacility: (businessId: string, trackId: BranchUpgradeTrackId) => boolean;
   onLaunchHoldingBulkAds: () => boolean;
   onDistributeHoldingBonus: () => boolean;
+  onPerformBranchMaintenance?: (businessId: string) => void;
+  onRenewBranchEquipment?: (businessId: string) => void;
+  onSyncBranchPrices?: (businessId: string) => void;
 }
 
 function StatusDotsRow({
@@ -652,6 +655,9 @@ export function BusinessesWorkspace({
   onUpgradeBranchFacility,
   onLaunchHoldingBulkAds,
   onDistributeHoldingBonus,
+  onPerformBranchMaintenance,
+  onRenewBranchEquipment,
+  onSyncBranchPrices,
 }: BusinessesWorkspaceProps) {
   const [flowStep, setFlowStep] = useState<'overview' | 'select' | 'manage' | 'reports'>('overview');
   const [selectorViewMode, setSelectorViewMode] = useState<'card' | 'list'>('card');
@@ -1092,6 +1098,9 @@ export function BusinessesWorkspace({
           onCustomizeBranch={onCustomizeBranch}
           onLaunchMarketing={onLaunchBranchMarketing}
           onUpgradeFacility={onUpgradeBranchFacility}
+          onPerformMaintenance={onPerformBranchMaintenance}
+          onRenewEquipment={onRenewBranchEquipment}
+          onSyncPrices={onSyncBranchPrices}
         />
       )}
 
