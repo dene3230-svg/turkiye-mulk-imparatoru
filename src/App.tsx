@@ -24,7 +24,6 @@ import type {
   BusinessTypeId,
   ChainCloneDraft,
   ChatMessage,
-  DaySimAutoStopAlert,
   EmpireState,
   FranchiseBrand,
   GameSettings,
@@ -170,6 +169,7 @@ import {
   applyRealtimeBusinessDelete,
   applyRealtimeBusinessPatch,
   applyRealtimeBusinessUpsert,
+  deletePlayerBusinessesFromRoom,
   formatOwnerDisplayName,
   generateSeedCityRivals,
   isRealPlayerBusiness,
@@ -219,22 +219,11 @@ import { BorsaModal } from './components/BorsaModal';
 import { BankingModal } from './components/BankingModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { PatronChatPanel } from './components/PatronChatPanel';
-import { GameHubMenuModal } from './components/GameHubMenuModal';
 import { AccountingModal } from './components/AccountingModal';
 import { GameTutorialOverlay } from './components/GameTutorialOverlay';
-import {
-  BottomSheetLauncher,
-  type BottomSheetActionId,
-  type BottomSheetGroup,
-} from './components/BottomSheetLauncher';
 import { DayEndReportModal } from './components/DayEndReportModal';
-import { DaySimAutoStopModal } from './components/DaySimAutoStopModal';
 import { OfficeModal, type OfficeModalTabId } from './components/OfficeModal';
 import { ExecutiveDashboard, type QuickActionId } from './components/ExecutiveDashboard';
-import {
-  DashboardDetailModal,
-  type DashboardDetailTarget,
-} from './components/DashboardDetailModal';
 import {
   BusinessesWorkspace,
   FinansWorkspace,
@@ -257,11 +246,7 @@ import {
   signLeaseContract,
   terminateLeaseContract,
 } from './game/quickActionsEngine';
-import {
-  computeExecutiveDashboardMetrics,
-  type AccountCardId,
-  type OperationCardId,
-} from './game/dashboardMetrics';
+import { computeExecutiveDashboardMetrics } from './game/dashboardMetrics';
 import {
   CrisisDecisionModal,
   RaiseRequestsModal,
@@ -654,10 +639,7 @@ export default function App() {
   const [bankingInitialTab, setBankingInitialTab] = useState<'loans' | 'own-bank'>('loans');
   const [accountingModalOpen, setAccountingModalOpen] = useState(false);
   const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
-  const [hubMenuOpen, setHubMenuOpen] = useState(false);
-  const [bottomSheetGroup, setBottomSheetGroup] = useState<BottomSheetGroup | null>(null);
   const [dayEndModalOpen, setDayEndModalOpen] = useState(false);
-  const [daySimAutoStopAlert, setDaySimAutoStopAlert] = useState<DaySimAutoStopAlert | null>(null);
   const [officeModalOpen, setOfficeModalOpen] = useState(false);
   const [officeModalTab, setOfficeModalTab] = useState<OfficeModalTabId>('design');
   const [patronChatOpen, setPatronChatOpen] = useState(false);
@@ -673,8 +655,6 @@ export default function App() {
   const [strategicHubOpen, setStrategicHubOpen] = useState(false);
 
   const [activeNav, setActiveNav] = useState<ExecutiveNavId>('overview');
-  const [selectedAccountId, setSelectedAccountId] = useState<AccountCardId>('cash');
-  const [dashboardDetail, setDashboardDetail] = useState<DashboardDetailTarget | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [pinDropMode, setPinDropMode] = useState<boolean>(true);
   const [flyTarget, setFlyTarget] = useState<{
@@ -686,9 +666,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v150',
-      title: 'Türkiye Mülk İmparatoru v1.5.0',
-      body: 'Modern 3 sütunlu yatay yönetici kontrol paneli ve yeni minimalist arayüz tasarımı eklendi.',
+      id: 'welcome-v172',
+      title: 'Mülk İmparatorluğu v1.7.2',
+      body: 'Kademeli vergi sistemi, gerçekçi kiralık mülk getirileri, Genel Müdür bakım dengesi ve tam mat koyu arayüz aktif.',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -1101,12 +1081,6 @@ export default function App() {
               true
             );
           }
-        }
-
-        if (gameSpeed === 'day' && result.daySimAutoStop) {
-          setGameSpeed(1);
-          setDaySimAutoStopAlert(result.daySimAutoStop);
-          soundEngine.playNotification();
         }
 
         if (result.hardcoreSettlement) {
@@ -1584,8 +1558,6 @@ export default function App() {
   const closeAllInGameOverlays = useCallback(() => {
     setSettingsOpen(false);
     setNotifOpen(false);
-    setHubMenuOpen(false);
-    setBottomSheetGroup(null);
     setActiveDrawer(null);
     setDroppedPin(null);
     setSelectedBusinessId(null);
@@ -1598,6 +1570,7 @@ export default function App() {
     setBankingModalOpen(false);
     setAccountingModalOpen(false);
     setLeaderboardModalOpen(false);
+    setDayEndModalOpen(false);
     setOfficeModalOpen(false);
     setPatronChatOpen(false);
     setCityPickerOpen(false);
@@ -1607,6 +1580,10 @@ export default function App() {
     setStoreModalOpen(false);
     setOverviewReportsOpen(false);
     setOverviewManagedBranchId(null);
+    setCrisisModalOpen(false);
+    setRaiseModalOpen(false);
+    setStrategicHubOpen(false);
+    setOtaModalOpen(false);
   }, []);
 
   const handleReturnToMainMenu = useCallback(() => {
@@ -1721,9 +1698,7 @@ export default function App() {
       setBorsaModalOpen(false);
       setBankingModalOpen(false);
       setAccountingModalOpen(false);
-      setHubMenuOpen(false);
       setOfficeModalOpen(false);
-      setBottomSheetGroup(null);
       setActiveDrawer(tab === 'portfolio' ? 'portfolio' : null);
       setHrModalOpen(tab === 'hr');
       setHoldingModalOpen(tab === 'franchise');
@@ -1733,91 +1708,6 @@ export default function App() {
       }
     },
     [hrTargetBusinessId, empire.businesses]
-  );
-
-  const handleBottomSheetSelect = useCallback(
-    (actionId: BottomSheetActionId) => {
-      soundEngine.playClick();
-      setBottomSheetGroup(null);
-      setDroppedPin(null);
-      setSelectedBusinessId(null);
-      setSelectedCompetitorId(null);
-      setActiveDrawer(null);
-      setHrModalOpen(false);
-      setHoldingModalOpen(false);
-      setRivalsModalOpen(false);
-      setBorsaModalOpen(false);
-      setBankingModalOpen(false);
-      setAccountingModalOpen(false);
-      setHubMenuOpen(false);
-      setOfficeModalOpen(false);
-      setLeaderboardModalOpen(false);
-
-      switch (actionId) {
-        case 'mgmt_businesses':
-          handleSelectManagementTab('portfolio');
-          break;
-        case 'mgmt_hr':
-          setHrInitialSubView('branches');
-          handleSelectManagementTab('hr');
-          break;
-        case 'mgmt_hq':
-          setHrInitialSubView('hq');
-          handleSelectManagementTab('hr');
-          break;
-        case 'mgmt_rivals':
-          handleSelectManagementTab('rivals');
-          break;
-        case 'mgmt_franchise':
-          handleSelectManagementTab('franchise');
-          break;
-        case 'fin_accounting':
-          setAccountingModalOpen(true);
-          break;
-        case 'fin_banking':
-          setBankingModalOpen(true);
-          break;
-        case 'fin_stocks':
-          setBorsaMode('market');
-          setBorsaModalOpen(true);
-          break;
-        case 'fin_portfolio':
-          setBorsaMode('portfolio');
-          setBorsaModalOpen(true);
-          break;
-        case 'office_design':
-          setOfficeModalTab('design');
-          setOfficeModalOpen(true);
-          break;
-        case 'office_phone':
-          setOfficeModalTab('phone');
-          setOfficeModalOpen(true);
-          break;
-        case 'office_assets':
-          setOfficeModalTab('assets');
-          setOfficeModalOpen(true);
-          break;
-        case 'office_dayend':
-          setDayEndModalOpen(true);
-          break;
-        case 'office_missions':
-          setActiveDrawer('missions');
-          break;
-        case 'office_news':
-          setActiveDrawer('market');
-          break;
-        case 'office_leaderboard':
-          setLeaderboardModalOpen(true);
-          break;
-        case 'office_guide':
-          setTutorialOpen(true);
-          break;
-        case 'office_settings':
-          setSettingsOpen(true);
-          break;
-      }
-    },
-    [handleSelectManagementTab]
   );
 
   const handleStartCloneBusiness = useCallback(
@@ -1836,7 +1726,6 @@ export default function App() {
       setSelectedCompetitorId(null);
       setDroppedPin(null);
       setPinDropMode(true);
-      setDashboardDetail(null);
       setActiveNav('map');
       pushNotification(
         'Zincir Şube Yerleştirme Modu',
@@ -1953,7 +1842,6 @@ export default function App() {
       setSelectedCompetitorId(null);
       setDroppedPin(null);
       setActiveDrawer(null);
-      setDashboardDetail(null);
       setActiveNav('map');
       soundEngine.playClick();
       if (target) {
@@ -1971,7 +1859,6 @@ export default function App() {
     setSelectedBusinessId(null);
     setDroppedPin(null);
     setActiveDrawer(null);
-    setDashboardDetail(null);
     setActiveNav('map');
     soundEngine.playClick();
     setFlyTarget({ lat: record.lat, lng: record.lng, zoom: 15, nonce: Date.now() });
@@ -3316,23 +3203,27 @@ export default function App() {
   };
 
   const handleResetGame = () => {
+    const previousOwnIds = empireRef.current.businesses.map((b) => b.id);
+    const prevIdSet = new Set(previousOwnIds);
+    const ownerId = user?.id ?? '';
+
     const fresh = createInitialEmpireState(Date.now(), startingCityPlate);
+    closeAllInGameOverlays();
     setEmpire(fresh);
     setGameSpeed(1);
-    setDroppedPin(null);
-    setSelectedBusinessId(null);
-    setSelectedCompetitorId(null);
-    setInteriorBusinessId(null);
-    setActiveDrawer(null);
-    setHrModalOpen(false);
-    setHoldingModalOpen(false);
-    setRivalsModalOpen(false);
-    setOfficeModalOpen(false);
+    setActiveNav('overview');
+    setHrTargetBusinessId(null);
     setChainCloneDraft(null);
     setPreselectedFranchise(null);
+    setRoomRecords((prev) =>
+      prev.filter((r) => (ownerId ? r.owner_id !== ownerId : true) && !prevIdSet.has(r.id))
+    );
     focusHeadquarters(fresh);
     if (user) {
       saveEmpireStateLocal(user.id, fresh);
+      void deletePlayerBusinessesFromRoom(user.id, previousOwnIds);
+    } else if (previousOwnIds.length > 0) {
+      void deletePlayerBusinessesFromRoom('', previousOwnIds);
     }
     pushNotification(
       'İmparatorluk Sıfırlandı',
@@ -3353,34 +3244,16 @@ export default function App() {
   );
 
   const dashboardMetrics = useMemo(
-    () => computeExecutiveDashboardMetrics(empire, stockQuotes, now),
-    [empire, stockQuotes, now]
+    () => computeExecutiveDashboardMetrics(empire, stockQuotes, now, competitorBusinesses),
+    [empire, stockQuotes, now, competitorBusinesses]
   );
 
   const handleSelectExecutiveNav = useCallback(
     (nav: ExecutiveNavId) => {
       soundEngine.playClick();
       closeAllInGameOverlays();
-      setDashboardDetail(null);
       setActiveNav(nav);
       if (nav === 'map') {
-        setPinDropMode(true);
-      }
-    },
-    [closeAllInGameOverlays]
-  );
-
-  const handleManageOperation = useCallback(
-    (opId: OperationCardId) => {
-      soundEngine.playClick();
-      closeAllInGameOverlays();
-      setDashboardDetail(null);
-      if (opId === 'businesses') {
-        setActiveNav('businesses');
-      } else if (opId === 'office') {
-        setActiveNav('office');
-      } else {
-        setActiveNav('map');
         setPinDropMode(true);
       }
     },
@@ -3739,6 +3612,7 @@ export default function App() {
                 <ExecutiveDashboard
                   state={empire}
                   metrics={dashboardMetrics}
+                  competitorBusinesses={competitorBusinesses}
                   now={now}
                   franchiseOfferCount={allFranchises.length}
                   onQuickAction={handleOverviewQuickAction}
@@ -4004,6 +3878,7 @@ export default function App() {
               {activeNav === 'businesses' && (
                 <BusinessesWorkspace
                   state={empire}
+                  stockQuotes={stockQuotes}
                   competitorBusinesses={competitorBusinesses}
                   now={now}
                   onGoMapNewBranch={() => {
@@ -4084,32 +3959,6 @@ export default function App() {
                 onOpenChange={setPatronChatOpen}
                 hideFloatingButton={true}
                 onSendMessage={handleSendChat}
-              />
-
-              {/* Slide-Over Detail Modal for Dashboard DETAY & Account Cards */}
-              <DashboardDetailModal
-                target={dashboardDetail}
-                state={empire}
-                quotes={stockQuotes}
-                metrics={dashboardMetrics}
-                now={now}
-                onClose={() => setDashboardDetail(null)}
-                onNavigateManage={(section) => handleSelectExecutiveNav(section)}
-                onOpenBanking={() => {
-                  closeAllInGameOverlays();
-                  setBankingModalOpen(true);
-                }}
-                onOpenAccounting={() => {
-                  closeAllInGameOverlays();
-                  setAccountingModalOpen(true);
-                }}
-                onOpenBorsa={() => {
-                  closeAllInGameOverlays();
-                  setBorsaMode('market');
-                  setBorsaModalOpen(true);
-                }}
-                onOpenFranchise={() => handleSelectManagementTab('franchise')}
-                onFocusBusinessOnMap={handleSelectOwnBusiness}
               />
 
               {/* Unified Modal Drawer for Piyasa Haberleri & Görevler */}
@@ -4332,38 +4181,6 @@ export default function App() {
         onClose={() => setAccountingModalOpen(false)}
       />
 
-      <BottomSheetLauncher
-        group={bottomSheetGroup}
-        onClose={() => setBottomSheetGroup(null)}
-        onSelect={handleBottomSheetSelect}
-        stats={{
-          branchCount: empire.businesses.length,
-          underConstructionCount: empire.businesses.filter((b) => isBusinessUnderConstruction(b))
-            .length,
-          staffCount:
-            empire.businesses.reduce((s, b) => s + (b.employees?.length ?? 0), 0) +
-            (empire.cityManagers?.length ?? 0),
-          rivalCount: competitorBusinesses.length,
-          franchiseCount: allFranchises.length,
-          hasCeoOrAccountant: Boolean(empire.accountant || empire.ceo),
-          activeLoansCount: (empire.activeLoans ?? []).filter(
-            (l) => l.status === 'active' || l.status === 'garnishing'
-          ).length,
-          unpaidTaxesCount: (empire.pendingTaxes ?? []).filter((t) => t.status !== 'paid').length,
-          portfolioHoldingsCount: (empire.stockPortfolio ?? []).filter((h) => h.shares > 0).length,
-          pendingDayEndCount: (empire.pendingDayEndReports ?? []).length,
-          pendingDayEndNet: (empire.pendingDayEndReports ?? []).reduce(
-            (s, r) => s + r.manualCollectibleNet,
-            0
-          ),
-          claimableMissionsCount: claimableMissionCount,
-          officePrestige: officeBenefits.officePrestige,
-          officeTierName: officeBenefits.tier.name,
-          brandRecognition: Math.round(empire.brandRecognition ?? 5),
-          personalAssetsCount: (empire.personalAssetIds ?? []).length,
-        }}
-      />
-
       <OfficeModal
         open={officeModalOpen}
         initialTab={officeModalTab}
@@ -4397,40 +4214,6 @@ export default function App() {
         historyReports={empire.dayEndHistory ?? []}
         onCollectAll={handleCollectDayEndAll}
         onCollectSingle={handleCollectDayEndSingle}
-      />
-
-      <DaySimAutoStopModal
-        alert={daySimAutoStopAlert}
-        onClose={() => setDaySimAutoStopAlert(null)}
-        onPrimaryAction={(alert) => {
-          setDaySimAutoStopAlert(null);
-          if (alert.reason === 'construction_completed') {
-            if (alert.businessId) {
-              handleSelectOwnBusiness(alert.businessId);
-            } else {
-              handleSelectManagementTab('portfolio');
-            }
-          } else if (alert.reason === 'payment_due') {
-            setAccountingModalOpen(true);
-          } else {
-            setAccountingModalOpen(true);
-          }
-        }}
-      />
-
-      <GameHubMenuModal
-        open={hubMenuOpen}
-        companyLevel={companyTier.level}
-        companyTitle={companyTier.title}
-        netWorth={netWorth}
-        activeCityLabel={`${activeProvince.code} ${activeProvince.name}`}
-        onOpenLeaderboard={() => setLeaderboardModalOpen(true)}
-        onOpenHolding={() => setHoldingModalOpen(true)}
-        onOpenPatronChat={() => setPatronChatOpen(true)}
-        onOpenGuide={handleReplayTutorial}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onGoMainMenu={handleReturnToMainMenu}
-        onClose={() => setHubMenuOpen(false)}
       />
 
       <AdsPromotionModal
@@ -4467,6 +4250,8 @@ export default function App() {
       {overviewReportsOpen && (
         <HoldingReportsModal
           state={empire}
+          quotes={stockQuotes}
+          competitorBusinesses={competitorBusinesses}
           now={now}
           onClose={() => setOverviewReportsOpen(false)}
           onNavigateToBranch={(id) => {

@@ -386,10 +386,14 @@ test('5-tier HR candidate pool & automation (Çalışan -> Müdür Yrd -> Şube 
   assert.equal(autoGm.managerRole, 'genel_mudur');
   assert.equal(autoGm.efficiencyBonus, 0.2);
 
-  // Automated branch keeps 100% stock & maintenance after ticking
+  // Automated branch keeps 100% stock; v1.7.2 GM reduces wear by 35% (no free 100% hold)
   const autoTick = tickEconomy(hiredGm.state, 60, now + 60_000);
   assert.equal(autoTick.state.businesses[0].stockLevel, 100);
-  assert.equal(autoTick.state.businesses[0].maintenanceLevel, 100);
+  assert.ok(
+    (autoTick.state.businesses[0].maintenanceLevel ?? 100) < 100 &&
+      (autoTick.state.businesses[0].maintenanceLevel ?? 0) >= 94,
+    'GM must slow condition wear (-35%) rather than holding 100% for free'
+  );
 });
 
 test('Parking 250m (+15% cap), Factory (%35 supply), Supermarket Chain (3+), and Franchise (+35%) synergies work', () => {
@@ -654,8 +658,8 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.7.1');
-  assert.equal(compareSemver('1.7.0', '1.7.1'), 1);
+  assert.equal(APP_VERSION, '1.7.2');
+  assert.equal(compareSemver('1.7.1', '1.7.2'), 1);
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -2821,8 +2825,8 @@ test('v1.6.0 Quick Actions Modules (Holding Promos, Rental Leases, Daily Offers,
   const dayTick = tickEconomy(state, 30, now + 30_020);
   assert.equal(dayTick.daysPassed, 1);
   assert.ok(
-    dayTick.state.cash >= cashBeforeDay + dailyRent,
-    '30-second day turnover must credit passive daily rental income'
+    dayTick.state.cash > cashBeforeDay,
+    '30-second day turnover must credit net passive daily rental income (after aidat & progressive tax)'
   );
   state = dayTick.state;
 

@@ -55,13 +55,7 @@ export function CompetitorInspector({
       }`}
     >
       {/* Fixed Header */}
-      <div
-        className={`flex shrink-0 items-start justify-between gap-2 border-b px-3.5 py-2.5 ${
-          isRealPlayer
-            ? 'border-[#334155] bg-gradient-to-r from-rose-950/60 via-slate-900/95 to-cyan-950/60'
-            : 'border-[#334155] bg-[#222B38]'
-        }`}
-      >
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[#334155] bg-[#222B38] px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <BrandLogo brandKey={holdingName || competitor.owner_name} size={42} />
           <div className="min-w-0">

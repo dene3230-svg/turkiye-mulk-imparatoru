@@ -14,20 +14,75 @@ import { SEED_FRANCHISE_BRANDS } from '../game/holdingEngine';
 import { DEFAULT_SYSTEM_BANKS } from '../game/bankingEngine';
 import { SEED_PLAYER_IPOS } from '../game/stockMarket';
 
+// Session-level circuit breaker for missing/schema-mismatched optional tables (404 / PGRST205 / 400)
+const UNAVAILABLE_CACHE_KEY = 'tmi_unavailable_supabase_tables_v172';
+const unavailableTables = new Set<string>();
+
+try {
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    const raw = window.sessionStorage.getItem(UNAVAILABLE_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        for (const t of parsed) if (typeof t === 'string') unavailableTables.add(t);
+      }
+    }
+  }
+} catch {
+  // ignore storage access issues
+}
+
+function markTableUnavailable(table: string): void {
+  unavailableTables.add(table);
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(UNAVAILABLE_CACHE_KEY, JSON.stringify(Array.from(unavailableTables)));
+    }
+  } catch {
+    // ignore storage access issues
+  }
+}
+
+function isTableUnavailableOrSchemaError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const obj = error as { code?: string; status?: number; message?: string };
+  const code = String(obj.code ?? '');
+  const msg = String(obj.message ?? '').toLowerCase();
+  if (
+    obj.status === 404 ||
+    obj.status === 400 ||
+    code === 'PGRST205' ||
+    code === 'PGRST204' ||
+    code === '42P01' ||
+    code === '42703' ||
+    code === '42501'
+  ) {
+    return true;
+  }
+  return (
+    msg.includes('could not find') ||
+    msg.includes('does not exist') ||
+    msg.includes('schema cache')
+  );
+}
+
 // --- FRANCHISES (public.franchises) ---
 export async function fetchAllFranchises(): Promise<FranchiseBrand[]> {
+  if (unavailableTables.has('franchises')) {
+    return SEED_FRANCHISE_BRANDS;
+  }
   return withSafeTimeout(
     async () => {
       try {
         const { data, error } = await supabase
           .from('franchises')
-          .select(
-            'id, owner_id, owner_name, brand_name, business_type, license_fee, royalty_rate, branch_count, total_royalty_earned, created_at'
-          )
-          .order('branch_count', { ascending: false })
+          .select('*')
           .limit(100);
 
         if (error || !data) {
+          if (isTableUnavailableOrSchemaError(error)) {
+            markTableUnavailable('franchises');
+          }
           return SEED_FRANCHISE_BRANDS;
         }
 
@@ -47,10 +102,10 @@ export async function fetchAllFranchises(): Promise<FranchiseBrand[]> {
           };
         });
 
+        remote.sort((a, b) => b.branchCount - a.branchCount);
         const ids = new Set(remote.map((r) => r.id));
         return [...remote, ...SEED_FRANCHISE_BRANDS.filter((s) => !ids.has(s.id))];
-      } catch (err) {
-        console.warn('[corporateSync] Franchises okunamadı, yerel veriler kullanılıyor:', err);
+      } catch {
         return SEED_FRANCHISE_BRANDS;
       }
     },
@@ -61,6 +116,7 @@ export async function fetchAllFranchises(): Promise<FranchiseBrand[]> {
 }
 
 export async function publishFranchiseBrand(brand: FranchiseBrand): Promise<boolean> {
+  if (unavailableTables.has('franchises')) return false;
   try {
     const { error } = await supabase.from('franchises').upsert(
       {
@@ -76,6 +132,9 @@ export async function publishFranchiseBrand(brand: FranchiseBrand): Promise<bool
       },
       { onConflict: 'id' }
     );
+    if (error && isTableUnavailableOrSchemaError(error)) {
+      markTableUnavailable('franchises');
+    }
     return !error;
   } catch {
     return false;
@@ -87,33 +146,40 @@ export async function incrementFranchiseUsage(
   nextBranchCount: number,
   nextRoyaltyTotal: number
 ): Promise<void> {
+  if (unavailableTables.has('franchises')) return;
   try {
-    await supabase
+    const { error } = await supabase
       .from('franchises')
       .update({
         branch_count: nextBranchCount,
         total_royalty_earned: nextRoyaltyTotal,
       })
       .eq('id', franchiseId);
+    if (error && isTableUnavailableOrSchemaError(error)) {
+      markTableUnavailable('franchises');
+    }
   } catch {
-    // non-fatal offline fallback
+    // silent offline fallback
   }
 }
 
 // --- BANKS (public.banks) ---
 export async function fetchAllBanks(): Promise<BankRecord[]> {
+  if (unavailableTables.has('banks')) {
+    return DEFAULT_SYSTEM_BANKS;
+  }
   return withSafeTimeout(
     async () => {
       try {
         const { data, error } = await supabase
           .from('banks')
-          .select(
-            'id, owner_id, owner_name, bank_name, brand_color, emblem, hq_city_plate, hq_city_name, hq_lat, hq_lng, pool_capital, base_interest_rate, min_credit_score, total_loans_issued, total_interest_earned, seized_assets_count, created_at'
-          )
-          .order('pool_capital', { ascending: false })
+          .select('*')
           .limit(100);
 
         if (error || !data) {
+          if (isTableUnavailableOrSchemaError(error)) {
+            markTableUnavailable('banks');
+          }
           return DEFAULT_SYSTEM_BANKS;
         }
 
@@ -137,10 +203,10 @@ export async function fetchAllBanks(): Promise<BankRecord[]> {
           createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
         }));
 
+        remote.sort((a, b) => b.poolCapital - a.poolCapital);
         const ids = new Set(remote.map((r) => r.id));
         return [...remote, ...DEFAULT_SYSTEM_BANKS.filter((s) => !ids.has(s.id))];
-      } catch (err) {
-        console.warn('[corporateSync] Bankalar okunamadı, yerel veriler kullanılıyor:', err);
+      } catch {
         return DEFAULT_SYSTEM_BANKS;
       }
     },
@@ -151,6 +217,7 @@ export async function fetchAllBanks(): Promise<BankRecord[]> {
 }
 
 export async function publishBankRecord(bank: BankRecord): Promise<boolean> {
+  if (unavailableTables.has('banks')) return false;
   try {
     const { error } = await supabase.from('banks').upsert(
       {
@@ -173,6 +240,9 @@ export async function publishBankRecord(bank: BankRecord): Promise<boolean> {
       },
       { onConflict: 'id' }
     );
+    if (error && isTableUnavailableOrSchemaError(error)) {
+      markTableUnavailable('banks');
+    }
     return !error;
   } catch {
     return false;
@@ -181,6 +251,7 @@ export async function publishBankRecord(bank: BankRecord): Promise<boolean> {
 
 // --- LOANS (public.loans) ---
 export async function publishLoanRecord(loan: LoanRecord): Promise<boolean> {
+  if (unavailableTables.has('loans')) return false;
   try {
     const { error } = await supabase.from('loans').upsert(
       {
@@ -203,6 +274,9 @@ export async function publishLoanRecord(loan: LoanRecord): Promise<boolean> {
       },
       { onConflict: 'id' }
     );
+    if (error && isTableUnavailableOrSchemaError(error)) {
+      markTableUnavailable('loans');
+    }
     return !error;
   } catch {
     return false;
@@ -211,18 +285,21 @@ export async function publishLoanRecord(loan: LoanRecord): Promise<boolean> {
 
 // --- PLAYER IPO LISTINGS (public.ipo_listings) ---
 export async function fetchPlayerIpoListings(): Promise<StockQuote[]> {
+  if (unavailableTables.has('ipo_listings')) {
+    return SEED_PLAYER_IPOS;
+  }
   return withSafeTimeout(
     async () => {
       try {
         const { data, error } = await supabase
           .from('ipo_listings')
-          .select(
-            'ticker, owner_id, owner_name, holding_name, price, open_price, market_cap, business_count, factory_count'
-          )
-          .order('market_cap', { ascending: false })
+          .select('*')
           .limit(50);
 
         if (error || !data) {
+          if (isTableUnavailableOrSchemaError(error)) {
+            markTableUnavailable('ipo_listings');
+          }
           return SEED_PLAYER_IPOS;
         }
 
@@ -246,10 +323,10 @@ export async function fetchPlayerIpoListings(): Promise<StockQuote[]> {
           };
         });
 
+        remote.sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0));
         const tickers = new Set(remote.map((r) => r.ticker));
         return [...remote, ...SEED_PLAYER_IPOS.filter((s) => !tickers.has(s.ticker))];
-      } catch (err) {
-        console.warn('[corporateSync] IPO listesi okunamadı, yerel veriler kullanılıyor:', err);
+      } catch {
         return SEED_PLAYER_IPOS;
       }
     },
@@ -260,6 +337,7 @@ export async function fetchPlayerIpoListings(): Promise<StockQuote[]> {
 }
 
 export async function publishPlayerIpoListing(quote: StockQuote): Promise<boolean> {
+  if (unavailableTables.has('ipo_listings')) return false;
   try {
     const { error } = await supabase.from('ipo_listings').upsert(
       {
@@ -275,6 +353,9 @@ export async function publishPlayerIpoListing(quote: StockQuote): Promise<boolea
       },
       { onConflict: 'ticker' }
     );
+    if (error && isTableUnavailableOrSchemaError(error)) {
+      unavailableTables.add('ipo_listings');
+    }
     return !error;
   } catch {
     return false;
@@ -315,14 +396,19 @@ export function subscribePatronChat(
             payload: msg,
           });
         }
-        await supabase.from('patron_chat').insert({
-          id: msg.id,
-          channel: msg.channel,
-          sender_id: msg.senderId,
-          sender_name: msg.senderName,
-          sender_badge: msg.senderBadge,
-          message: msg.text,
-        });
+        if (!unavailableTables.has('patron_chat')) {
+          const { error } = await supabase.from('patron_chat').insert({
+            id: msg.id,
+            channel: msg.channel,
+            sender_id: msg.senderId,
+            sender_name: msg.senderName,
+            sender_badge: msg.senderBadge,
+            message: msg.text,
+          });
+          if (error && isTableUnavailableOrSchemaError(error)) {
+            unavailableTables.add('patron_chat');
+          }
+        }
       } catch {
         // local echo already shown
       }

@@ -879,11 +879,14 @@ export interface RentalProperty {
   kind: RentalPropertyKind;
   purchasePrice: number;
   baseMonthlyRent: number;
+  dailyMaintenanceCost?: number;
   owned: boolean;
   leasedTenantName?: string;
   leasedSectorLabel?: string;
+  leasedReliabilityPct?: number;
   activeMonthlyRent?: number;
   leaseRemainingDays?: number;
+  vacancyDaysRemaining?: number;
   tenantOffers: TenantOffer[];
 }
 

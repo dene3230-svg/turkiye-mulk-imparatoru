@@ -19,7 +19,9 @@ import {
   generateRaiseRequestsForDay,
   getBranchManagementEfficiencyCap,
   getConditionPerformanceMultiplier,
+  getMaintenanceRepairCost,
   getPrestigeIpoStatus,
+  hasCityGeneralManager,
   maybeGenerateOperationalCrisis,
   performBranchMaintenance,
   processHardcoreDailySettlement,
@@ -30,8 +32,18 @@ import {
   upgradeBranchEquipment,
 } from './hardcoreEconomyEngine';
 import { computeExecutiveDashboardMetrics } from './dashboardMetrics';
+import { computeHoldingReportsSnapshot } from './holdingReportsEngine';
+import {
+  RENTAL_PROPERTY_CATALOG,
+  buyRentalProperty,
+  calculateDailyRentalMaintenanceCost,
+  getRentalNetMonthlyYieldPct,
+  processDailyRentalPortfolio,
+  signLeaseContract,
+  terminateLeaseContract,
+} from './quickActionsEngine';
 import { resolvePinLocation } from './provinces81';
-import type { EmpireState, HiredStaff, PinLocationInfo } from '../types/game';
+import type { EmpireState, HiredStaff, PinLocationInfo, RemoteBusinessRecord } from '../types/game';
 
 function landPin(lat: number, lng: number, cityPlate: number): PinLocationInfo {
   const base = resolvePinLocation(lat, lng, cityPlate);
@@ -365,4 +377,210 @@ test('6. Endgame Mega Projects (15-30d), Board Contracts & IPO / New Market Pres
   assert.equal(ticked.daysPassed, 1);
   assert.ok((ticked.state.businesses[0].maintenanceLevel ?? 100) < 100);
   assert.ok((ticked.state.boardContracts ?? []).length === 3);
+});
+
+test('7. v1.7.2 No double taxation on Day-30 rollover (only daily progressive tax)', () => {
+  const now = 1_100_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 20_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+  const built = purchaseBusiness(state, 'restoran', landPin(41.04, 29.01, 34), 'Tek Vergi Restoran', owner, [], now);
+  assert.equal(built.ok, true);
+  state = {
+    ...openBranches(built.state),
+    gameMinutes: 30 * 1440 - 10, // Day 30 23:50 -> next 2s crosses Day 31 (month 2)
+    pendingTaxes: [],
+  };
+
+  const day30Tick = tickEconomy(state, 2, now + 2000);
+  assert.equal(day30Tick.daysPassed, 1);
+  assert.equal(day30Tick.newTaxBillAmount, 0, 'Legacy 30-day bulk tax must never be generated');
+  assert.equal((day30Tick.state.pendingTaxes ?? []).length, 0);
+});
+
+test('8. v1.7.2 Exact parity between ExecutiveDashboard metrics and HoldingReportsModal (24h)', () => {
+  const now = 1_200_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 100_000_000;
+  const owner = { id: 'p1', name: 'Holding' };
+  const coords = [
+    landPin(41.01, 29.01, 34),
+    landPin(41.03, 29.03, 34),
+    landPin(41.05, 29.05, 34),
+    landPin(41.07, 29.07, 34),
+    landPin(41.09, 29.09, 34),
+  ];
+  for (let i = 0; i < coords.length; i += 1) {
+    const res = purchaseBusiness(state, 'kafe', coords[i], `Eşitlik Kafe ${i + 1}`, owner, [], now + i);
+    assert.equal(res.ok, true);
+    state = res.state;
+  }
+  state = openBranches(state);
+
+  const rivals: RemoteBusinessRecord[] = [
+    {
+      id: 'rival-parity-1',
+      owner_id: 'other-1',
+      owner_name: 'Rakip A',
+      city_plate: 34,
+      city_name: 'İstanbul',
+      district: 'Beşiktaş',
+      business_name: 'Rakip Kafe',
+      business_type: 'kafe',
+      lat: 41.02,
+      lng: 29.02,
+      level: 2,
+      hourly_income: 8000,
+      valuation: 400_000,
+      created_at: new Date(now).toISOString(),
+    },
+  ];
+
+  const dash = computeExecutiveDashboardMetrics(state, [], now, rivals);
+  const report = computeHoldingReportsSnapshot(state, '24h', now, [], rivals);
+
+  assert.equal(report.totalRevenue, dash.dailyEstimatedRevenue);
+  assert.equal(report.totalExpense, dash.dailyOperatingExpenses);
+  assert.equal(report.netProfit, dash.dailyEstimatedRevenue - dash.dailyOperatingExpenses);
+  assert.equal(report.dailyHqBureaucracyCost, dash.dailyHqBureaucracyCost);
+  assert.equal(report.progressiveTaxBracketPct, dash.progressiveTaxBracketPct);
+  assert.ok(report.dailyHqBureaucracyCost > 0, '5 branches must incur HQ bureaucracy cost in both views');
+});
+
+test('9. v1.7.2 Realistic rental yields (2.5%-4.2%/mo), daily maintenance, 1.2% turnover & vacancy cooldown', () => {
+  for (const prop of RENTAL_PROPERTY_CATALOG) {
+    const netMonthlyPct = getRentalNetMonthlyYieldPct(prop);
+    assert.ok(
+      netMonthlyPct >= 2.5 && netMonthlyPct <= 4.2,
+      `Expected net monthly yield 2.5%..4.2% for ${prop.catalogId}, got ${netMonthlyPct.toFixed(2)}%`
+    );
+    assert.ok((prop.dailyMaintenanceCost ?? 0) > 0, `Property ${prop.catalogId} must have daily maintenance cost`);
+  }
+
+  let state = createInitialEmpireState(1_300_000, 34);
+  state.cash = 10_000_000;
+  const bought = buyRentalProperty(state, 'rent-kadikoy-shop', undefined, 1_300_010);
+  assert.equal(bought.ok, true);
+  assert.ok(calculateDailyRentalMaintenanceCost(bought.state) > 0);
+
+  const firstOfferId = bought.property!.tenantOffers[0].id;
+  const leased = signLeaseContract(bought.state, 'rent-kadikoy-shop', firstOfferId, 1_300_020);
+  assert.equal(leased.ok, true);
+
+  // Terminating lease charges 1.2% turnover renovation & starts 3-5 day vacancy cooldown
+  const cashBeforeTerminate = leased.state.cash;
+  const terminated = terminateLeaseContract(leased.state, 'rent-kadikoy-shop');
+  assert.equal(terminated.ok, true);
+  assert.ok(terminated.state.cash < cashBeforeTerminate, 'Turnover renovation cost must be charged');
+  const vacantProp = terminated.state.rentalProperties!.find((p) => p.catalogId === 'rent-kadikoy-shop')!;
+  assert.ok((vacantProp.vacancyDaysRemaining ?? 0) >= 3 && (vacantProp.vacancyDaysRemaining ?? 0) <= 5);
+
+  // Re-signing during vacancy cooldown is blocked
+  const blockedSign = signLeaseContract(terminated.state, 'rent-kadikoy-shop', firstOfferId, 1_300_030);
+  assert.equal(blockedSign.ok, false);
+
+  // Advancing daily rental portfolio ticks down cooldown until ready
+  const afterCooldown = processDailyRentalPortfolio(
+    terminated.state.rentalProperties,
+    vacantProp.vacancyDaysRemaining!,
+    7
+  );
+  const readyProp = afterCooldown.properties!.find((p) => p.catalogId === 'rent-kadikoy-shop')!;
+  assert.equal(readyProp.vacancyDaysRemaining ?? 0, 0);
+});
+
+test('10. v1.7.2 City Genel Müdür gives -35% wear & -20% repair discount (no free 100% hold) + Supabase rival saturation', () => {
+  const now = 1_400_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 20_000_000;
+  const owner = { id: 'p1', name: 'Patron' };
+  const built = purchaseBusiness(state, 'kafe', landPin(41.04, 29.01, 34), 'GM Kafe', owner, [], now);
+  assert.equal(built.ok, true);
+  state = openBranches(built.state);
+  const biz = state.businesses[0];
+
+  const gm: HiredStaff = {
+    id: 'gm-34',
+    name: 'Selim Müdür',
+    role: 'genel_mudur',
+    roleTitle: 'Genel Müdür',
+    stars: 4,
+    speed: 85,
+    efficiency: 90,
+    leadership: 92,
+    hireCost: 400_000,
+    hourlySalary: 500,
+    dailyWage: 4000,
+    dailyEmployerSgk: 900,
+    hiredAt: now,
+    assignedCityPlate: 34,
+  };
+
+  assert.equal(hasCityGeneralManager(biz, [gm]), true);
+
+  const wearWithoutGm = calculateDailyConditionWear(biz, false);
+  const wearWithGm = calculateDailyConditionWear(biz, true);
+  assert.ok(wearWithGm > 0 && wearWithGm < wearWithoutGm, 'GM reduces wear by 35% without freezing to 0');
+  assert.ok(Math.abs(wearWithGm / wearWithoutGm - 0.65) < 0.05);
+
+  const wornBiz = { ...biz, maintenanceLevel: 55 };
+  const costWithoutGm = getMaintenanceRepairCost(wornBiz, false);
+  const costWithGm = getMaintenanceRepairCost(wornBiz, true);
+  assert.ok(costWithGm < costWithoutGm && Math.abs(costWithGm / costWithoutGm - 0.8) < 0.05);
+
+  // Even with a city Genel Müdür, 1-day tick wears condition down (no free 100% hold!)
+  const stateWithGm: EmpireState = { ...state, cityManagers: [gm] };
+  const ticked = tickEconomy(stateWithGm, 30, now + 30_000);
+  assert.ok(
+    (ticked.state.businesses[0].maintenanceLevel ?? 100) < 100,
+    'GM must NOT keep maintenanceLevel permanently frozen at 100%'
+  );
+
+  // Supabase competitorBusinesses in same city/sector reduce saturation factor and live revenue
+  const rivals: RemoteBusinessRecord[] = [
+    {
+      id: 'r1',
+      owner_id: 'other-1',
+      owner_name: 'Rakip 1',
+      city_plate: 34,
+      city_name: 'İstanbul',
+      district: 'Beşiktaş',
+      business_name: 'Rakip Kafe 1',
+      business_type: 'kafe',
+      lat: 41.05,
+      lng: 29.02,
+      level: 1,
+      hourly_income: 5000,
+      valuation: 300_000,
+      created_at: new Date(now).toISOString(),
+    },
+    {
+      id: 'r2',
+      owner_id: 'other-2',
+      owner_name: 'Rakip 2',
+      city_plate: 34,
+      city_name: 'İstanbul',
+      district: 'Şişli',
+      business_name: 'Rakip Kafe 2',
+      business_type: 'kafe',
+      lat: 41.06,
+      lng: 29.03,
+      level: 1,
+      hourly_income: 5000,
+      valuation: 300_000,
+      created_at: new Date(now).toISOString(),
+    },
+  ];
+
+  const satSolo = calculateRegionalSaturationFactor(biz, [biz], 0, []);
+  const satWithRivals = calculateRegionalSaturationFactor(biz, [biz], 0, rivals);
+  assert.equal(satSolo.multiplier, 1.0);
+  assert.ok(satWithRivals.multiplier < 0.85, 'Same-city same-sector Supabase rivals must reduce saturation');
+
+  const incSolo = calculateBusinessIncomePerSec(biz, null, now, [biz], { ...state, competitorBusinesses: [] });
+  const incWithRivals = calculateBusinessIncomePerSec(biz, null, now, [biz], {
+    ...state,
+    competitorBusinesses: rivals,
+  });
+  assert.ok(incWithRivals < incSolo, 'Active regional rivals must reduce live branch revenue');
 });

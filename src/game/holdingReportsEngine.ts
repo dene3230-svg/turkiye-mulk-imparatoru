@@ -1,13 +1,19 @@
-import type { ActiveAdCampaign, EmpireState, OwnedBusiness } from '../types/game';
+import type {
+  ActiveAdCampaign,
+  EmpireState,
+  OwnedBusiness,
+  RemoteBusinessRecord,
+  StockQuote,
+} from '../types/game';
 import { getBlueprintById } from './catalog';
 import {
   calculateBusinessHourlyIncome,
-  calculateDailyRentAndUtilities,
   isBusinessUnderConstruction,
 } from './economy';
-import { calculateTotalDailyPayrollBreakdown, getBranchStaffSlots } from './hrEngine';
+import { getBranchStaffSlots } from './hrEngine';
 import { calculateBranchServiceQuality } from './officeEngine';
 import { getBranchFacilityLevel } from './branchOpsEngine';
+import { computeExecutiveDashboardMetrics } from './dashboardMetrics';
 
 export type ReportPeriodId = '24h' | '7d' | '30d';
 
@@ -15,9 +21,11 @@ export interface ExpenseBreakdown {
   personnelPct: number;
   rentTaxPct: number;
   supplyOpsPct: number;
+  hqBureaucracyPct: number;
   personnelCost: number;
   rentTaxCost: number;
   supplyOpsCost: number;
+  hqBureaucracyCost: number;
   totalExpense: number;
 }
 
@@ -64,6 +72,10 @@ export interface HoldingReportsSnapshot {
   totalStaffCount: number;
   bulkAdCost: number;
   bulkBonusCost: number;
+  progressiveTaxBracketPct: number;
+  dailyCorporateTaxEstimate: number;
+  dailyHqBureaucracyCost: number;
+  inflationIndex: number;
 }
 
 const SECTOR_META: Record<string, { label: string; color: string }> = {
@@ -266,17 +278,19 @@ export function scanSmartBranchAlerts(
 export function computeHoldingReportsSnapshot(
   state: EmpireState,
   period: ReportPeriodId,
-  now = Date.now()
+  now = Date.now(),
+  quotes: StockQuote[] = [],
+  competitorBusinesses?: RemoteBusinessRecord[]
 ): HoldingReportsSnapshot {
   const periodDays = getPeriodDays(period);
   const businesses = Array.isArray(state.businesses) ? state.businesses : [];
+  const stateWithRivals = { ...state, competitorBusinesses };
+
+  // Single source of truth: share the exact progressive tax, HQ bureaucracy overhead & inflation engine with ExecutiveDashboard!
+  const execMetrics = computeExecutiveDashboardMetrics(state, quotes, now, competitorBusinesses);
 
   let activeBranchCount = 0;
-  let dailyRevenue = 0;
-  let dailyRentAndUtilities = 0;
-  let dailySupplyCost = 0;
   let satisfactionSum = 0;
-  let totalStaffCount = 0;
 
   const sectorMap = new Map<
     string,
@@ -288,11 +302,6 @@ export function computeHoldingReportsSnapshot(
   for (const biz of businesses) {
     const bp = getBlueprintById(biz.blueprintId);
     const underConst = isBusinessUnderConstruction(biz);
-    const slots = getBranchStaffSlots(biz);
-    totalStaffCount += slots.workers + slots.assistantManagers + slots.branchManagers;
-
-    const rent = Math.max(0, safeFinite(calculateDailyRentAndUtilities(biz)));
-    dailyRentAndUtilities += rent;
 
     const bizDailyRev = underConst
       ? 0
@@ -300,16 +309,13 @@ export function computeHoldingReportsSnapshot(
           0,
           Math.round(
             safeFinite(
-              calculateBusinessHourlyIncome(biz, state.activeEvent, now, businesses, state)
+              calculateBusinessHourlyIncome(biz, state.activeEvent, now, businesses, stateWithRivals)
             ) * 24
           )
         );
 
     if (!underConst) {
       activeBranchCount += 1;
-      dailyRevenue += bizDailyRev;
-      const cogsRatio = bp?.baseCogsRatio ?? 0.36;
-      dailySupplyCost += Math.round(bizDailyRev * cogsRatio);
       const q = calculateBranchServiceQuality(biz, state.cityManagers ?? [], businesses);
       satisfactionSum += safeFinite(q.customerTrafficPct);
     }
@@ -333,42 +339,44 @@ export function computeHoldingReportsSnapshot(
     }
   }
 
-  // Include HQ executives & city managers in total headcount for bonus calculation
-  totalStaffCount += (state.cityManagers ?? []).length;
-  if (state.accountant) totalStaffCount += 1;
-  if (state.ceo) totalStaffCount += 1;
+  const totalStaffCount = execMetrics.totalStaffCount;
 
-  const payroll = calculateTotalDailyPayrollBreakdown(state);
-  const dailyPersonnelCost = Math.max(0, Math.round(safeFinite(payroll.dailyTotalCost)));
-
-  // Add realistic Turkish operational tax share (~14% of gross margin) into Rent/Tax bucket
-  const dailyEstimatedTax = Math.max(
+  // Exact parity with ExecutiveDashboard (progressive corporate tax + HQ bureaucracy overhead + inflation)
+  const dailyRevenue = Math.max(0, Math.round(safeFinite(execMetrics.dailyEstimatedRevenue)));
+  const dailyPersonnelCost = Math.max(0, Math.round(safeFinite(execMetrics.dailyPayrollWithSgk)));
+  const dailyRentTaxTotal = Math.max(
     0,
-    Math.round(Math.max(0, dailyRevenue - dailySupplyCost - dailyPersonnelCost) * 0.14)
+    Math.round(safeFinite(execMetrics.dailyRentUtilities) + safeFinite(execMetrics.dailyCorporateTaxEstimate))
   );
-  const dailyRentTaxTotal = Math.max(0, Math.round(dailyRentAndUtilities + dailyEstimatedTax));
-  const dailySupplyOpsTotal = Math.max(0, Math.round(dailySupplyCost));
+  const dailySupplyOpsTotal = Math.max(0, Math.round(safeFinite(execMetrics.dailyEstimatedSupply)));
+  const dailyHqBureaucracyTotal = Math.max(
+    0,
+    Math.round(safeFinite(execMetrics.dailyHqBureaucracyCost))
+  );
 
   const totalRevenue = Math.round(dailyRevenue * periodDays);
   const personnelCost = Math.round(dailyPersonnelCost * periodDays);
   const rentTaxCost = Math.round(dailyRentTaxTotal * periodDays);
   const supplyOpsCost = Math.round(dailySupplyOpsTotal * periodDays);
-  const totalExpense = personnelCost + rentTaxCost + supplyOpsCost;
+  const hqBureaucracyCost = Math.round(dailyHqBureaucracyTotal * periodDays);
+  const totalExpense = personnelCost + rentTaxCost + supplyOpsCost + hqBureaucracyCost;
   const netProfit = totalRevenue - totalExpense;
   const profitMarginPct =
     totalRevenue > 0 ? Math.max(-99, Math.min(95, Math.round((netProfit / totalRevenue) * 100))) : 0;
 
-  // Normalize expense percentages cleanly to sum to 100
-  let personnelPct = 40;
-  let rentTaxPct = 35;
+  // True proportional expense percentages summing cleanly to 100%
+  let personnelPct = 45;
+  let rentTaxPct = 30;
   let supplyOpsPct = 25;
+  let hqBureaucracyPct = 0;
   if (totalExpense > 0) {
     personnelPct = Math.round((personnelCost / totalExpense) * 100);
     rentTaxPct = Math.round((rentTaxCost / totalExpense) * 100);
-    supplyOpsPct = Math.max(0, 100 - personnelPct - rentTaxPct);
-    // Re-balance if rounding pushed personnel + rent > 100
-    if (personnelPct + rentTaxPct > 100) {
-      rentTaxPct = Math.max(0, 100 - personnelPct);
+    hqBureaucracyPct =
+      hqBureaucracyCost > 0 ? Math.round((hqBureaucracyCost / totalExpense) * 100) : 0;
+    supplyOpsPct = Math.max(0, 100 - personnelPct - rentTaxPct - hqBureaucracyPct);
+    if (personnelPct + rentTaxPct + hqBureaucracyPct > 100) {
+      rentTaxPct = Math.max(0, 100 - personnelPct - hqBureaucracyPct);
       supplyOpsPct = 0;
     }
   }
@@ -414,7 +422,9 @@ export function computeHoldingReportsSnapshot(
       : 0;
   const brandRecognitionPct = Math.max(0, Math.min(100, Math.round(state.brandRecognition ?? 5)));
 
-  const dailyNetProfit = dailyRevenue - (dailyPersonnelCost + dailyRentTaxTotal + dailySupplyOpsTotal);
+  const dailyNetProfit =
+    dailyRevenue -
+    (dailyPersonnelCost + dailyRentTaxTotal + dailySupplyOpsTotal + dailyHqBureaucracyTotal);
   const trendSeries = buildTrendSeries(period, dailyRevenue, dailyNetProfit, state);
 
   return {
@@ -430,9 +440,11 @@ export function computeHoldingReportsSnapshot(
       personnelPct,
       rentTaxPct,
       supplyOpsPct,
+      hqBureaucracyPct,
       personnelCost,
       rentTaxCost,
       supplyOpsCost,
+      hqBureaucracyCost,
       totalExpense,
     },
     alerts: scanSmartBranchAlerts(state, now),
@@ -443,6 +455,10 @@ export function computeHoldingReportsSnapshot(
     totalStaffCount,
     bulkAdCost: computeBulkAdCampaignCost(activeBranchCount),
     bulkBonusCost: computeBulkStaffBonusCost(activeBranchCount, totalStaffCount),
+    progressiveTaxBracketPct: execMetrics.progressiveTaxBracketPct,
+    dailyCorporateTaxEstimate: execMetrics.dailyCorporateTaxEstimate,
+    dailyHqBureaucracyCost: execMetrics.dailyHqBureaucracyCost,
+    inflationIndex: execMetrics.inflationIndex,
   };
 }
 

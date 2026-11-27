@@ -21,8 +21,10 @@ import type {
 import { formatTL } from '../game/economy';
 import {
   calculateDailyRentalIncome,
+  calculateDailyRentalMaintenanceCost,
   ensureDailyOffersForDay,
   getMergedRentalProperties,
+  getRentalNetMonthlyYieldPct,
   HOLDING_PROMO_TIERS,
   HOLDING_STORE_ITEMS,
 } from '../game/quickActionsEngine';
@@ -211,6 +213,8 @@ export function RentalListingsModal({
 
   const properties = getMergedRentalProperties(state);
   const dailyPassive = calculateDailyRentalIncome(state);
+  const dailyRentalMaint = calculateDailyRentalMaintenanceCost(state);
+  const dailyNetPassive = dailyPassive - dailyRentalMaint;
   const ownedCount = properties.filter((p) => p.owned).length;
   const leasedCount = properties.filter((p) => p.owned && p.leasedTenantName).length;
 
@@ -240,7 +244,7 @@ export function RentalListingsModal({
                 KİRALIK İLANLARI & PASİF KİRA PORTFÖYÜ
               </h2>
               <p className="text-xs text-slate-400">
-                Boş dükkan, daire ve ofis satın alın · Kiracı tekliflerini onaylayıp günlük pasif kira kazanın
+                Aylık %2.8–%4.1 net kira getirisi · Periyodik aidat, bakım ve kiracı değişim tadilat maliyetleri dahil
               </p>
             </div>
           </div>
@@ -249,12 +253,16 @@ export function RentalListingsModal({
             <div className="text-right">
               <div className="text-[11px] text-slate-400">
                 {ownedCount} Mülk · {leasedCount} Kiracılı
+                {dailyRentalMaint > 0 ? ` · Aidat -${formatTL(dailyRentalMaint, true)}/g` : ''}
               </div>
               <div
                 data-testid="rental-daily-income"
-                className="font-mono-num text-xs font-bold text-[#6EB288]"
+                className={`font-mono-num text-xs font-bold ${
+                  dailyNetPassive >= 0 ? 'text-[#7A9E7E]' : 'text-[#B86B5E]'
+                }`}
               >
-                +{formatTL(dailyPassive)} / Gün Pasif Kira
+                {dailyNetPassive >= 0 ? '+' : '-'}
+                {formatTL(Math.abs(dailyNetPassive))} / Gün Net Pasif Kira
               </div>
             </div>
             <button
@@ -312,6 +320,9 @@ export function RentalListingsModal({
                   prop.kind === 'dukkan' ? Store : prop.kind === 'daire' ? Home : Building2;
                 const canBuy = state.cash >= prop.purchasePrice;
                 const isLeased = Boolean(prop.owned && prop.leasedTenantName && (prop.leaseRemainingDays ?? 0) > 0);
+                const vacancyDays = Math.max(0, prop.vacancyDaysRemaining ?? 0);
+                const dailyAidat = Math.max(0, Math.round(prop.dailyMaintenanceCost ?? 0));
+                const netYieldPct = getRentalNetMonthlyYieldPct(prop);
                 return (
                   <div
                     key={prop.catalogId}
@@ -332,27 +343,50 @@ export function RentalListingsModal({
                         <span
                           className={`text-[11px] font-bold ${
                             isLeased
-                              ? 'text-[#6EB288]'
+                              ? 'text-[#7A9E7E]'
+                              : vacancyDays > 0
+                              ? 'text-[#B86B5E]'
                               : prop.owned
-                              ? 'text-[#D8A338]'
+                              ? 'text-[#C8AE7D]'
                               : 'text-slate-400'
                           }`}
                         >
-                          {isLeased ? 'Kiracılı' : prop.owned ? 'Boş Mülk' : 'Satılık'}
+                          {isLeased
+                            ? 'Kiracılı'
+                            : vacancyDays > 0
+                            ? `Tadilat (${vacancyDays}g)`
+                            : prop.owned
+                            ? 'Boş Mülk'
+                            : 'Satılık'}
                         </span>
                       </div>
 
-                      <div className="mt-3 flex items-center justify-between border-y border-[#334155] py-2 text-xs">
+                      <div className="mt-3 grid grid-cols-2 gap-1.5 border-y border-[#334155] py-2 text-xs">
                         <div>
                           <span className="text-slate-400">Değer: </span>
                           <span className="font-mono-num font-bold text-slate-100">
                             {formatTL(prop.purchasePrice)}
                           </span>
                         </div>
-                        <div>
-                          <span className="text-slate-400">Tahmini Kira: </span>
-                          <span className="font-mono-num font-bold text-[#6EB288]">
+                        <div className="text-right">
+                          <span className="text-slate-400">Kira: </span>
+                          <span className="font-mono-num font-bold text-[#7A9E7E]">
                             {formatTL(prop.baseMonthlyRent)}/ay
+                          </span>
+                        </div>
+                        <div className="text-[11px]">
+                          <span className="text-slate-400">Net Getiri: </span>
+                          <span
+                            data-testid={`rental-yield-${prop.catalogId}`}
+                            className="font-mono-num font-bold text-[#C8AE7D]"
+                          >
+                            %{netYieldPct.toFixed(1)}/ay
+                          </span>
+                        </div>
+                        <div className="text-right text-[11px]">
+                          <span className="text-slate-400">Aidat/Bakım: </span>
+                          <span className="font-mono-num font-bold text-[#B86B5E]">
+                            -{formatTL(dailyAidat)}/gün
                           </span>
                         </div>
                       </div>
@@ -368,7 +402,7 @@ export function RentalListingsModal({
                           onClick={() => onBuyProperty(prop.catalogId)}
                           className={`w-full rounded-xl py-2 text-xs font-bold transition-colors ${
                             canBuy
-                              ? 'bg-[#D8A338] text-[#181F29] hover:bg-[#E2AF48]'
+                              ? 'bg-[#C8AE7D] text-[#181F29] hover:bg-[#D2BB8E]'
                               : 'cursor-not-allowed bg-[#334155] text-slate-500'
                           }`}
                         >
@@ -380,8 +414,8 @@ export function RentalListingsModal({
                         <div className="space-y-2 rounded-xl border border-[#334155] bg-[#181F29] p-3">
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-bold text-slate-100">{prop.leasedTenantName}</span>
-                            <span className="font-mono-num font-bold text-[#6EB288]">
-                              +{formatTL(Math.round((prop.activeMonthlyRent ?? 0) / 30))}/gün
+                            <span className="font-mono-num font-bold text-[#7A9E7E]">
+                              +{formatTL(Math.round((prop.activeMonthlyRent ?? 0) / 30) - dailyAidat)}/gün net
                             </span>
                           </div>
                           <div className="flex items-center justify-between text-[11px] text-slate-400">
@@ -393,8 +427,20 @@ export function RentalListingsModal({
                             onClick={() => onTerminateLease(prop.catalogId)}
                             className="w-full rounded-lg border border-[#475569] py-1.5 text-[11px] font-semibold text-slate-300 hover:bg-[#2C3647] hover:text-white"
                           >
-                            Sözleşmeyi Feshet
+                            Sözleşmeyi Feshet (3 gün boşluk)
                           </button>
+                        </div>
+                      ) : vacancyDays > 0 ? (
+                        <div
+                          data-testid={`rental-vacancy-${prop.catalogId}`}
+                          className="rounded-xl border border-[#B86B5E]/45 bg-[#181F29] p-3 text-xs text-slate-300"
+                        >
+                          <div className="font-bold text-[#C8AE7D]">
+                            Tadilat & Kiracı Hazırlığı ({vacancyDays} gün kaldı)
+                          </div>
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            Kiracı değişimi sonrası tadilat tamamlanana kadar yeni sözleşme imzalanamaz; günlük aidat gideri işler.
+                          </p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -418,7 +464,7 @@ export function RentalListingsModal({
                                 type="button"
                                 data-testid={`sign-lease-${offer.id}`}
                                 onClick={() => onSignLease(prop.catalogId, offer.id)}
-                                className="shrink-0 rounded-lg bg-[#6EB288] px-2.5 py-1.5 font-mono-num text-[11px] font-bold text-[#142019] hover:bg-[#7EC499]"
+                                className="shrink-0 rounded-lg bg-[#7A9E7E] px-2.5 py-1.5 font-mono-num text-[11px] font-bold text-[#181F29] hover:bg-[#8BAE8F]"
                               >
                                 Kirala ({formatTL(offer.monthlyRent, true)}/ay)
                               </button>

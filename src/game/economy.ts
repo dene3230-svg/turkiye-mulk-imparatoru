@@ -73,8 +73,6 @@ import {
   runGeneralManagerAutoAds,
 } from './strategyEngine';
 import {
-  calculateHourlyTaxBreakdown,
-  createMonthlyTaxObligation,
   generateAccountantPool,
   generateCeoPool,
   processAccountantAutoPayments,
@@ -89,10 +87,11 @@ import {
   computeNextBrandRecognition,
 } from './officeEngine';
 import {
-  advanceRentalLeasesByDays,
   calculateDailyRentalIncome,
+  calculateDailyRentalMaintenanceCost,
   calculateRentalPropertiesValuation,
   generateDailyOffersForDay,
+  processDailyRentalPortfolio,
 } from './quickActionsEngine';
 import {
   CONDITION_SUSPEND_THRESHOLD,
@@ -443,6 +442,7 @@ export function calculateBusinessIncomePerSec(
     inflationIndex?: number;
     prestigeMarketTier?: number;
     permanentPrestigeBonusPct?: number;
+    competitorBusinesses?: RemoteBusinessRecord[];
   }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
@@ -565,7 +565,8 @@ export function calculateBusinessIncomePerSec(
   const saturationMult = calculateRegionalSaturationFactor(
     business,
     allOwnBusinesses ?? [business],
-    stateContext?.prestigeMarketTier ?? 0
+    stateContext?.prestigeMarketTier ?? 0,
+    stateContext?.competitorBusinesses
   ).multiplier;
   const inflationRevMult = calculateInflationMarginFactor(
     business,
@@ -615,6 +616,7 @@ export function calculateBusinessHourlyIncome(
     inflationIndex?: number;
     prestigeMarketTier?: number;
     permanentPrestigeBonusPct?: number;
+    competitorBusinesses?: RemoteBusinessRecord[];
   }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
@@ -1250,12 +1252,22 @@ export function tickEconomy(
   const branchLines: DayEndBranchLine[] = [];
 
   const officeBenefits = calculateOfficeBenefits(state);
+  const tickStateContext = {
+    ...state,
+    competitorBusinesses: ceoContext?.rivalRecords,
+  };
 
   const updatedBusinesses = state.businesses.map((b) => {
     const bp = getBlueprintById(b.blueprintId);
     const automation = resolveBusinessAutomation(b, cityManagers, state.businesses);
     const wasUnderConstruction = isBusinessUnderConstruction(b);
-    const incomePerSec = calculateBusinessIncomePerSec(b, activeEvent, now, state.businesses, state);
+    const incomePerSec = calculateBusinessIncomePerSec(
+      b,
+      activeEvent,
+      now,
+      state.businesses,
+      tickStateContext
+    );
     const earned = incomePerSec * safeDt;
     const capacity = calculateVaultCapacity(b);
     const slots = getBranchStaffSlots(b);
@@ -1271,10 +1283,7 @@ export function tickEconomy(
       } else {
         nextStock = Math.max(15, nextStock - safeDt * 0.22);
       }
-
-      if (automation.autoMaintenance && automation.managerRole === 'genel_mudur') {
-        nextMaint = 100;
-      }
+      // v1.7.2: Şehir Genel Müdürü bakım maliyetini %20 düşürür ve günlük yıpranmayı %35 azaltır; bedava %100 sıfırlama kaldırıldı.
 
       // Morale degrades faster if understaffed (0-1 worker) or neglected; recovers with manager & quality investment
       if (automation.fullAutomation) {
@@ -1535,13 +1544,12 @@ export function tickEconomy(
     (bl) => bl.endsAtGameMin > nextMinutes
   );
 
-  // Monthly Tax Accrual & Overdue Tax tracking
+  // v1.7.2: Legacy 30-day bulk monthly tax bills (createMonthlyTaxObligation) removed to prevent double taxation.
+  // Only daily progressive corporate tax (15%-42% + prestige surcharge) settles at midnight in processHardcoreDailySettlement.
   let nextPendingTaxes = [...(state.pendingTaxes ?? [])];
-  let newTaxBillAmount = 0;
+  const newTaxBillAmount = 0;
 
-  if (daysPassed > 0) {
-    const completedDay = nextTotalDay - 1;
-    // Update overdue days on existing unpaid tax bills
+  if (daysPassed > 0 && nextPendingTaxes.length > 0) {
     nextPendingTaxes = nextPendingTaxes.map((bill) => {
       if (bill.status === 'paid') return bill;
       const overdue = Math.max(0, nextTotalDay - bill.dueGameDay);
@@ -1549,43 +1557,6 @@ export function tickEconomy(
         ? { ...bill, overdueDays: overdue, status: 'overdue' as const }
         : bill;
     });
-
-    // Every 30th day (monthly closing): generate realistic Turkish monthly tax obligation
-    if (completedDay % 30 === 0 && updatedBusinesses.length > 0) {
-      const totalHourlyGross = updatedBusinesses.reduce(
-        (sum, b) =>
-          sum + calculateBusinessHourlyIncome(b, activeEvent, now, updatedBusinesses, state),
-        0
-      );
-      const hourlyPayroll =
-        calculateTotalHourlyPayroll(state) +
-        (state.accountant?.hourlySalary ?? 0) +
-        (state.ceo?.hourlySalary ?? 0);
-      const hourlyRentAndUtilities = Math.round(
-        updatedBusinesses.reduce((s, b) => s + calculateDailyRentAndUtilities(b), 0) / 24
-      );
-      const estNetWorth = calculateNetWorth(
-        { ...state, businesses: updatedBusinesses },
-        now,
-        stockQuotes
-      );
-      const { breakdown } = calculateHourlyTaxBreakdown({
-        hourlyGrossRevenue: totalHourlyGross,
-        hourlyPayroll,
-        hourlyOperatingExpensesBeforeTax:
-          hourlyPayroll + hourlyRentAndUtilities + Math.round(totalHourlyGross * 0.2),
-        hourlyRentAndUtilities,
-        branchCount: updatedBusinesses.length,
-        netWorth: estNetWorth,
-        accountant: state.accountant,
-      });
-      const monthNum = Math.max(1, Math.floor(completedDay / 30));
-      const newBill = createMonthlyTaxObligation(monthNum, completedDay, breakdown, now);
-      if (newBill) {
-        nextPendingTaxes = [newBill, ...nextPendingTaxes].slice(0, 12);
-        newTaxBillAmount = newBill.amount;
-      }
-    }
   }
 
   const brandUpdate = computeNextBrandRecognition(
@@ -1596,13 +1567,18 @@ export function tickEconomy(
     nextMinutes
   );
 
-  // Passive daily rental income from leased properties (settled automatically each new day)
-  const dailyRentalIncomeSettled =
+  // Passive daily rental income minus aidat/maintenance & turnover renovation costs (settled each new day)
+  const dailyRentalGrossSettled =
     daysPassed > 0 ? calculateDailyRentalIncome(state) * daysPassed : 0;
-  const nextRentalProperties =
+  const dailyRentalMaintSettled =
+    daysPassed > 0 ? calculateDailyRentalMaintenanceCost(state) * daysPassed : 0;
+  const rentalPortfolioStep =
     daysPassed > 0
-      ? advanceRentalLeasesByDays(state.rentalProperties, daysPassed)
-      : state.rentalProperties;
+      ? processDailyRentalPortfolio(state.rentalProperties, daysPassed, nextTotalDay)
+      : { properties: state.rentalProperties, renovationCosts: 0, vacatedNames: [] };
+  const nextRentalProperties = rentalPortfolioStep.properties;
+  const dailyRentalIncomeSettled =
+    dailyRentalGrossSettled - dailyRentalMaintSettled - rentalPortfolioStep.renovationCosts;
   const nextHoldingPromo =
     state.activeHoldingPromo && state.activeHoldingPromo.endsAtGameMin > nextMinutes
       ? state.activeHoldingPromo
@@ -1703,7 +1679,7 @@ export function tickEconomy(
       Math.max(0, autoCollectedAtMidnight) +
       dividendPaid +
       passiveRoyaltyGain +
-      dailyRentalIncomeSettled +
+      Math.max(0, dailyRentalIncomeSettled) +
       Math.max(0, hardcoreSettlement?.megaProjectIncome ?? 0),
     franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
     businesses: finalBusinesses,

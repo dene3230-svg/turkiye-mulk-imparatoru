@@ -24,7 +24,7 @@ import {
   Utensils,
   Car,
 } from 'lucide-react';
-import type { EmpireState, OwnedBusiness } from '../types/game';
+import type { EmpireState, OwnedBusiness, RemoteBusinessRecord } from '../types/game';
 import type { ExecutiveDashboardMetrics, IncomeExpensePoint } from '../game/dashboardMetrics';
 import { calculateBusinessHourlyIncome, formatTL, isBusinessUnderConstruction } from '../game/economy';
 import { calculateBranchServiceQuality } from '../game/officeEngine';
@@ -55,6 +55,7 @@ interface ExecutiveDashboardProps {
   metrics: ExecutiveDashboardMetrics;
   now: number;
   franchiseOfferCount: number;
+  competitorBusinesses?: RemoteBusinessRecord[];
   onQuickAction: (action: QuickActionId) => void;
   onManageBranch: (businessId: string) => void;
   onDiscoverBranches: () => void;
@@ -200,6 +201,7 @@ export function ExecutiveDashboard({
   metrics,
   now,
   franchiseOfferCount,
+  competitorBusinesses = [],
   onQuickAction,
   onManageBranch,
   onDiscoverBranches,
@@ -213,7 +215,7 @@ export function ExecutiveDashboard({
   const dailyExpenses = Math.max(0, Math.round(metrics.dailyOperatingExpenses));
   const dailyNetProfit = dailyRevenue - dailyExpenses;
 
-  // Expense breakdown percentages (Personel / Kira-Vergi / Tedarik / Merkez Yönetim)
+  // Expense breakdown percentages (Personel / Kira-Vergi / Tedarik / Merkez Yönetim) — exact proportional shares
   const rentAndTaxCost = metrics.dailyRentUtilities + (metrics.dailyCorporateTaxEstimate ?? 0);
   const hqBureaucracyCost = Math.max(0, metrics.dailyHqBureaucracyCost ?? 0);
   const expSum = Math.max(
@@ -230,7 +232,7 @@ export function ExecutiveDashboard({
     : 30;
   const hqPct =
     hasRealExpense && hqBureaucracyCost > 0
-      ? Math.max(6, Math.round((hqBureaucracyCost / expSum) * 100))
+      ? Math.round((hqBureaucracyCost / expSum) * 100)
       : 0;
   const supplyPct = Math.max(0, 100 - staffPct - rentPct - hqPct);
 
@@ -492,36 +494,82 @@ export function ExecutiveDashboard({
                   data-testid="expense-breakdown-bar"
                   className="flex h-6 w-full overflow-hidden rounded-full border border-[#334155] bg-[#181F29] text-[10.5px] font-medium text-slate-100 lg:h-7 lg:text-xs"
                 >
-                  <div
-                    className="flex items-center justify-center truncate bg-[#7E96B0] px-2 text-[#181F29] font-semibold transition-all"
-                    style={{ width: `${Math.max(16, staffPct)}%` }}
-                    title={`Personel %${staffPct}`}
-                  >
-                    <span className="truncate whitespace-nowrap">Personel %{staffPct}</span>
-                  </div>
-                  <div
-                    className="flex items-center justify-center truncate bg-[#3E4C5E] px-2 transition-all"
-                    style={{ width: `${Math.max(16, rentPct)}%` }}
-                    title={`Kira/Vergi %${rentPct}`}
-                  >
-                    <span className="truncate whitespace-nowrap">Kira/Vergi %{rentPct}</span>
-                  </div>
-                  <div
-                    className="flex items-center justify-center truncate bg-[#B86B5E] px-2 transition-all"
-                    style={{ width: `${Math.max(16, supplyPct)}%` }}
-                    title={`Tedarik %${supplyPct}`}
-                  >
-                    <span className="truncate whitespace-nowrap">Tedarik %{supplyPct}</span>
-                  </div>
+                  {staffPct > 0 && (
+                    <div
+                      data-testid="expense-staff-segment"
+                      className="flex items-center justify-center overflow-hidden bg-[#7E96B0] font-semibold text-[#181F29] transition-all"
+                      style={{ width: `${staffPct}%` }}
+                      title={`Personel %${staffPct}`}
+                    >
+                      {staffPct > 12 && (
+                        <span className="truncate whitespace-nowrap px-1.5">Personel %{staffPct}</span>
+                      )}
+                    </div>
+                  )}
+                  {rentPct > 0 && (
+                    <div
+                      data-testid="expense-rent-segment"
+                      className="flex items-center justify-center overflow-hidden bg-[#3E4C5E] transition-all"
+                      style={{ width: `${rentPct}%` }}
+                      title={`Kira/Vergi %${rentPct}`}
+                    >
+                      {rentPct > 12 && (
+                        <span className="truncate whitespace-nowrap px-1.5">Kira/Vergi %{rentPct}</span>
+                      )}
+                    </div>
+                  )}
+                  {supplyPct > 0 && (
+                    <div
+                      data-testid="expense-supply-segment"
+                      className="flex items-center justify-center overflow-hidden bg-[#B86B5E] transition-all"
+                      style={{ width: `${supplyPct}%` }}
+                      title={`Tedarik %${supplyPct}`}
+                    >
+                      {supplyPct > 12 && (
+                        <span className="truncate whitespace-nowrap px-1.5">Tedarik %{supplyPct}</span>
+                      )}
+                    </div>
+                  )}
                   {hqPct > 0 && (
                     <div
                       data-testid="expense-hq-bureaucracy-segment"
-                      className="flex items-center justify-center truncate bg-[#C8AE7D] px-2 font-semibold text-[#181F29] transition-all"
-                      style={{ width: `${Math.max(14, hqPct)}%` }}
+                      className="flex items-center justify-center overflow-hidden bg-[#C8AE7D] font-semibold text-[#181F29] transition-all"
+                      style={{ width: `${hqPct}%` }}
                       title={`Merkez Yönetim & Denetim Gideri: ${formatTL(hqBureaucracyCost)}/gün (%${hqPct})`}
                     >
-                      <span className="truncate whitespace-nowrap">Merkez %{hqPct}</span>
+                      {hqPct > 12 && (
+                        <span className="truncate whitespace-nowrap px-1.5">Merkez %{hqPct}</span>
+                      )}
                     </div>
+                  )}
+                </div>
+                <div
+                  data-testid="expense-breakdown-legend"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-[#7E96B0]" />
+                    <span>Personel</span>
+                    <strong className="font-mono-num text-slate-100">%{staffPct}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-[#3E4C5E] ring-1 ring-slate-500/60" />
+                    <span>Kira/Vergi</span>
+                    <strong className="font-mono-num text-slate-100">%{rentPct}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-[#B86B5E]" />
+                    <span>Tedarik</span>
+                    <strong className="font-mono-num text-slate-100">%{supplyPct}</strong>
+                  </span>
+                  {hqBureaucracyCost > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-[#C8AE7D]" />
+                      <span>Merkez</span>
+                      <strong className="font-mono-num text-[#C8AE7D]">
+                        %{hqPct} ({formatTL(hqBureaucracyCost, true)})
+                      </strong>
+                    </span>
                   )}
                 </div>
               </div>
@@ -565,7 +613,7 @@ export function ExecutiveDashboard({
                         state.activeEvent,
                         now,
                         state.businesses,
-                        state
+                        { ...state, competitorBusinesses }
                       ) * 24
                     );
 

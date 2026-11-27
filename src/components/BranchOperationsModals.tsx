@@ -58,6 +58,7 @@ import {
   getEquipmentRenewalCost,
   getMaintenanceRepairCost,
   getPriceSyncCost,
+  hasCityGeneralManager,
 } from '../game/hardcoreEconomyEngine';
 
 export function BranchConceptGlyph({
@@ -203,15 +204,15 @@ export function BranchSelectorModal({
   return (
     <div
       data-testid="branch-selector-modal"
-      className="fixed inset-0 z-[1050] flex items-center justify-center bg-[#050A17]/78 p-2 lg:p-5"
+      className="fixed inset-0 z-[1050] flex items-center justify-center bg-black/75 p-2 lg:p-5"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#222B38]"
+        className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#181F29]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Modal Header */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#334155] bg-[#0D162A]/90 px-3 py-2 lg:px-5 lg:py-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#334155] bg-[#222B38] px-3 py-2 lg:px-5 lg:py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-xs font-extrabold tracking-wide lg:text-base">
               <span className="text-slate-400">İŞLETMELERİM</span>
@@ -227,7 +228,7 @@ export function BranchSelectorModal({
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-[#334155] bg-[#0A1224] p-0.5">
+            <div className="flex items-center gap-1.5 rounded-xl border border-[#334155] bg-[#181F29] p-0.5">
               <span className="hidden pl-2 text-[9px] font-bold tracking-wider text-slate-400 sm:inline">
                 GÖRÜNÜM:
               </span>
@@ -235,9 +236,9 @@ export function BranchSelectorModal({
                 type="button"
                 data-testid="branch-view-card-btn"
                 onClick={() => onChangeViewMode('card')}
-                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-extrabold transition-all lg:text-xs ${
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-extrabold transition-colors lg:text-xs ${
                   viewMode === 'card'
-                    ? 'bg-[#7E96B0]/15 text-cyan-100 ring-1 ring-cyan-400/60'
+                    ? 'bg-[#7E96B0] text-[#181F29]'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -248,9 +249,9 @@ export function BranchSelectorModal({
                 type="button"
                 data-testid="branch-view-list-btn"
                 onClick={() => onChangeViewMode('list')}
-                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-extrabold transition-all lg:text-xs ${
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-extrabold transition-colors lg:text-xs ${
                   viewMode === 'list'
-                    ? 'bg-[#7E96B0]/15 text-cyan-100 ring-1 ring-cyan-400/60'
+                    ? 'bg-[#7E96B0] text-[#181F29]'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -274,7 +275,7 @@ export function BranchSelectorModal({
         {/* Body Content */}
         <div className="panel-scroll min-h-0 flex-1 p-2.5 lg:p-4">
           {businesses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-[#334155] bg-[#0D1629]/70 px-6 py-10 text-center">
+            <div className="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-[#334155] bg-[#222B38] px-6 py-10 text-center">
               <Building2 className="h-10 w-10 text-[#7E96B0]/75" />
               <h3 className="mt-2.5 text-sm font-extrabold text-white lg:text-base">
                 Henüz Açılmış Şubeniz Yok
@@ -395,7 +396,7 @@ export function BranchSelectorModal({
                         e.stopPropagation();
                         onManageBranch(biz.id);
                       }}
-                      className="flex min-h-[30px] w-full items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-cyan-500/20 px-2.5 py-1 text-[10px] font-extrabold tracking-wide text-amber-100 transition-all hover:brightness-125 active:scale-[0.98] lg:min-h-[36px] lg:text-xs"
+                      className="flex min-h-[30px] w-full items-center justify-center rounded-xl border border-[#C8AE7D]/50 bg-[#C8AE7D]/20 px-2.5 py-1 text-[10px] font-extrabold tracking-wide text-[#C8AE7D] transition-colors hover:bg-[#C8AE7D]/30 lg:min-h-[36px] lg:text-xs"
                     >
                       YÖNET & ÖZELLEŞTİR
                     </button>
@@ -423,10 +424,10 @@ export function BranchSelectorModal({
                       style={{
                         borderColor: isSelected ? s.accentColor : 'rgba(51,65,85,0.7)',
                       }}
-                      className={`flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left transition-all lg:px-3.5 lg:py-2.5 ${
+                      className={`flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors lg:px-3.5 lg:py-2.5 ${
                         isSelected
-                          ? 'bg-[#172848]/95 '
-                          : 'bg-[#101A30]/85 hover:bg-[#152340]/90'
+                          ? 'bg-[#222B38]'
+                          : 'bg-[#1D2532] hover:bg-[#222B38]'
                       }`}
                     >
                       <div className="flex min-w-0 items-center gap-2">
@@ -513,14 +514,14 @@ export function BranchSelectorModal({
                         </div>
                       </div>
 
-                      <div className="my-2.5 flex items-center justify-center rounded-xl border border-[#334155] bg-[#0A1224]/75 py-2">
+                      <div className="my-2.5 flex items-center justify-center rounded-xl border border-[#334155] bg-[#181F29] py-2">
                         <MiniStorefrontArt
                           accentColor={s.accentColor}
                           level={activeSelected.level}
                         />
                       </div>
 
-                      <div className="space-y-1.5 rounded-xl border border-[#334155] bg-[#0B1325]/85 p-2.5 text-[10.5px] lg:text-xs">
+                      <div className="space-y-1.5 rounded-xl border border-[#334155] bg-[#181F29] p-2.5 text-[10.5px] lg:text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-slate-400">Günlük Gelir:</span>
                           <span className="font-mono-num font-extrabold text-[#7A9E7E]">
@@ -554,7 +555,7 @@ export function BranchSelectorModal({
                         type="button"
                         data-testid="branch-list-manage-btn"
                         onClick={() => onManageBranch(activeSelected.id)}
-                        className="flex min-h-[34px] w-full items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D] px-3 py-1.5 text-[11px] font-extrabold tracking-wide text-amber-100 transition-all hover:brightness-115 lg:min-h-[40px] lg:text-xs"
+                        className="flex min-h-[34px] w-full items-center justify-center rounded-xl border border-[#C8AE7D] bg-[#C8AE7D] px-3 py-1.5 text-[11px] font-extrabold tracking-wide text-[#181F29] transition-colors hover:bg-[#D2BB8E] lg:min-h-[40px] lg:text-xs"
                       >
                         YÖNET & ÖZELLEŞTİR
                       </button>
@@ -677,15 +678,15 @@ export function BranchManagementModal({
   return (
     <div
       data-testid="branch-management-modal"
-      className="fixed inset-0 z-[1060] flex items-center justify-center bg-[#050A17]/80 p-2 lg:p-5"
+      className="fixed inset-0 z-[1060] flex items-center justify-center bg-black/75 p-2 lg:p-5"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[93vh] w-full max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#222B38]"
+        className="flex max-h-[93vh] w-full max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#181F29]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header with Back Arrow & Close */}
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#334155] bg-[#0C1528]/95 px-3 py-2 lg:px-5 lg:py-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#334155] bg-[#222B38] px-3 py-2 lg:px-5 lg:py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               type="button"
@@ -736,7 +737,8 @@ export function BranchManagementModal({
           const conditionPct = Math.max(0, Math.min(100, Math.round(business.maintenanceLevel ?? 100)));
           const isSuspended = Boolean(business.suspendedForMaintenance) || conditionPct < CONDITION_SUSPEND_THRESHOLD;
           const isWarning = !isSuspended && conditionPct < CONDITION_WARNING_THRESHOLD;
-          const repairCost = getMaintenanceRepairCost(business);
+          const hasCityGm = hasCityGeneralManager(business, state.cityManagers ?? []);
+          const repairCost = getMaintenanceRepairCost(business, hasCityGm);
           const renewCost = getEquipmentRenewalCost(business);
           const priceSyncCost = getPriceSyncCost(business);
           const currentGameDay = Math.max(1, Math.floor((state.gameMinutes ?? 540) / 1440) + 1);
@@ -815,7 +817,10 @@ export function BranchManagementModal({
                     className="inline-flex items-center gap-1.5 rounded-xl border border-[#7A9E7E]/50 bg-[#222B38] px-2.5 py-1.5 text-[11px] font-semibold text-[#7A9E7E] hover:bg-[#2A3545] disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <Wrench className="h-3.5 w-3.5" strokeWidth={1.5} />
-                    <span>Bakım Yap ({formatTL(repairCost, true)})</span>
+                    <span>
+                      Bakım Yap ({formatTL(repairCost, true)}
+                      {hasCityGm ? ' · -%20 GM' : ''})
+                    </span>
                   </button>
                 )}
                 {onRenewEquipment && (
@@ -883,7 +888,7 @@ export function BranchManagementModal({
                     value={nameDraft}
                     onChange={(e) => setNameDraft(e.target.value)}
                     placeholder="Örn: Kadıköy Kafe"
-                    className="w-full rounded-xl border border-slate-600/80 bg-[#0A1224] py-1.5 pl-3 pr-8 text-xs font-bold text-white outline-none transition-colors focus:border-[#334155] lg:py-2 lg:text-sm"
+                    className="w-full rounded-xl border border-[#334155] bg-[#181F29] py-1.5 pl-3 pr-8 text-xs font-bold text-white outline-none transition-colors focus:border-[#7E96B0] lg:py-2 lg:text-sm"
                   />
                   <Edit3 className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                 </div>
@@ -907,7 +912,7 @@ export function BranchManagementModal({
                         style={{ backgroundColor: hex }}
                         className={`flex h-7 w-7 items-center justify-center rounded-full transition-transform ${
                           active
-                            ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0E182D]'
+                            ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#222B38]'
                             : 'opacity-80 hover:opacity-100'
                         }`}
                       >
@@ -933,10 +938,10 @@ export function BranchManagementModal({
                         data-testid={`branch-icon-${item.id}`}
                         onClick={() => setIconDraft(item.id)}
                         style={{
-                          borderColor: active ? colorDraft : 'rgba(51,65,85,0.7)',
-                          backgroundColor: active ? `${colorDraft}24` : 'rgba(10,18,36,0.8)',
+                          borderColor: active ? colorDraft : '#334155',
+                          backgroundColor: active ? `${colorDraft}24` : '#181F29',
                         }}
-                        className="flex flex-col items-center justify-center gap-1 rounded-xl border py-1.5 text-[9.5px] font-bold text-slate-200 transition-all hover:brightness-110 lg:py-2"
+                        className="flex flex-col items-center justify-center gap-1 rounded-xl border py-1.5 text-[9.5px] font-bold text-slate-200 transition-colors hover:border-slate-500 lg:py-2"
                       >
                         <span style={{ color: active ? colorDraft : '#94A3B8' }}>
                           <BranchConceptGlyph iconId={item.id} className="h-4 w-4" />
@@ -953,7 +958,7 @@ export function BranchManagementModal({
               type="button"
               data-testid="branch-save-customize-btn"
               onClick={handleSaveIdentity}
-              className="mt-3 flex min-h-[34px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#334155] bg-[#7E96B0] px-3 py-1.5 text-xs font-extrabold tracking-wide text-cyan-50 transition-all hover:brightness-115 active:scale-[0.98] lg:min-h-[40px]"
+              className="mt-3 flex min-h-[34px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#7E96B0] bg-[#7E96B0] px-3 py-1.5 text-xs font-extrabold tracking-wide text-[#181F29] transition-colors hover:bg-[#8DA4BD] lg:min-h-[40px]"
             >
               {savedNotice ? (
                 <>
@@ -1006,7 +1011,7 @@ export function BranchManagementModal({
                     <div
                       key={camp.id}
                       data-testid={`branch-campaign-${camp.id}`}
-                      className="rounded-xl border border-[#334155] bg-[#0C1428]/90 p-2.5"
+                      className="rounded-xl border border-[#334155] bg-[#181F29] p-2.5"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -1089,7 +1094,7 @@ export function BranchManagementModal({
                     <div
                       key={track.id}
                       data-testid={`branch-upgrade-track-${track.id}`}
-                      className="rounded-xl border border-[#334155] bg-[#0C1428]/90 p-2.5"
+                      className="rounded-xl border border-[#334155] bg-[#181F29] p-2.5"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-[11px] font-extrabold text-white lg:text-xs">
@@ -1103,9 +1108,9 @@ export function BranchManagementModal({
                         </span>
                       </div>
 
-                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#222B38]">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-amber-400 to-cyan-300 transition-all"
+                          className="h-full rounded-full bg-[#7A9E7E] transition-all"
                           style={{ width: `${Math.max(10, pct)}%` }}
                         />
                       </div>

@@ -1,4 +1,4 @@
-import type { EmpireState, StockQuote } from '../types/game';
+import type { EmpireState, RemoteBusinessRecord, StockQuote } from '../types/game';
 import {
   calculateBusinessHourlyIncome,
   calculateBusinessValuation,
@@ -24,6 +24,7 @@ import { getBlueprintById, IPO_MIN_NET_WORTH } from './catalog';
 import { checkIpoEligibility } from './stockMarket';
 import {
   calculateDailyRentalIncome,
+  calculateDailyRentalMaintenanceCost,
   calculateRentalPropertiesValuation,
 } from './quickActionsEngine';
 import {
@@ -196,12 +197,17 @@ function computeDailyPayrollWithSgk(state: EmpireState): number {
 export function computeExecutiveDashboardMetrics(
   state: EmpireState,
   quotes: StockQuote[],
-  now: number
+  now: number,
+  competitorBusinesses?: RemoteBusinessRecord[]
 ): ExecutiveDashboardMetrics {
   const safeCash = safeNum(state.cash, 0);
   const safeCreditScore = Math.round(safeNum(state.creditScore, 1100));
   const safeGameMinutes = safeNum(state.gameMinutes, 540);
   const businesses = Array.isArray(state.businesses) ? state.businesses : [];
+  const stateWithRivals = {
+    ...state,
+    competitorBusinesses,
+  };
 
   const officeBenefits = calculateOfficeBenefits(state);
   const officeTierIdx = Math.max(
@@ -252,7 +258,7 @@ export function computeExecutiveDashboardMetrics(
       const hourly = Math.max(
         0,
         safeNum(
-          calculateBusinessHourlyIncome(biz, state.activeEvent, now, businesses, state),
+          calculateBusinessHourlyIncome(biz, state.activeEvent, now, businesses, stateWithRivals),
           0
         )
       );
@@ -273,12 +279,13 @@ export function computeExecutiveDashboardMetrics(
   }
 
   const dailyRentalIncome = calculateDailyRentalIncome(state);
+  const dailyRentalMaintenance = calculateDailyRentalMaintenanceCost(state);
   const completedMegaProjectsDailyIncome = getCompletedMegaProjectsDailyIncome(state);
   dailyEstimatedRevenue += dailyRentalIncome + completedMegaProjectsDailyIncome;
 
   const currentInflation = Math.max(1.0, safeNum(state.inflationIndex, 1.0));
   const megaSupplyBonus = getMegaProjectSupplyDiscountBonus(state);
-  dailyRentUtilities = Math.round(dailyRentUtilities * currentInflation);
+  dailyRentUtilities = Math.round(dailyRentUtilities * currentInflation) + dailyRentalMaintenance;
   dailyEstimatedSupply = Math.round(
     dailyEstimatedSupply * currentInflation * Math.max(0.5, 1 - megaSupplyBonus)
   );

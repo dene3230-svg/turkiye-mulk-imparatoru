@@ -1,6 +1,7 @@
 import type {
   BoardContract,
   EmpireState,
+  HiredStaff,
   MegaProjectDef,
   MegaProjectId,
   MegaProjectState,
@@ -8,6 +9,7 @@ import type {
   OperationalCrisisType,
   OwnedBusiness,
   ProgressiveTaxResult,
+  RemoteBusinessRecord,
   WageRaiseRequest,
 } from '../types/game';
 import { getBlueprintById } from './catalog';
@@ -20,6 +22,8 @@ export const HQ_BUREAUCRACY_DAILY_COST_PER_EXTRA_BRANCH = 18_500;
 
 export const CONDITION_WARNING_THRESHOLD = 60;
 export const CONDITION_SUSPEND_THRESHOLD = 25;
+export const GM_WEAR_REDUCTION_RATE = 0.35; // Şehir Genel Müdürü yıpranmayı %35 azaltır
+export const GM_MAINTENANCE_COST_DISCOUNT = 0.20; // Şehir Genel Müdürü bakım maliyetinde %20 indirim sağlar
 
 export const UNMANAGED_EFFICIENCY_CAP = 0.55;
 export const REJECTED_RAISE_EFFICIENCY_CAP = 0.30;
@@ -161,13 +165,27 @@ export function calculateHqBureaucracyDailyCost(branchCount: number): number {
 
 // ── 2. Branch Condition, Depreciation, Maintenance & Equipment Renewal ──────
 
-export function calculateDailyConditionWear(business: OwnedBusiness): number {
+export function hasCityGeneralManager(
+  business: Pick<OwnedBusiness, 'cityPlate'>,
+  cityManagers?: HiredStaff[]
+): boolean {
+  return (cityManagers ?? []).some(
+    (m) => m.role === 'genel_mudur' && m.assignedCityPlate === business.cityPlate
+  );
+}
+
+export function calculateDailyConditionWear(
+  business: OwnedBusiness,
+  hasCityGm = false
+): number {
   const level = Math.max(1, business.level ?? 1);
   const eqLevel = Math.max(1, Math.min(10, business.equipmentLevel ?? 1));
   const staffLoad = Math.min(6, business.employees?.length ?? business.staffCount ?? 0);
   // Base wear 2.4%, increases with branch level & workload, softened by modern equipment -> clamped to 2.0%..4.0%
   const rawWear = 2.4 + (level - 1) * 0.28 + staffLoad * 0.14 - (eqLevel - 1) * 0.18;
-  return Number(Math.max(2.0, Math.min(4.0, rawWear)).toFixed(2));
+  const clampedBase = Math.max(2.0, Math.min(4.0, rawWear));
+  const effectiveWear = hasCityGm ? clampedBase * (1 - GM_WEAR_REDUCTION_RATE) : clampedBase;
+  return Number(effectiveWear.toFixed(2));
 }
 
 export function getConditionPerformanceMultiplier(condition: number): number {
@@ -185,12 +203,17 @@ export function getConditionPerformanceMultiplier(condition: number): number {
   return Number((0.42 + ratio * 0.38).toFixed(3));
 }
 
-export function getMaintenanceRepairCost(business: OwnedBusiness): number {
+export function getMaintenanceRepairCost(
+  business: OwnedBusiness,
+  hasCityGm = false
+): number {
   const bp = getBlueprintById(business.blueprintId);
   const condition = Math.max(0, Math.min(100, business.maintenanceLevel ?? 100));
   const missing = Math.max(10, 100 - condition);
   const base = Math.max(12_000, Math.round((business.purchaseCost || bp?.baseCost || 120_000) * 0.045));
-  return Math.round((base * (missing / 45)) / 500) * 500;
+  const rawCost = base * (missing / 45);
+  const discounted = hasCityGm ? rawCost * (1 - GM_MAINTENANCE_COST_DISCOUNT) : rawCost;
+  return Math.max(500, Math.round(discounted / 500) * 500);
 }
 
 export function getEquipmentRenewalCost(business: OwnedBusiness): number {
@@ -208,14 +231,15 @@ export function getPriceSyncCost(business: OwnedBusiness): number {
 export function performBranchMaintenance(
   state: EmpireState,
   businessId: string
-): { state: EmpireState; ok: boolean; error?: string; cost?: number; newCondition?: number } {
+): { state: EmpireState; ok: boolean; error?: string; cost?: number; newCondition?: number; gmDiscountApplied?: boolean } {
   const biz = state.businesses.find((b) => b.id === businessId);
   if (!biz) return { state, ok: false, error: 'Şube bulunamadı.' };
   const currentCond = Math.round(biz.maintenanceLevel ?? 100);
   if (currentCond >= 99 && !biz.suspendedForMaintenance) {
     return { state, ok: false, error: 'Şube kondisyonu zaten tam durumda (%100).' };
   }
-  const cost = getMaintenanceRepairCost(biz);
+  const hasGm = hasCityGeneralManager(biz, state.cityManagers);
+  const cost = getMaintenanceRepairCost(biz, hasGm);
   if (state.cash < cost) {
     return {
       state,
@@ -242,6 +266,7 @@ export function performBranchMaintenance(
     ok: true,
     cost,
     newCondition: nextCond,
+    gmDiscountApplied: hasGm,
   };
 }
 
@@ -490,8 +515,9 @@ export function resolveRaiseRequest(
 export function calculateRegionalSaturationFactor(
   business: OwnedBusiness,
   allOwnBusinesses: OwnedBusiness[],
-  prestigeMarketTier = 0
-): { multiplier: number; sameSectorNearbyCount: number } {
+  prestigeMarketTier = 0,
+  competitorBusinesses?: RemoteBusinessRecord[]
+): { multiplier: number; sameSectorNearbyCount: number; rivalSameSectorCount: number } {
   let nearbySameSector = 0;
   for (const other of allOwnBusinesses) {
     if (other.id === business.id) continue;
@@ -501,15 +527,33 @@ export function calculateRegionalSaturationFactor(
     nearbySameSector += dist < 0.08 ? 1.2 : 0.75;
   }
 
-  const competitionPressure = Math.max(0, prestigeMarketTier) * 0.04;
-  if (nearbySameSector <= 0 && competitionPressure === 0) {
-    return { multiplier: 1.0, sameSectorNearbyCount: 0 };
+  let rivalWeight = 0;
+  let rivalSameSectorCount = 0;
+  const bizDistrict = (business.districtName ?? '').trim().toLocaleLowerCase('tr-TR');
+  for (const rival of competitorBusinesses ?? []) {
+    if (!rival || rival.id === business.id) continue;
+    if (rival.owner_id && business.ownerId && rival.owner_id === business.ownerId) continue;
+    if (rival.business_type !== business.blueprintId) continue;
+    if (rival.city_plate !== business.cityPlate) continue;
+    rivalSameSectorCount += 1;
+    const dist = Math.hypot((rival.lat ?? 0) - (business.lat ?? 0), (rival.lng ?? 0) - (business.lng ?? 0));
+    const rivalDistrict = (rival.district ?? '').trim().toLocaleLowerCase('tr-TR');
+    const sameDistrict = Boolean(bizDistrict && rivalDistrict && bizDistrict === rivalDistrict);
+    // Same-district or close-proximity rival exerts stronger market share pressure
+    rivalWeight += dist < 0.08 || sameDistrict ? 0.95 : 0.45;
   }
 
-  const rawMult = 1 - nearbySameSector * 0.13 - competitionPressure;
+  const totalCrowdWeight = nearbySameSector + rivalWeight;
+  const competitionPressure = Math.max(0, prestigeMarketTier) * 0.04;
+  if (totalCrowdWeight <= 0 && competitionPressure === 0) {
+    return { multiplier: 1.0, sameSectorNearbyCount: 0, rivalSameSectorCount: 0 };
+  }
+
+  const rawMult = 1 - totalCrowdWeight * 0.12 - competitionPressure;
   return {
-    multiplier: Number(Math.max(0.55, Math.min(1.0, rawMult)).toFixed(3)),
-    sameSectorNearbyCount: Math.ceil(nearbySameSector),
+    multiplier: Number(Math.max(0.5, Math.min(1.0, rawMult)).toFixed(3)),
+    sameSectorNearbyCount: Math.ceil(nearbySameSector) + rivalSameSectorCount,
+    rivalSameSectorCount,
   };
 }
 
@@ -1116,8 +1160,7 @@ export function processHardcoreDailySettlement(params: {
   const dailyHqBureaucracyCost =
     calculateHqBureaucracyDailyCost(params.businesses.length) * daysPassed;
 
-  // 2. Daily Condition Depreciation (2%..4% per day) & <25% Suspension
-  // Executive Genel Müdür overseeing the city provides preventive maintenance; all other branches wear 2%..4%/day.
+  // 2. Daily Condition Depreciation (2%..4%/day; city Genel Müdür cuts wear by 35% instead of free 100%)
   const gmCities = new Set(
     (state.cityManagers ?? [])
       .filter((m) => m.role === 'genel_mudur' && m.assignedCityPlate !== undefined)
@@ -1125,10 +1168,8 @@ export function processHardcoreDailySettlement(params: {
   );
   let nextBusinesses = params.businesses.map((b) => {
     if ((b.constructionDaysRemaining ?? 0) > 0) return b;
-    if (gmCities.has(b.cityPlate)) {
-      return { ...b, maintenanceLevel: 100, suspendedForMaintenance: false };
-    }
-    const wear = calculateDailyConditionWear(b) * daysPassed;
+    const hasCityGm = gmCities.has(b.cityPlate);
+    const wear = calculateDailyConditionWear(b, hasCityGm) * daysPassed;
     const nextMaint = Number(Math.max(0, (b.maintenanceLevel ?? 100) - wear).toFixed(1));
     const suspended = nextMaint < CONDITION_SUSPEND_THRESHOLD;
     return {

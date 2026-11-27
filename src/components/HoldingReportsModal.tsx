@@ -10,7 +10,7 @@ import {
   ThumbsUp,
   X,
 } from 'lucide-react';
-import type { EmpireState } from '../types/game';
+import type { EmpireState, RemoteBusinessRecord, StockQuote } from '../types/game';
 import { formatTL } from '../game/economy';
 import {
   computeHoldingReportsSnapshot,
@@ -22,6 +22,8 @@ import {
 interface HoldingReportsModalProps {
   state: EmpireState;
   now: number;
+  quotes?: StockQuote[];
+  competitorBusinesses?: RemoteBusinessRecord[];
   onClose: () => void;
   onNavigateToBranch: (businessId: string) => void;
   onLaunchBulkAds: () => boolean;
@@ -124,7 +126,7 @@ function SectorDonutChart({ slices }: { slices: SectorDistributionSlice[] }) {
           />
         );
       })}
-      <circle cx="48" cy="48" r="22" fill="#0E172B" />
+      <circle cx="48" cy="48" r="22" fill="#181F29" />
       <text
         x="48"
         y="46"
@@ -154,6 +156,8 @@ const PERIOD_OPTIONS: Array<{ id: ReportPeriodId; label: string }> = [
 export function HoldingReportsModal({
   state,
   now,
+  quotes = [],
+  competitorBusinesses = [],
   onClose,
   onNavigateToBranch,
   onLaunchBulkAds,
@@ -162,7 +166,13 @@ export function HoldingReportsModal({
   const [period, setPeriod] = useState<ReportPeriodId>('24h');
   const [actionToast, setActionToast] = useState<string | null>(null);
 
-  const report = computeHoldingReportsSnapshot(state, period, now);
+  const report = computeHoldingReportsSnapshot(
+    state,
+    period,
+    now,
+    quotes,
+    competitorBusinesses
+  );
   const chart = buildSmoothCurve(report.trendSeries, 240, 82);
   const canAffordAds = report.activeBranchCount > 0 && state.cash >= report.bulkAdCost;
   const canAffordBonus =
@@ -188,15 +198,15 @@ export function HoldingReportsModal({
   return (
     <div
       data-testid="holding-reports-modal"
-      className="fixed inset-0 z-[1055] flex items-center justify-center bg-[#040915]/82 p-1.5 lg:p-5"
+      className="fixed inset-0 z-[1055] flex items-center justify-center bg-black/75 p-1.5 lg:p-5"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#222B38]"
+        className="flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#181F29]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ==================== HEADER + PERIOD FILTER ==================== */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#334155] bg-[#0C1528]/95 px-3 py-1.5 lg:px-5 lg:py-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#334155] bg-[#222B38] px-3 py-1.5 lg:px-5 lg:py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-wide lg:text-base">
               <span className="text-slate-400">İŞLETMELERİM</span>
@@ -212,7 +222,7 @@ export function HoldingReportsModal({
             {/* Period Filter: 24 SAAT | 7 GÜN | 30 GÜN */}
             <div
               data-testid="reports-period-toggle"
-              className="flex items-center gap-0.5 rounded-xl border border-[#334155] bg-[#0A1224] p-0.5"
+              className="flex items-center gap-0.5 rounded-xl border border-[#334155] bg-[#181F29] p-0.5"
             >
               {PERIOD_OPTIONS.map((opt) => {
                 const active = period === opt.id;
@@ -222,9 +232,9 @@ export function HoldingReportsModal({
                     type="button"
                     data-testid={`reports-period-${opt.id}`}
                     onClick={() => setPeriod(opt.id)}
-                    className={`rounded-lg px-2 py-0.5 text-[9.5px] font-extrabold tracking-wide transition-all whitespace-nowrap lg:px-3 lg:py-1 lg:text-xs ${
+                    className={`rounded-lg px-2 py-0.5 text-[9.5px] font-extrabold tracking-wide transition-colors whitespace-nowrap lg:px-3 lg:py-1 lg:text-xs ${
                       active
-                        ? 'bg-[#7E96B0]/15 text-cyan-100  ring-1 ring-cyan-400/70'
+                        ? 'bg-[#7E96B0] text-[#181F29]'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -266,7 +276,7 @@ export function HoldingReportsModal({
               </div>
 
               {/* Revenue, Net Profit, Margin Summary */}
-              <div className="mt-2.5 grid grid-cols-2 gap-2 rounded-xl border border-[#334155] bg-[#0A1326]/85 p-2 lg:p-2.5">
+              <div className="mt-2.5 grid grid-cols-2 gap-2 rounded-xl border border-[#334155] bg-[#181F29] p-2 lg:p-2.5">
                 <div className="min-w-0">
                   <div className="truncate text-[9px] font-semibold text-slate-400 lg:text-[10.5px]">
                     {report.periodTitle}:
@@ -301,10 +311,21 @@ export function HoldingReportsModal({
                     </span>
                   </div>
                 </div>
+                <div className="col-span-2 flex flex-wrap items-center justify-between gap-1 border-t border-[#334155] pt-1.5 text-[9.5px] text-slate-400">
+                  <span>
+                    Toplam Gider:{' '}
+                    <strong data-testid="reports-total-expenses" className="font-mono-num text-[#B86B5E]">
+                      {formatTL(report.totalExpense, true)}
+                    </strong>
+                  </span>
+                  <span data-testid="reports-tax-bracket" className="font-mono-num text-slate-300">
+                    Vergi Dilimi: %{report.progressiveTaxBracketPct}
+                  </span>
+                </div>
               </div>
 
               {/* Smooth Revenue & Net Profit Area/Line Chart */}
-              <div className="mt-2 rounded-xl border border-[#334155] bg-[#0A1326]/80 px-2 pb-1 pt-1.5 lg:mt-2.5 lg:pb-1.5 lg:pt-2">
+              <div className="mt-2 rounded-xl border border-[#334155] bg-[#181F29] px-2 pb-1 pt-1.5 lg:mt-2.5 lg:pb-1.5 lg:pt-2">
                 <svg
                   viewBox="0 0 240 82"
                   preserveAspectRatio="none"
@@ -313,21 +334,21 @@ export function HoldingReportsModal({
                 >
                   <defs>
                     <linearGradient id="repRevArea" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.34" />
-                      <stop offset="55%" stopColor="#22D3EE" stopOpacity="0.22" />
-                      <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.4" />
+                      <stop offset="0%" stopColor="#7E96B0" stopOpacity="0.28" />
+                      <stop offset="60%" stopColor="#7A9E7E" stopOpacity="0.20" />
+                      <stop offset="100%" stopColor="#C8AE7D" stopOpacity="0.28" />
                     </linearGradient>
                     <linearGradient id="repRevStroke" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#38BDF8" />
-                      <stop offset="60%" stopColor="#22D3EE" />
-                      <stop offset="100%" stopColor="#FBBF24" />
+                      <stop offset="0%" stopColor="#7E96B0" />
+                      <stop offset="60%" stopColor="#7A9E7E" />
+                      <stop offset="100%" stopColor="#C8AE7D" />
                     </linearGradient>
                   </defs>
                   <path d={chart.revArea} fill="url(#repRevArea)" />
                   <path
                     d={chart.profLine}
                     fill="none"
-                    stroke="#34D399"
+                    stroke="#7A9E7E"
                     strokeWidth="1.6"
                     strokeDasharray="4 3"
                     opacity="0.85"
@@ -339,7 +360,7 @@ export function HoldingReportsModal({
                     strokeWidth="2.4"
                     strokeLinecap="round"
                   />
-                  <circle cx={chart.lastRev.x} cy={chart.lastRev.y} r="3.2" fill="#FBBF24" />
+                  <circle cx={chart.lastRev.x} cy={chart.lastRev.y} r="3.2" fill="#C8AE7D" />
                 </svg>
                 <div className="mt-1 flex items-center justify-between text-[8px] font-medium text-slate-400 lg:text-[9.5px]">
                   {report.trendSeries.map((pt) => (
@@ -354,7 +375,11 @@ export function HoldingReportsModal({
               <div className="text-[9.5px] font-extrabold tracking-wider text-slate-300 lg:text-[10.5px]">
                 GİDER KIRILIMI
               </div>
-              <div className="mt-1.5 grid grid-cols-3 gap-1 text-[9.5px] lg:text-[11px]">
+              <div
+                className={`mt-1.5 grid gap-1 text-[9.5px] lg:text-[11px] ${
+                  report.expenseBreakdown.hqBureaucracyCost > 0 ? 'grid-cols-4' : 'grid-cols-3'
+                }`}
+              >
                 <div>
                   <div className="truncate text-slate-300">Personel</div>
                   <div
@@ -365,15 +390,15 @@ export function HoldingReportsModal({
                   </div>
                 </div>
                 <div>
-                  <div className="truncate text-slate-300">Kira/Sabit</div>
+                  <div className="truncate text-slate-300">Kira/Vergi</div>
                   <div
                     data-testid="reports-exp-rent-pct"
-                    className="font-mono-num font-extrabold text-[#C8AE7D]"
+                    className="font-mono-num font-extrabold text-slate-200"
                   >
                     %{report.expenseBreakdown.rentTaxPct}
                   </div>
                 </div>
-                <div className="text-right">
+                <div className={report.expenseBreakdown.hqBureaucracyCost > 0 ? '' : 'text-right'}>
                   <div className="truncate text-slate-300">Tedarik</div>
                   <div
                     data-testid="reports-exp-supply-pct"
@@ -382,21 +407,44 @@ export function HoldingReportsModal({
                     %{report.expenseBreakdown.supplyOpsPct}
                   </div>
                 </div>
+                {report.expenseBreakdown.hqBureaucracyCost > 0 && (
+                  <div className="text-right">
+                    <div className="truncate text-slate-300">Merkez</div>
+                    <div
+                      data-testid="reports-exp-hq-pct"
+                      className="font-mono-num font-extrabold text-[#C8AE7D]"
+                    >
+                      %{report.expenseBreakdown.hqBureaucracyPct}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="mt-1.5 flex h-2.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
-                <div
-                  className="h-full bg-[#7E96B0] transition-all"
-                  style={{ width: `${report.expenseBreakdown.personnelPct}%` }}
-                />
-                <div
-                  className="h-full bg-[#C8AE7D] transition-all"
-                  style={{ width: `${report.expenseBreakdown.rentTaxPct}%` }}
-                />
-                <div
-                  className="h-full bg-[#B86B5E] transition-all"
-                  style={{ width: `${report.expenseBreakdown.supplyOpsPct}%` }}
-                />
+              <div className="mt-1.5 flex h-2.5 w-full overflow-hidden rounded-full bg-[#181F29]">
+                {report.expenseBreakdown.personnelPct > 0 && (
+                  <div
+                    className="h-full bg-[#7E96B0] transition-all"
+                    style={{ width: `${report.expenseBreakdown.personnelPct}%` }}
+                  />
+                )}
+                {report.expenseBreakdown.rentTaxPct > 0 && (
+                  <div
+                    className="h-full bg-[#3E4C5E] transition-all"
+                    style={{ width: `${report.expenseBreakdown.rentTaxPct}%` }}
+                  />
+                )}
+                {report.expenseBreakdown.supplyOpsPct > 0 && (
+                  <div
+                    className="h-full bg-[#B86B5E] transition-all"
+                    style={{ width: `${report.expenseBreakdown.supplyOpsPct}%` }}
+                  />
+                )}
+                {report.expenseBreakdown.hqBureaucracyPct > 0 && (
+                  <div
+                    className="h-full bg-[#C8AE7D] transition-all"
+                    style={{ width: `${report.expenseBreakdown.hqBureaucracyPct}%` }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -437,10 +485,8 @@ export function HoldingReportsModal({
                       <div
                         key={alert.id}
                         data-testid={`reports-alert-${alert.type}`}
-                        className={`rounded-xl border p-2 lg:p-2.5 ${
-                          isWarn
-                            ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]'
-                            : 'border-[#7A9E7E]/45 bg-[#7A9E7E]'
+                        className={`rounded-xl border bg-[#181F29] p-2 lg:p-2.5 ${
+                          isWarn ? 'border-[#C8AE7D]/55' : 'border-[#7A9E7E]/55'
                         }`}
                       >
                         <div className="flex items-start gap-1.5 lg:gap-2">
@@ -453,7 +499,7 @@ export function HoldingReportsModal({
                             <div className="truncate text-[10px] font-extrabold text-white lg:text-xs">
                               {alert.headline}
                             </div>
-                            <p className="mt-0.5 text-[9px] leading-snug text-slate-200 lg:text-[11px]">
+                            <p className="mt-0.5 text-[9px] leading-snug text-slate-300 lg:text-[11px]">
                               {alert.detail}
                             </p>
                           </div>
@@ -464,10 +510,10 @@ export function HoldingReportsModal({
                             type="button"
                             data-testid={`reports-alert-action-${alert.type}`}
                             onClick={() => onNavigateToBranch(alert.businessId)}
-                            className={`rounded-lg border px-2 py-0.5 text-[9px] font-extrabold tracking-wide transition-all hover:brightness-125 lg:px-2.5 lg:py-1 lg:text-[10.5px] ${
+                            className={`rounded-lg border px-2 py-0.5 text-[9px] font-extrabold tracking-wide transition-colors lg:px-2.5 lg:py-1 lg:text-[10.5px] ${
                               isWarn
-                                ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-amber-100'
-                                : 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-emerald-100'
+                                ? 'border-[#C8AE7D]/50 bg-[#C8AE7D]/20 text-[#C8AE7D] hover:bg-[#C8AE7D]/30'
+                                : 'border-[#7A9E7E]/50 bg-[#7A9E7E]/20 text-[#7A9E7E] hover:bg-[#7A9E7E]/30'
                             }`}
                           >
                             {alert.actionLabel}
@@ -481,7 +527,7 @@ export function HoldingReportsModal({
             </div>
 
             {/* Bottom Customer Satisfaction & Brand Recognition Bars */}
-            <div className="mt-2 space-y-1.5 rounded-xl border border-[#334155] bg-[#0A1326]/85 p-2 lg:mt-3 lg:space-y-2 lg:p-2.5">
+            <div className="mt-2 space-y-1.5 rounded-xl border border-[#334155] bg-[#181F29] p-2 lg:mt-3 lg:space-y-2 lg:p-2.5">
               <div>
                 <div className="flex items-center justify-between text-[10px] lg:text-xs">
                   <span className="flex items-center gap-1.5 font-bold text-slate-200">
@@ -538,7 +584,7 @@ export function HoldingReportsModal({
               </div>
 
               {/* Donut Chart + Sector Legend */}
-              <div className="mt-2 flex items-center gap-2 rounded-xl border border-[#334155] bg-[#0A1326]/85 p-2 lg:mt-2.5 lg:gap-2.5 lg:p-2.5">
+              <div className="mt-2 flex items-center gap-2 rounded-xl border border-[#334155] bg-[#181F29] p-2 lg:mt-2.5 lg:gap-2.5 lg:p-2.5">
                 <SectorDonutChart slices={report.sectorSlices} />
                 <div className="min-w-0 flex-1 space-y-1.5">
                   {report.sectorSlices.length === 0 ? (
@@ -593,16 +639,20 @@ export function HoldingReportsModal({
                 data-testid="reports-bulk-ads-btn"
                 disabled={!canAffordAds}
                 onClick={triggerBulkAds}
-                className={`flex min-h-[34px] w-full flex-col items-center justify-center rounded-xl border px-2.5 py-1 transition-all lg:min-h-[44px] lg:px-3 lg:py-1.5 ${
+                className={`flex min-h-[34px] w-full flex-col items-center justify-center rounded-xl border px-2.5 py-1 transition-colors lg:min-h-[44px] lg:px-3 lg:py-1.5 ${
                   canAffordAds
-                    ? 'border-[#334155] bg-[#7E96B0] text-cyan-50  hover:brightness-115 active:scale-[0.98]'
+                    ? 'border-[#7E96B0] bg-[#7E96B0] text-[#181F29] hover:bg-[#8DA4BD]'
                     : 'cursor-not-allowed border-[#334155] bg-[#1D2532] text-slate-500'
                 }`}
               >
                 <span className="text-[9.5px] font-extrabold tracking-wide lg:text-xs">
                   TÜM ŞUBELERE REKLAM VER
                 </span>
-                <span className="font-mono-num text-[9px] font-bold text-[#7E96B0] lg:text-[11px]">
+                <span
+                  className={`font-mono-num text-[9px] font-bold lg:text-[11px] ${
+                    canAffordAds ? 'text-[#181F29]/80' : 'text-slate-500'
+                  }`}
+                >
                   ({formatTL(report.bulkAdCost)})
                 </span>
               </button>
@@ -612,16 +662,20 @@ export function HoldingReportsModal({
                 data-testid="reports-bulk-bonus-btn"
                 disabled={!canAffordBonus}
                 onClick={triggerBulkBonus}
-                className={`flex min-h-[34px] w-full flex-col items-center justify-center rounded-xl border px-2.5 py-1 transition-all lg:min-h-[44px] lg:px-3 lg:py-1.5 ${
+                className={`flex min-h-[34px] w-full flex-col items-center justify-center rounded-xl border px-2.5 py-1 transition-colors lg:min-h-[44px] lg:px-3 lg:py-1.5 ${
                   canAffordBonus
-                    ? 'border-[#C8AE7D]/45 bg-[#C8AE7D] text-amber-50  hover:brightness-115 active:scale-[0.98]'
+                    ? 'border-[#C8AE7D] bg-[#C8AE7D] text-[#181F29] hover:bg-[#D2BB8E]'
                     : 'cursor-not-allowed border-[#334155] bg-[#1D2532] text-slate-500'
                 }`}
               >
                 <span className="text-[9.5px] font-extrabold tracking-wide lg:text-xs">
                   TÜM PERSONELE PRİM DAĞIT
                 </span>
-                <span className="font-mono-num text-[9px] font-bold text-[#C8AE7D] lg:text-[11px]">
+                <span
+                  className={`font-mono-num text-[9px] font-bold lg:text-[11px] ${
+                    canAffordBonus ? 'text-[#181F29]/80' : 'text-slate-500'
+                  }`}
+                >
                   ({formatTL(report.bulkBonusCost)})
                 </span>
               </button>

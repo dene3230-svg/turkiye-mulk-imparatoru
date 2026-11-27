@@ -274,7 +274,7 @@ export function FinansWorkspace({
               type="button"
               data-testid="finance-btn-create-bank"
               onClick={() => onOpenBanking('own-bank')}
-              className="flex min-h-[32px] flex-col items-center justify-center rounded-xl border border-slate-600/80 bg-[#1A243B]/90 px-1.5 py-1 text-center transition-all hover:border-[#C8AE7D]/45 hover:bg-[#222E4A] active:scale-[0.98] lg:min-h-[40px]"
+              className="flex min-h-[32px] flex-col items-center justify-center rounded-xl border border-[#334155] bg-[#181F29] px-1.5 py-1 text-center transition-colors hover:border-[#C8AE7D]/45 hover:bg-[#2A3545] lg:min-h-[40px]"
             >
               <span className="text-[9px] font-extrabold leading-none tracking-wide text-white lg:text-[11px]">
                 BANKA KUR
@@ -357,12 +357,12 @@ export function FinansWorkspace({
                 {fm.miniBars.map((bar, idx) => (
                   <div key={`${bar.label}-${idx}`} className="flex h-full items-end gap-0.5">
                     <div
-                      className="w-1.5 rounded-t-sm bg-gradient-to-t from-cyan-500 to-sky-300 lg:w-2"
+                      className="w-1.5 rounded-t-sm bg-[#7E96B0] lg:w-2"
                       style={{ height: `${bar.incomePct}%` }}
                       title={`${bar.label} Gelir: ${formatTL(bar.income, true)}`}
                     />
                     <div
-                      className="w-1.5 rounded-t-sm bg-gradient-to-t from-rose-600 to-rose-400 lg:w-2"
+                      className="w-1.5 rounded-t-sm bg-[#B86B5E] lg:w-2"
                       style={{ height: `${bar.expensePct}%` }}
                       title={`${bar.label} Gider: ${formatTL(bar.expense, true)}`}
                     />
@@ -450,10 +450,10 @@ export function FinansWorkspace({
                   onOpenDayEnd();
                 }
               }}
-              className={`mt-1.5 flex min-h-[28px] w-full items-center justify-center rounded-xl px-3 py-1 text-[9.5px] font-extrabold tracking-wide transition-all active:scale-[0.98] lg:mt-2 lg:min-h-[34px] lg:text-xs ${
+              className={`mt-1.5 flex min-h-[28px] w-full items-center justify-center rounded-xl px-3 py-1 text-[9.5px] font-extrabold tracking-wide transition-colors lg:mt-2 lg:min-h-[34px] lg:text-xs ${
                 fm.pendingDayEndCount > 0
-                  ? 'border border-[#334155] bg-[#7A9E7E] text-cyan-100  hover:brightness-110'
-                  : 'border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] hover:bg-[#7E96B0]/15'
+                  ? 'border border-[#7A9E7E] bg-[#7A9E7E] text-[#181F29] hover:bg-[#8BAE8F]'
+                  : 'border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] hover:bg-[#7E96B0]/25'
               }`}
             >
               HASILATI AKTAR
@@ -496,7 +496,7 @@ export function FinansWorkspace({
           {/* Live BIST 100 Sparkline Box */}
           <div
             data-testid="finance-bist-sparkline"
-            className="mt-1.5 rounded-xl border border-[#334155] bg-[#0D132B]/85 px-2.5 py-1.5 lg:mt-2.5 lg:px-3 lg:py-2.5"
+            className="mt-1.5 rounded-xl border border-[#334155] bg-[#181F29] px-2.5 py-1.5 lg:mt-2.5 lg:px-3 lg:py-2.5"
           >
             <div className="flex items-center justify-between gap-2 text-[9.5px] lg:text-xs">
               <span className="font-bold text-slate-200">
@@ -590,6 +590,7 @@ export function FinansWorkspace({
 interface BusinessesWorkspaceProps {
   state: EmpireState;
   competitorBusinesses: RemoteBusinessRecord[];
+  stockQuotes?: StockQuote[];
   now: number;
   onGoMapNewBranch: () => void;
   onOpenHr: (businessId?: string) => void;
@@ -643,6 +644,7 @@ function StatusDotsRow({
 export function BusinessesWorkspace({
   state,
   competitorBusinesses,
+  stockQuotes = [],
   now,
   onGoMapNewBranch,
   onOpenHr,
@@ -692,7 +694,7 @@ export function BusinessesWorkspace({
       {/* ==================== TOP ACTION BAR (NO ŞUBE KOTASI!) ==================== */}
       <div
         data-testid="businesses-top-action-bar"
-        className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 rounded-[20px] border border-[#334155] bg-[#101A30]/90 px-2.5 py-1.5 lg:gap-2 lg:px-4 lg:py-2.5"
+        className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 rounded-[20px] border border-[#334155] bg-[#222B38] px-2.5 py-1.5 lg:gap-2 lg:px-4 lg:py-2.5"
       >
         <div className="flex flex-wrap items-center gap-1.5 lg:gap-2">
           <button
@@ -769,7 +771,7 @@ export function BusinessesWorkspace({
             </div>
 
             {/* Lead Branch Summary Box */}
-            <div className="rounded-xl border border-[#334155] bg-[#0B1427]/85 px-2.5 py-2 lg:px-3 lg:py-2.5">
+            <div className="rounded-xl border border-[#334155] bg-[#181F29] px-2.5 py-2 lg:px-3 lg:py-2.5">
               {metrics.leadBranch ? (
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -848,7 +850,7 @@ export function BusinessesWorkspace({
             </div>
 
             {/* 3 Summary KPI Figures */}
-            <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[#334155] bg-[#0B1427]/85 p-2 lg:gap-2 lg:p-2.5">
+            <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[#334155] bg-[#181F29] p-2 lg:gap-2 lg:p-2.5">
               <div className="min-w-0">
                 <div className="truncate text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
                   Günlük Ciro
@@ -950,7 +952,7 @@ export function BusinessesWorkspace({
             </div>
 
             {/* Compact Staff Rows */}
-            <div className="space-y-1 rounded-xl border border-[#334155] bg-[#0B1326]/85 p-2">
+            <div className="space-y-1 rounded-xl border border-[#334155] bg-[#181F29] p-2">
               {visibleStaff.length === 0 ? (
                 <div className="py-2 text-center text-[10px] text-slate-400 lg:text-xs">
                   Henüz atanmış personel bulunmuyor. İK menüsünden ekip kurabilirsiniz.
@@ -959,7 +961,7 @@ export function BusinessesWorkspace({
                 visibleStaff.map((member) => (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between gap-2 rounded-lg bg-[#101C36]/75 px-2 py-1 text-[9.5px] lg:px-2.5 lg:py-1.5 lg:text-xs"
+                    className="flex items-center justify-between gap-2 rounded-lg bg-[#222B38] px-2 py-1 text-[9.5px] lg:px-2.5 lg:py-1.5 lg:text-xs"
                   >
                     <div className="min-w-0 flex-1 truncate">
                       <span className="font-bold text-white">{member.name}</span>
@@ -1012,7 +1014,7 @@ export function BusinessesWorkspace({
             </div>
 
             {/* Split Metrics + Colored Dot Indicators */}
-            <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#334155] bg-[#0B1427]/85 p-2 lg:gap-3 lg:p-2.5">
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#334155] bg-[#181F29] p-2 lg:gap-3 lg:p-2.5">
               <div className="space-y-1 text-[9.5px] lg:text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Boşta Personel:</span>
@@ -1109,6 +1111,8 @@ export function BusinessesWorkspace({
         <HoldingReportsModal
           state={state}
           now={now}
+          quotes={stockQuotes}
+          competitorBusinesses={competitorBusinesses}
           onClose={() => setFlowStep('overview')}
           onNavigateToBranch={openBranchManagement}
           onLaunchBulkAds={onLaunchHoldingBulkAds}
@@ -1200,13 +1204,12 @@ export function OfficeWorkspace({
           {/* Architectural Interior Preview Card */}
           <div
             data-testid="office-interior-preview"
-            className="relative min-h-[96px] flex-[1.15] overflow-hidden rounded-[20px] border border-[#334155] bg-[#0D1628]"
+            className="relative min-h-[96px] flex-[1.15] overflow-hidden rounded-[20px] border border-[#334155] bg-[#181F29]"
           >
             <OfficeInteriorPreview tierId={currentTier.id} />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#181F29]/85 to-transparent" />
-            <div className="absolute bottom-1.5 left-2 right-2 flex items-center justify-between text-[8.5px] font-bold text-slate-200 lg:bottom-2 lg:left-3 lg:right-3 lg:text-[10px]">
-              <span className="truncate drop-shadow">{currentTier.subtitle}</span>
-              <span className="shrink-0 rounded-md bg-black/70 px-1.5 py-0.5 font-mono-num text-[#C8AE7D] border border-[#C8AE7D]/45">
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-[#334155]/70 bg-[#181F29]/90 px-2.5 py-1.5 text-[8.5px] font-bold text-slate-200 lg:px-3 lg:py-2 lg:text-[10px]">
+              <span className="truncate">{currentTier.subtitle}</span>
+              <span className="shrink-0 rounded-md border border-[#C8AE7D]/45 bg-[#222B38] px-1.5 py-0.5 font-mono-num text-[#C8AE7D]">
                 Tanınırlık %{metrics.brandRecognitionPct}
               </span>
             </div>
@@ -1244,7 +1247,7 @@ export function OfficeWorkspace({
           {/* Active Office Bonuses Card */}
           <div
             data-testid="office-active-bonuses"
-            className="shrink-0 rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
+            className="shrink-0 rounded-[20px] border border-[#334155] bg-[#222B38] p-2 lg:p-3.5"
           >
             <div className="text-[9.5px] font-extrabold tracking-wide text-slate-100 lg:text-[11px]">
               AKTİF OFİS BONUSLARI
@@ -1297,7 +1300,7 @@ export function OfficeWorkspace({
                 <div
                   key={item.id}
                   data-testid={`office-equip-card-${item.id}`}
-                  className="flex min-h-0 flex-1 items-center justify-between gap-1.5 rounded-[20px] border border-[#334155] bg-[#111B30]/85 px-2 py-1.5 transition-colors hover:border-[#334155] lg:gap-2.5 lg:px-3.5 lg:py-2.5"
+                  className="flex min-h-0 flex-1 items-center justify-between gap-1.5 rounded-[20px] border border-[#334155] bg-[#222B38] px-2 py-1.5 transition-colors hover:border-[#475569] lg:gap-2.5 lg:px-3.5 lg:py-2.5"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:gap-3">
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-10 lg:w-10">
@@ -1383,7 +1386,7 @@ export function OfficeWorkspace({
           {/* Card A — Akıllı Telefonum */}
           <div
             data-testid="office-card-phone"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2 lg:p-3.5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
@@ -1424,7 +1427,7 @@ export function OfficeWorkspace({
           {/* Card B — Ofis Seviyesi Yükselt */}
           <div
             data-testid="office-card-tier-upgrade"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2 lg:p-3.5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
@@ -1484,11 +1487,11 @@ export function OfficeWorkspace({
           {/* Card C — Kişisel Varlıklar */}
           <div
             data-testid="office-card-assets"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2 lg:p-3.5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-fuchsia-400/35 bg-fuchsia-500/15 text-[#7E96B0] lg:h-10 lg:w-10">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D] lg:h-10 lg:w-10">
                   <Car className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <div className="min-w-0 leading-tight">
@@ -1498,7 +1501,7 @@ export function OfficeWorkspace({
                   <div className="mt-0.5 truncate text-[9px] text-slate-300 lg:text-[11px]">
                     Araçlar & Gayrimenkul
                     {ownedAssetsCount > 0 && (
-                      <span className="ml-1 font-mono-num text-fuchsia-300">
+                      <span className="ml-1 font-mono-num text-[#C8AE7D]">
                         · {ownedAssetsCount} varlık
                         <span className="hidden lg:inline">
                           {' '}
@@ -1509,7 +1512,7 @@ export function OfficeWorkspace({
                   </div>
                 </div>
               </div>
-              <span className="font-mono-num text-[11px] font-extrabold text-fuchsia-300 lg:text-xs">
+              <span className="font-mono-num text-[11px] font-extrabold text-[#C8AE7D] lg:text-xs">
                 C
               </span>
             </div>

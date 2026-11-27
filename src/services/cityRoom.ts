@@ -24,6 +24,22 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // Runtime schema cache so optional alias columns (e.g. `name` if table uses `business_name`)
 // are stripped automatically without repeating failed requests.
 const missingBusinessesColumns = new Set<string>();
+let businessesTableUnavailable = false;
+let businessesWriteDisabled = false;
+
+function isBusinessesTableMissingError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const obj = error as { code?: string; status?: number; message?: string };
+  const code = String(obj.code ?? '');
+  const msg = String(obj.message ?? '').toLowerCase();
+  return (
+    obj.status === 404 ||
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    msg.includes('could not find the table') ||
+    msg.includes('relation "public.businesses" does not exist')
+  );
+}
 
 /**
  * Ensures any local business ID (including legacy `biz-...` strings) becomes a valid,
@@ -566,6 +582,9 @@ function stripMissingColumnsFromRow(
 async function upsertBusinessesWithSchemaFallback(
   records: RemoteBusinessRecord[]
 ): Promise<{ ok: boolean; error?: string }> {
+  if (businessesTableUnavailable || businessesWriteDisabled) {
+    return { ok: false };
+  }
   const baseRows = records.map(buildBusinessesUpsertPayload);
   let attempts = 0;
 
@@ -577,18 +596,24 @@ async function upsertBusinessesWithSchemaFallback(
       return { ok: true };
     }
 
+    if (isBusinessesTableMissingError(error)) {
+      businessesTableUnavailable = true;
+      return { ok: false };
+    }
+
     const missingCol = extractMissingColumnName(error.message ?? '');
     if (missingCol && !missingBusinessesColumns.has(missingCol)) {
       missingBusinessesColumns.add(missingCol);
       continue;
     }
 
-    const msg = formatSupabaseError(error, 'İşletme Supabase veritabanına kaydedilemedi');
-    console.warn('[Supabase businesses UPSERT hatası]', error);
-    return { ok: false, error: msg };
+    // Schema constraint / RLS / 400 mismatch: silence repeated writes this session and continue locally
+    businessesWriteDisabled = true;
+    return { ok: false, error: formatSupabaseError(error, 'Yerel mod aktif') };
   }
 
-  return { ok: false, error: 'Supabase tablo şeması uyumsuz (businesses).' };
+  businessesWriteDisabled = true;
+  return { ok: false };
 }
 
 /**
@@ -601,15 +626,19 @@ export async function fetchAllWorldBusinesses(): Promise<{
   connected: boolean;
   error?: string;
 }> {
+  if (businessesTableUnavailable) {
+    return { records: [], rawTotal: 0, connected: false };
+  }
   return withSafeTimeout(
     async () => {
       try {
         const { data, error } = await supabase.from('businesses').select('*');
 
         if (error) {
-          const msg = formatSupabaseError(error, 'Supabase işletmeler okunamadı');
-          console.warn('[Supabase businesses SELECT hatası]', error);
-          return { records: [], rawTotal: 0, connected: false, error: msg };
+          if (isBusinessesTableMissingError(error)) {
+            businessesTableUnavailable = true;
+          }
+          return { records: [], rawTotal: 0, connected: false };
         }
 
         if (!Array.isArray(data)) {
@@ -621,14 +650,12 @@ export async function fetchAllWorldBusinesses(): Promise<{
           .filter((item): item is RemoteBusinessRecord => item !== null);
 
         return { records, rawTotal: data.length, connected: true };
-      } catch (err) {
-        const msg = formatSupabaseError(err, 'Supabase işletmeler okunamadı');
-        console.warn('[Supabase businesses SELECT istisnası]', err);
-        return { records: [], rawTotal: 0, connected: false, error: msg };
+      } catch {
+        return { records: [], rawTotal: 0, connected: false };
       }
     },
     6500,
-    { records: [], rawTotal: 0, connected: false, error: 'Supabase yanıt süresi aşıldı.' },
+    { records: [], rawTotal: 0, connected: false },
     'fetchAllWorldBusinesses'
   );
 }
@@ -636,6 +663,9 @@ export async function fetchAllWorldBusinesses(): Promise<{
 export async function fetchCityBusinesses(
   cityPlate: number
 ): Promise<{ records: RemoteBusinessRecord[]; connected: boolean; error?: string }> {
+  if (businessesTableUnavailable) {
+    return { records: [], connected: false };
+  }
   try {
     const { data, error } = await supabase
       .from('businesses')
@@ -644,9 +674,10 @@ export async function fetchCityBusinesses(
       .limit(250);
 
     if (error) {
-      const msg = formatSupabaseError(error, 'Şehir işletmeleri okunamadı');
-      console.error('[Supabase businesses city SELECT hatası]', error);
-      return { records: [], connected: false, error: msg };
+      if (isBusinessesTableMissingError(error)) {
+        businessesTableUnavailable = true;
+      }
+      return { records: [], connected: false };
     }
 
     if (!Array.isArray(data)) {
@@ -658,10 +689,8 @@ export async function fetchCityBusinesses(
       .filter((item): item is RemoteBusinessRecord => item !== null);
 
     return { records, connected: true };
-  } catch (err) {
-    const msg = formatSupabaseError(err, 'Şehir işletmeleri okunamadı');
-    console.error('[Supabase businesses city SELECT istisnası]', err);
-    return { records: [], connected: false, error: msg };
+  } catch {
+    return { records: [], connected: false };
   }
 }
 
@@ -738,17 +767,13 @@ export function subscribeToGlobalBusinesses(callbacks: {
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           callbacks.onStatus?.('offline');
           if (err) {
-            const msg = formatSupabaseError(err, `Realtime kanal hatası (${status})`);
-            console.warn('[Supabase Realtime businesses hatası]', status, err);
-            callbacks.onError?.(msg);
+            callbacks.onError?.(formatSupabaseError(err, `Realtime kanal hatası (${status})`));
           }
         }
       });
   } catch (err) {
     callbacks.onStatus?.('offline');
-    const msg = formatSupabaseError(err, 'Realtime bağlantısı kurulamadı');
-    console.warn('[Supabase Realtime başlatma hatası]', err);
-    callbacks.onError?.(msg);
+    callbacks.onError?.(formatSupabaseError(err, 'Realtime bağlantısı kurulamadı'));
   }
 
   if (typeof BroadcastChannel !== 'undefined') {
@@ -861,6 +886,10 @@ export async function updateBusinessInRoom(
     dbPatch.name = patch.business_name;
   }
 
+  if (businessesTableUnavailable || businessesWriteDisabled) {
+    return { ok: false };
+  }
+
   try {
     let attempts = 0;
     while (attempts < 6) {
@@ -869,20 +898,22 @@ export async function updateBusinessInRoom(
       if (Object.keys(filtered).length === 0) return { ok: true };
       const { error } = await supabase.from('businesses').update(filtered).eq('id', uuidId);
       if (!error) return { ok: true };
+      if (isBusinessesTableMissingError(error)) {
+        businessesTableUnavailable = true;
+        return { ok: false };
+      }
       const missingCol = extractMissingColumnName(error.message ?? '');
       if (missingCol && !missingBusinessesColumns.has(missingCol)) {
         missingBusinessesColumns.add(missingCol);
         continue;
       }
-      const msg = formatSupabaseError(error, 'İşletme Supabase üzerinde güncellenemedi');
-      console.warn('[Supabase businesses UPDATE hatası]', error);
-      return { ok: false, error: msg };
+      businessesWriteDisabled = true;
+      return { ok: false };
     }
-    return { ok: false, error: 'İşletme güncellenemedi.' };
-  } catch (err) {
-    const msg = formatSupabaseError(err, 'İşletme Supabase üzerinde güncellenemedi');
-    console.warn('[Supabase businesses UPDATE istisnası]', err);
-    return { ok: false, error: msg };
+    businessesWriteDisabled = true;
+    return { ok: false };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -891,17 +922,50 @@ export async function removeBusinessFromRoom(
 ): Promise<{ ok: boolean; error?: string }> {
   const uuidId = ensureUuidForBusinessId(id);
   postLocalBusinessBroadcast({ type: 'delete', id: uuidId });
+  if (businessesTableUnavailable) return { ok: false };
   try {
     const { error } = await supabase.from('businesses').delete().eq('id', uuidId);
     if (error) {
-      const msg = formatSupabaseError(error, 'İşletme Supabase üzerinden silinemedi');
-      console.warn('[Supabase businesses DELETE hatası]', error);
-      return { ok: false, error: msg };
+      if (isBusinessesTableMissingError(error)) {
+        businessesTableUnavailable = true;
+      }
+      return { ok: false };
     }
     return { ok: true };
-  } catch (err) {
-    const msg = formatSupabaseError(err, 'İşletme Supabase üzerinden silinemedi');
-    console.warn('[Supabase businesses DELETE istisnası]', err);
-    return { ok: false, error: msg };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Deletes all businesses belonging to the resetting player from Supabase `public.businesses`
+ * and broadcasts local tab deletion events so old pins never remain on the shared world map.
+ */
+export async function deletePlayerBusinessesFromRoom(
+  ownerId: string,
+  businessIds: string[] = []
+): Promise<void> {
+  const uniqueUuids = Array.from(
+    new Set(businessIds.filter(Boolean).map((id) => ensureUuidForBusinessId(id)))
+  );
+  for (const uuid of uniqueUuids) {
+    postLocalBusinessBroadcast({ type: 'delete', id: uuid });
+  }
+  if (businessesTableUnavailable) return;
+
+  try {
+    const cleanOwner = String(ownerId ?? '').trim();
+    if (cleanOwner) {
+      const { error } = await supabase.from('businesses').delete().eq('owner_id', cleanOwner);
+      if (error && isBusinessesTableMissingError(error)) {
+        businessesTableUnavailable = true;
+        return;
+      }
+    }
+    if (uniqueUuids.length > 0) {
+      await supabase.from('businesses').delete().in('id', uniqueUuids);
+    }
+  } catch {
+    // silent fallback in offline/demo mode
   }
 }

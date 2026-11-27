@@ -114,6 +114,7 @@ export interface RentalCatalogDef {
   kind: RentalPropertyKind;
   purchasePrice: number;
   baseMonthlyRent: number;
+  dailyMaintenanceCost: number; // Aidat, sigorta ve periyodik bakım gideri (boşken de ödenir)
   offers: Array<{
     tenantName: string;
     sectorLabel: string;
@@ -123,6 +124,7 @@ export interface RentalCatalogDef {
   }>;
 }
 
+// v1.7.2 Balanced commercial real estate yields: ~2.5% - 4.2% net monthly yield after aidat/bakım & vacancy risk
 export const RENTAL_PROPERTY_CATALOG: RentalCatalogDef[] = [
   {
     catalogId: 'rent-kadikoy-shop',
@@ -130,10 +132,11 @@ export const RENTAL_PROPERTY_CATALOG: RentalCatalogDef[] = [
     cityLabel: 'İstanbul • Kadıköy',
     kind: 'dukkan',
     purchasePrice: 850_000,
-    baseMonthlyRent: 96_000,
+    baseMonthlyRent: 31_000,
+    dailyMaintenanceCost: 180,
     offers: [
       { tenantName: 'Bora Optik & Lens', sectorLabel: 'Perakende', rentFactor: 1.0, leaseDays: 30, reliabilityPct: 95 },
-      { tenantName: 'Ege Gurme Şarküteri', sectorLabel: 'Gıda', rentFactor: 1.12, leaseDays: 20, reliabilityPct: 87 },
+      { tenantName: 'Ege Gurme Şarküteri', sectorLabel: 'Gıda', rentFactor: 1.1, leaseDays: 20, reliabilityPct: 84 },
     ],
   },
   {
@@ -142,10 +145,11 @@ export const RENTAL_PROPERTY_CATALOG: RentalCatalogDef[] = [
     cityLabel: 'Ankara • Çankaya',
     kind: 'daire',
     purchasePrice: 620_000,
-    baseMonthlyRent: 68_000,
+    baseMonthlyRent: 21_500,
+    dailyMaintenanceCost: 130,
     offers: [
       { tenantName: 'Dr. Selin Arslan', sectorLabel: 'Konut Kiracısı', rentFactor: 1.0, leaseDays: 45, reliabilityPct: 98 },
-      { tenantName: 'Anadolu Mühendislik Lojman', sectorLabel: 'Kurumsal Konut', rentFactor: 1.09, leaseDays: 30, reliabilityPct: 92 },
+      { tenantName: 'Anadolu Mühendislik Lojman', sectorLabel: 'Kurumsal Konut', rentFactor: 1.08, leaseDays: 30, reliabilityPct: 89 },
     ],
   },
   {
@@ -154,7 +158,8 @@ export const RENTAL_PROPERTY_CATALOG: RentalCatalogDef[] = [
     cityLabel: 'İzmir • Konak',
     kind: 'ofis',
     purchasePrice: 1_450_000,
-    baseMonthlyRent: 174_000,
+    baseMonthlyRent: 56_000,
+    dailyMaintenanceCost: 320,
     offers: [
       { tenantName: 'Kordon Yazılım A.Ş.', sectorLabel: 'Teknoloji', rentFactor: 1.05, leaseDays: 45, reliabilityPct: 96 },
       { tenantName: 'Akdeniz Hukuk Bürosu', sectorLabel: 'Danışmanlık', rentFactor: 0.96, leaseDays: 60, reliabilityPct: 99 },
@@ -166,10 +171,11 @@ export const RENTAL_PROPERTY_CATALOG: RentalCatalogDef[] = [
     cityLabel: 'Bursa • Nilüfer',
     kind: 'dukkan',
     purchasePrice: 1_120_000,
-    baseMonthlyRent: 132_000,
+    baseMonthlyRent: 42_000,
+    dailyMaintenanceCost: 240,
     offers: [
-      { tenantName: 'Marmara Spor Giyim', sectorLabel: 'Tekstil', rentFactor: 1.08, leaseDays: 30, reliabilityPct: 91 },
-      { tenantName: 'Uludağ Eczanesi', sectorLabel: 'Sağlık', rentFactor: 0.98, leaseDays: 60, reliabilityPct: 98 },
+      { tenantName: 'Marmara Spor Giyim', sectorLabel: 'Tekstil', rentFactor: 1.08, leaseDays: 30, reliabilityPct: 88 },
+      { tenantName: 'Uludağ Eczanesi', sectorLabel: 'Sağlık', rentFactor: 0.97, leaseDays: 60, reliabilityPct: 98 },
     ],
   },
   {
@@ -178,9 +184,10 @@ export const RENTAL_PROPERTY_CATALOG: RentalCatalogDef[] = [
     cityLabel: 'Antalya • Konyaaltı',
     kind: 'daire',
     purchasePrice: 980_000,
-    baseMonthlyRent: 118_000,
+    baseMonthlyRent: 35_500,
+    dailyMaintenanceCost: 210,
     offers: [
-      { tenantName: 'SunLine Turizm Yönetici', sectorLabel: 'Kurumsal Konut', rentFactor: 1.14, leaseDays: 25, reliabilityPct: 89 },
+      { tenantName: 'SunLine Turizm Yönetici', sectorLabel: 'Kurumsal Konut', rentFactor: 1.12, leaseDays: 25, reliabilityPct: 85 },
       { tenantName: 'Aylin & Mert Kaya', sectorLabel: 'Aile Konutu', rentFactor: 1.0, leaseDays: 45, reliabilityPct: 96 },
     ],
   },
@@ -190,13 +197,16 @@ export const RENTAL_PROPERTY_CATALOG: RentalCatalogDef[] = [
     cityLabel: 'İstanbul • Beşiktaş',
     kind: 'ofis',
     purchasePrice: 2_650_000,
-    baseMonthlyRent: 330_000,
+    baseMonthlyRent: 112_000,
+    dailyMaintenanceCost: 580,
     offers: [
-      { tenantName: 'Boğaziçi Finans Danışmanlık', sectorLabel: 'Finans', rentFactor: 1.1, leaseDays: 45, reliabilityPct: 97 },
-      { tenantName: 'Nova Medya Holding', sectorLabel: 'Medya', rentFactor: 1.18, leaseDays: 30, reliabilityPct: 88 },
+      { tenantName: 'Boğaziçi Finans Danışmanlık', sectorLabel: 'Finans', rentFactor: 1.06, leaseDays: 45, reliabilityPct: 97 },
+      { tenantName: 'Nova Medya Holding', sectorLabel: 'Medya', rentFactor: 1.14, leaseDays: 30, reliabilityPct: 84 },
     ],
   },
 ];
+
+export const RENTAL_TURNOVER_RENOVATION_RATE = 0.012; // Sözleşme yenileme / kiracı değişim tadilatı (%1.2 mülk değeri)
 
 function buildTenantOffers(def: RentalCatalogDef): TenantOffer[] {
   return def.offers.map((o, idx) => ({
@@ -209,18 +219,32 @@ function buildTenantOffers(def: RentalCatalogDef): TenantOffer[] {
   }));
 }
 
+export function getRentalNetMonthlyYieldPct(prop: Pick<RentalProperty, 'purchasePrice' | 'baseMonthlyRent' | 'dailyMaintenanceCost'>): number {
+  if (!prop.purchasePrice || prop.purchasePrice <= 0) return 0;
+  const monthlyMaint = (prop.dailyMaintenanceCost ?? 0) * 30;
+  const netMonthly = Math.max(0, prop.baseMonthlyRent - monthlyMaint);
+  return Number(((netMonthly / prop.purchasePrice) * 100).toFixed(2));
+}
+
 export function getMergedRentalProperties(state: EmpireState): RentalProperty[] {
   const existing = state.rentalProperties ?? [];
   const byCatalog = new Map(existing.map((p) => [p.catalogId, p]));
   return RENTAL_PROPERTY_CATALOG.map((def) => {
     const saved = byCatalog.get(def.catalogId);
+    const freshOffers = buildTenantOffers(def);
     if (saved) {
+      const maxBalancedRent = Math.round(def.baseMonthlyRent * 1.2);
+      const syncedActiveRent =
+        saved.activeMonthlyRent && saved.activeMonthlyRent > maxBalancedRent
+          ? def.baseMonthlyRent
+          : saved.activeMonthlyRent;
       return {
         ...saved,
-        tenantOffers:
-          saved.tenantOffers && saved.tenantOffers.length > 0
-            ? saved.tenantOffers
-            : buildTenantOffers(def),
+        purchasePrice: def.purchasePrice,
+        baseMonthlyRent: def.baseMonthlyRent,
+        dailyMaintenanceCost: def.dailyMaintenanceCost,
+        activeMonthlyRent: syncedActiveRent,
+        tenantOffers: freshOffers,
       };
     }
     return {
@@ -231,21 +255,39 @@ export function getMergedRentalProperties(state: EmpireState): RentalProperty[] 
       kind: def.kind,
       purchasePrice: def.purchasePrice,
       baseMonthlyRent: def.baseMonthlyRent,
+      dailyMaintenanceCost: def.dailyMaintenanceCost,
       owned: false,
-      tenantOffers: buildTenantOffers(def),
+      vacancyDaysRemaining: 0,
+      tenantOffers: freshOffers,
     };
   });
 }
 
 export function calculateDailyRentalIncome(state: EmpireState): number {
-  const props = state.rentalProperties ?? [];
+  const props = getMergedRentalProperties(state);
   let totalDaily = 0;
   for (const p of props) {
-    if (p.owned && (p.activeMonthlyRent ?? 0) > 0 && (p.leaseRemainingDays ?? 0) > 0) {
+    if (
+      p.owned &&
+      (p.activeMonthlyRent ?? 0) > 0 &&
+      (p.leaseRemainingDays ?? 0) > 0 &&
+      (p.vacancyDaysRemaining ?? 0) <= 0
+    ) {
       totalDaily += Math.round((p.activeMonthlyRent ?? 0) / 30);
     }
   }
   return Math.max(0, totalDaily);
+}
+
+export function calculateDailyRentalMaintenanceCost(state: EmpireState): number {
+  const props = getMergedRentalProperties(state);
+  let totalMaint = 0;
+  for (const p of props) {
+    if (p.owned) {
+      totalMaint += Math.max(0, Math.round(p.dailyMaintenanceCost ?? 0));
+    }
+  }
+  return totalMaint;
 }
 
 export function calculateRentalPropertiesValuation(state: EmpireState): number {
@@ -277,6 +319,7 @@ export function buyRentalProperty(
   const updatedTarget: RentalProperty = {
     ...target,
     owned: true,
+    vacancyDaysRemaining: 0,
   };
   const nextProps = merged.map((p) => (p.catalogId === catalogId ? updatedTarget : p));
 
@@ -303,6 +346,13 @@ export function signLeaseContract(
   const target = merged.find((p) => p.catalogId === catalogId);
   if (!target) return { ok: false, state, error: 'Mülk bulunamadı.' };
   if (!target.owned) return { ok: false, state, error: 'Kiraya vermek için önce mülkü satın almalısınız.' };
+  if ((target.vacancyDaysRemaining ?? 0) > 0) {
+    return {
+      ok: false,
+      state,
+      error: `Mülk tadilat ve kiracı devir sürecinde (${target.vacancyDaysRemaining} gün kaldı).`,
+    };
+  }
   if ((target.leaseRemainingDays ?? 0) > 0 && target.leasedTenantName) {
     return { ok: false, state, error: 'Bu mülkte aktif bir kira sözleşmesi bulunuyor.' };
   }
@@ -314,13 +364,15 @@ export function signLeaseContract(
     ...target,
     leasedTenantName: offer.tenantName,
     leasedSectorLabel: offer.sectorLabel,
+    leasedReliabilityPct: offer.reliabilityPct,
     activeMonthlyRent: offer.monthlyRent,
     leaseRemainingDays: offer.leaseDays,
+    vacancyDaysRemaining: 0,
   };
   const nextProps = merged.map((p) => (p.catalogId === catalogId ? updatedTarget : p));
 
-  // Immediate first-day security / contract deposit bonus (+10% of monthly rent)
-  const contractBonus = Math.round(offer.monthlyRent * 0.1);
+  // Modest first-day contract commission / deposit administration fee (+5% of monthly rent)
+  const contractBonus = Math.round(offer.monthlyRent * 0.05);
 
   return {
     ok: true,
@@ -346,14 +398,18 @@ export function terminateLeaseContract(
   if (!target || !target.owned) return { ok: false, state, error: 'Mülk bulunamadı.' };
   if (!target.leasedTenantName) return { ok: false, state, error: 'Aktif sözleşme bulunmuyor.' };
 
+  const renovationCost =
+    Math.round((target.purchasePrice * RENTAL_TURNOVER_RENOVATION_RATE) / 500) * 500;
   const nextProps = merged.map((p) =>
     p.catalogId === catalogId
       ? {
           ...p,
           leasedTenantName: undefined,
           leasedSectorLabel: undefined,
+          leasedReliabilityPct: undefined,
           activeMonthlyRent: 0,
           leaseRemainingDays: 0,
+          vacancyDaysRemaining: 3, // Erken fesihte 3 gün tadilat/boşluk süreci
         }
       : p
   );
@@ -362,34 +418,86 @@ export function terminateLeaseContract(
     ok: true,
     state: {
       ...state,
+      cash: state.cash - renovationCost,
       rentalProperties: nextProps,
       lastSavedAt: now,
     },
   };
 }
 
-export function advanceRentalLeasesByDays(
+export interface RentalPortfolioDailyResult {
+  properties: RentalProperty[] | undefined;
+  renovationCosts: number;
+  vacatedNames: string[];
+}
+
+export function processDailyRentalPortfolio(
   props: RentalProperty[] | undefined,
-  daysPassed: number
-): RentalProperty[] | undefined {
-  if (!props || props.length === 0 || daysPassed <= 0) return props;
-  return props.map((p) => {
-    if (!p.owned || !p.leaseRemainingDays || p.leaseRemainingDays <= 0) return p;
+  daysPassed: number,
+  currentDay = 1
+): RentalPortfolioDailyResult {
+  if (!props || props.length === 0 || daysPassed <= 0) {
+    return { properties: props, renovationCosts: 0, vacatedNames: [] };
+  }
+  let renovationCosts = 0;
+  const vacatedNames: string[] = [];
+
+  const nextProps = props.map((p, idx) => {
+    if (!p.owned) return p;
+
+    // 1. Tick down vacancy/renovation cooldown if vacant
+    if ((p.vacancyDaysRemaining ?? 0) > 0) {
+      return {
+        ...p,
+        vacancyDaysRemaining: Math.max(0, (p.vacancyDaysRemaining ?? 0) - daysPassed),
+      };
+    }
+
+    if (!p.leaseRemainingDays || p.leaseRemainingDays <= 0) return p;
+
     const rem = Math.max(0, p.leaseRemainingDays - daysPassed);
-    if (rem === 0) {
+    const reliability = Math.max(70, Math.min(99, p.leasedReliabilityPct ?? 94));
+    // Lower-reliability tenants carry periodic early-departure vacancy risk every 12 days
+    const earlyExitRoll = ((currentDay * 17 + idx * 31) % 100);
+    const earlyExitRiskThreshold = Math.max(0, Math.round((96 - reliability) * 0.65));
+    const earlyVacated =
+      rem > 0 && currentDay > 5 && currentDay % 12 === idx % 12 && earlyExitRoll < earlyExitRiskThreshold;
+
+    if (rem === 0 || earlyVacated) {
+      const renoCost = Math.round((p.purchasePrice * RENTAL_TURNOVER_RENOVATION_RATE) / 500) * 500;
+      renovationCosts += renoCost;
+      vacatedNames.push(p.name);
+      const vacancyDays = earlyVacated ? 5 : 3 + ((currentDay + idx) % 3);
       return {
         ...p,
         leasedTenantName: undefined,
         leasedSectorLabel: undefined,
+        leasedReliabilityPct: undefined,
         activeMonthlyRent: 0,
         leaseRemainingDays: 0,
+        vacancyDaysRemaining: vacancyDays,
       };
     }
+
     return {
       ...p,
       leaseRemainingDays: rem,
     };
   });
+
+  return {
+    properties: nextProps,
+    renovationCosts,
+    vacatedNames,
+  };
+}
+
+export function advanceRentalLeasesByDays(
+  props: RentalProperty[] | undefined,
+  daysPassed: number,
+  currentDay = 1
+): RentalProperty[] | undefined {
+  return processDailyRentalPortfolio(props, daysPassed, currentDay).properties;
 }
 
 /* ============================================================================
