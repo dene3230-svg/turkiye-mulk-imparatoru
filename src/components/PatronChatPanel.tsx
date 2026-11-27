@@ -47,9 +47,9 @@ export function PatronChatPanel({
         data-testid="patron-chat-toggle"
         onClick={() => setOpen(true)}
         aria-label="Patron Sohbetini Aç"
-        className="pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] right-[max(14px,calc(var(--safe-right)+10px))] z-[610] flex min-h-[42px] items-center gap-1.5 rounded-2xl border border-slate-200/95 bg-white/95 px-3 text-[clamp(11px,1.4vw,12px)] font-bold text-slate-800 shadow-lg transition-colors hover:bg-amber-50 dark:border-slate-700/90 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800 whitespace-nowrap"
+        className="pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] right-[max(14px,calc(var(--safe-right)+10px))] z-[610] flex min-h-[42px] items-center gap-1.5 rounded-[20px] border border-slate-200/95 bg-white/95 px-3 text-[clamp(11px,1.4vw,12px)] font-bold text-slate-800 transition-colors hover:bg-amber-50 border-[#334155] bg-[#222B38] dark:text-slate-100 dark:hover:bg-[#1D2532] whitespace-nowrap"
       >
-        <MessageSquare className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <MessageSquare className="h-4 w-4 shrink-0 text-amber-600 dark:text-[#C8AE7D]" />
         <span className="hidden min-[800px]:inline">Patron Sohbeti</span>
         <span className="inline min-[800px]:hidden">Sohbet</span>
       </button>
@@ -60,33 +60,33 @@ export function PatronChatPanel({
     <aside
       aria-label="Patron Sohbeti"
       data-testid="patron-chat-panel"
-      className="pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] right-[max(14px,calc(var(--safe-right)+10px))] z-[640] flex h-[min(340px,56dvh)] w-[clamp(260px,34vw,340px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto fixed bottom-[max(14px,calc(var(--safe-bottom)+10px))] right-[max(14px,calc(var(--safe-right)+10px))] z-[640] flex h-[min(340px,56dvh)] w-[clamp(260px,34vw,340px)] flex-col overflow-hidden rounded-[20px] border border-slate-200/95 bg-white/98 text-slate-900 border-[#334155] bg-[#222B38] dark:text-slate-100"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 border-[#334155]">
         <div className="flex items-center gap-1.5 text-xs font-bold">
-          <MessageSquare className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          <MessageSquare className="h-3.5 w-3.5 text-amber-600 dark:text-[#C8AE7D]" />
           <span>Patron Sohbeti</span>
         </div>
         <button
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Sohbeti Küçült"
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-[#1D2532]"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/* Channel Switcher: City vs Turkey Global */}
-      <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/90 p-1.5 dark:border-slate-800 dark:bg-slate-950/60">
+      <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/90 p-1.5 border-[#334155] bg-black/70">
         <button
           type="button"
           onClick={() => setScope('city')}
           className={`flex items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-bold transition-colors ${
             scope === 'city'
-              ? 'bg-amber-600 text-white'
-              : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+              ? 'bg-[#C8AE7D] text-[#181F29]'
+              : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-[#1D2532]'
           }`}
         >
           <MapPin className="h-3 w-3" />
@@ -99,8 +99,8 @@ export function PatronChatPanel({
           onClick={() => setScope('global')}
           className={`flex items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-bold transition-colors ${
             scope === 'global'
-              ? 'bg-amber-600 text-white'
-              : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+              ? 'bg-[#C8AE7D] text-[#181F29]'
+              : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-[#1D2532]'
           }`}
         >
           <Globe2 className="h-3 w-3" />
@@ -118,10 +118,10 @@ export function PatronChatPanel({
           filtered.map((m) => (
             <div
               key={m.id}
-              className="rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs dark:bg-slate-950/70"
+              className="rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs bg-black/70"
             >
               <div className="flex items-center justify-between gap-1 text-[10px]">
-                <span className="font-bold text-amber-700 dark:text-amber-400">
+                <span className="font-bold text-amber-700 dark:text-[#C8AE7D]">
                   {m.senderName}{' '}
                   <span className="font-normal text-slate-400">· {m.senderBadge}</span>
                 </span>
@@ -143,7 +143,7 @@ export function PatronChatPanel({
       {/* Input */}
       <form
         onSubmit={handleSubmit}
-        className="flex items-center gap-1.5 border-t border-slate-200 p-2 dark:border-slate-800"
+        className="flex items-center gap-1.5 border-t border-slate-200 p-2 border-[#334155]"
       >
         <input
           type="text"
@@ -151,13 +151,13 @@ export function PatronChatPanel({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Patronlara mesaj yaz..."
-          className="h-8 flex-1 rounded-lg border border-slate-300 bg-slate-50 px-2.5 text-xs outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-950"
+          className="h-8 flex-1 rounded-lg border border-slate-300 bg-slate-50 px-2.5 text-xs outline-none focus:border-[#C8AE7D]/45 border-[#334155] bg-[#181F29]"
         />
         <button
           type="submit"
           aria-label="Mesaj Gönder"
           disabled={!draft.trim()}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#C8AE7D] text-[#181F29] hover:bg-[#D2BB8E] disabled:opacity-40"
         >
           <Send className="h-3.5 w-3.5" />
         </button>

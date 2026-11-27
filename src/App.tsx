@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bell,
-  Briefcase,
   Building2,
   CalendarCheck2,
-  Clock,
   Crown,
-  FastForward,
-  Home,
-  MapPin,
-  Pause,
-  Settings,
   Globe2,
-  Radio,
-  Landmark,
+  Home,
   Link2,
-  Sparkles,
+  Map as MapIcon,
+  Pause,
+  Play,
+  Radio,
+  Settings,
   Store,
-  User,
+  Wallet,
   X,
 } from 'lucide-react';
 
@@ -34,6 +29,7 @@ import type {
   FranchiseBrand,
   GameSettings,
   GameSpeed,
+  HoldingPromoTierId,
   MissionDef,
   NotificationItem,
   OfficeEquipmentId,
@@ -234,7 +230,7 @@ import {
 import { DayEndReportModal } from './components/DayEndReportModal';
 import { DaySimAutoStopModal } from './components/DaySimAutoStopModal';
 import { OfficeModal, type OfficeModalTabId } from './components/OfficeModal';
-import { ExecutiveDashboard } from './components/ExecutiveDashboard';
+import { ExecutiveDashboard, type QuickActionId } from './components/ExecutiveDashboard';
 import {
   DashboardDetailModal,
   type DashboardDetailTarget,
@@ -244,6 +240,23 @@ import {
   FinansWorkspace,
   OfficeWorkspace,
 } from './components/WorkspaceViews';
+import { HoldingReportsModal } from './components/HoldingReportsModal';
+import { BranchManagementModal } from './components/BranchOperationsModals';
+import {
+  AdsPromotionModal,
+  DailyOffersModal,
+  HoldingStoreModal,
+  RentalListingsModal,
+} from './components/QuickActionModals';
+import {
+  acceptDailyOffer,
+  buyRentalProperty,
+  declineDailyOffer,
+  launchHoldingPromotion,
+  purchaseStorePerk,
+  signLeaseContract,
+  terminateLeaseContract,
+} from './game/quickActionsEngine';
 import {
   computeExecutiveDashboardMetrics,
   type AccountCardId,
@@ -494,6 +507,22 @@ function migrateSavedEmpire(
           ? saved.officeEquipmentLevels
           : {},
       personalAssetIds: Array.isArray(saved.personalAssetIds) ? saved.personalAssetIds : [],
+      rentalProperties: Array.isArray(saved.rentalProperties) ? saved.rentalProperties : undefined,
+      dailyOffers: Array.isArray(saved.dailyOffers) ? saved.dailyOffers : undefined,
+      dailyOffersDay:
+        typeof saved.dailyOffersDay === 'number' && Number.isFinite(saved.dailyOffersDay)
+          ? saved.dailyOffersDay
+          : undefined,
+      activeHoldingPromo: saved.activeHoldingPromo ?? null,
+      supplyDiscountUntilDay:
+        typeof saved.supplyDiscountUntilDay === 'number' && Number.isFinite(saved.supplyDiscountUntilDay)
+          ? saved.supplyDiscountUntilDay
+          : undefined,
+      supplyDiscountPct:
+        typeof saved.supplyDiscountPct === 'number' && Number.isFinite(saved.supplyDiscountPct)
+          ? saved.supplyDiscountPct
+          : undefined,
+      storePurchasedIds: Array.isArray(saved.storePurchasedIds) ? saved.storePurchasedIds : [],
       lastSavedAt: finiteOr(saved.lastSavedAt, nowTs),
     };
 
@@ -617,6 +646,12 @@ export default function App() {
   const [officeModalTab, setOfficeModalTab] = useState<OfficeModalTabId>('design');
   const [patronChatOpen, setPatronChatOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => !isTutorialCompleted());
+  const [adsModalOpen, setAdsModalOpen] = useState(false);
+  const [rentalsModalOpen, setRentalsModalOpen] = useState(false);
+  const [offersModalOpen, setOffersModalOpen] = useState(false);
+  const [storeModalOpen, setStoreModalOpen] = useState(false);
+  const [overviewReportsOpen, setOverviewReportsOpen] = useState(false);
+  const [overviewManagedBranchId, setOverviewManagedBranchId] = useState<string | null>(null);
 
   const [activeNav, setActiveNav] = useState<ExecutiveNavId>('overview');
   const [selectedAccountId, setSelectedAccountId] = useState<AccountCardId>('cash');
@@ -1276,11 +1311,10 @@ export default function App() {
     return () => clearInterval(timer);
   }, [screen, gameSpeed, pushNotification, spawnCashPopup]);
 
-  // Live Borsa Ticker Loop (freezes on Pause, flows faster on 2x/4x/day-skip)
+  // Live Borsa Ticker Loop (strictly 2-state: paused when 0, steady 1x flow when 1)
   useEffect(() => {
     if (screen !== 'playing' || gameSpeed === 0) return;
-    const numericSpeed = gameSpeed === 'day' ? 6 : gameSpeed;
-    const intervalMs = Math.max(600, Math.round(3000 / numericSpeed));
+    const intervalMs = 3000;
     const tickerTimer = setInterval(() => {
       setStockQuotes((prev) => {
         const currentEmpire = empireRef.current;
@@ -1503,6 +1537,12 @@ export default function App() {
     setOfficeModalOpen(false);
     setPatronChatOpen(false);
     setCityPickerOpen(false);
+    setAdsModalOpen(false);
+    setRentalsModalOpen(false);
+    setOffersModalOpen(false);
+    setStoreModalOpen(false);
+    setOverviewReportsOpen(false);
+    setOverviewManagedBranchId(null);
   }, []);
 
   const handleReturnToMainMenu = useCallback(() => {
@@ -2845,7 +2885,131 @@ export default function App() {
 
   const handleSetGameSpeed = (nextSpeed: GameSpeed) => {
     soundEngine.playClick();
-    setGameSpeed(nextSpeed);
+    // Strict 2-state time control: ONLY Paused (0) or Normal Play (1 — 30s = 1 full day)
+    setGameSpeed(nextSpeed === 0 ? 0 : 1);
+  };
+
+  const handleTogglePlayPause = () => {
+    soundEngine.playClick();
+    setGameSpeed((prev) => (prev === 0 ? 1 : 0));
+  };
+
+  const handleLaunchHoldingPromo = (tierId: HoldingPromoTierId) => {
+    const res = launchHoldingPromotion(empire, tierId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Kampanya Başlatılamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Holding Reklam Kampanyası Başladı',
+      `${res.campaign?.name ?? 'Kampanya'} aktif! +${Math.round(
+        (res.campaign?.revenueBoost ?? 0) * 100
+      )}% müşteri trafiği ve +%${res.campaign?.brandGain ?? 0} tanınırlık.`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleBuyRentalProperty = (catalogId: string) => {
+    const res = buyRentalProperty(empire, catalogId, undefined, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Mülk Satın Alınamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Kiralık Mülk Portföye Eklendi',
+      `${res.property?.name ?? 'Mülk'} satın alındı. Kiracı tekliflerini onaylayarak pasif kira başlatabilirsiniz.`,
+      'milestone',
+      false
+    );
+  };
+
+  const handleSignRentalLease = (catalogId: string, offerId: string) => {
+    const res = signLeaseContract(empire, catalogId, offerId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Sözleşme Onaylanamadı', res.error, 'system', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Kira Sözleşmesi İmzalandı',
+      `${res.property?.leasedTenantName ?? 'Kiracı'} ile anlaşma tamam! Günlük +${formatTL(
+        Math.round((res.property?.activeMonthlyRent ?? 0) / 30)
+      )} pasif kira hesabınıza yatacak.`,
+      'revenue',
+      true
+    );
+  };
+
+  const handleTerminateRentalLease = (catalogId: string) => {
+    const res = terminateLeaseContract(empire, catalogId, Date.now());
+    if (!res.ok) return;
+    soundEngine.playClick();
+    setEmpire(res.state);
+    pushNotification('Kira Sözleşmesi Feshedildi', 'Mülk yeniden kiracı tekliflerine açıldı.', 'system', false);
+  };
+
+  const handleAcceptDailyOffer = (offerId: string) => {
+    const res = acceptDailyOffer(empire, offerId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Teklif Onaylanamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification('Fırsat Teklifi Onaylandı', res.summary ?? 'Anlaşma başarıyla uygulandı.', 'milestone', true);
+  };
+
+  const handleDeclineDailyOffer = (offerId: string) => {
+    soundEngine.playClick();
+    const res = declineDailyOffer(empire, offerId, Date.now());
+    setEmpire(res.state);
+  };
+
+  const handlePurchaseStorePerk = (itemId: string) => {
+    const res = purchaseStorePerk(empire, itemId, Date.now());
+    if (!res.ok) {
+      if (res.error) pushNotification('Satın Alınamadı', res.error, 'finance', false);
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    pushNotification(
+      'Mağaza Paketi Aktifleştirildi',
+      `${res.item?.name ?? 'Paket'}: ${res.item?.effectLabel ?? 'Holding bonusu uygulandı.'}`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleOverviewQuickAction = (action: QuickActionId) => {
+    soundEngine.playClick();
+    closeAllInGameOverlays();
+    if (action === 'ads') {
+      setAdsModalOpen(true);
+    } else if (action === 'rentals') {
+      setRentalsModalOpen(true);
+    } else if (action === 'franchise') {
+      setHoldingModalOpen(true);
+    } else if (action === 'offers') {
+      setOffersModalOpen(true);
+    } else if (action === 'borsa') {
+      setBorsaMode('market');
+      setBorsaModalOpen(true);
+    } else if (action === 'bank') {
+      setBankingInitialTab('loans');
+      setBankingModalOpen(true);
+    } else if (action === 'hr') {
+      setHrInitialSubView('branches');
+      setHrModalOpen(true);
+    } else if (action === 'reports') {
+      setOverviewReportsOpen(true);
+    }
   };
 
   const handleCompleteTutorial = () => {
@@ -3075,7 +3239,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-slate-100 text-slate-900 dark:bg-[#0B1221] dark:text-slate-100">
+    <div className="relative h-full w-full overflow-hidden bg-[#181F29] text-slate-100">
       <OrientationGuard />
 
       {screen === 'intro' && <StudioIntro onComplete={handleIntroComplete} />}
@@ -3114,110 +3278,99 @@ export default function App() {
       {screen === 'playing' && (
         <div
           data-testid="executive-shell"
-          className="relative flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-[#080E1C] via-[#0B1221] to-[#111827] text-slate-100"
+          className="relative flex h-full w-full flex-col overflow-hidden bg-[#181F29] text-slate-100"
         >
           {/* ================================================================
-              TOP INFORMATION BAR — Clean Single-Row Executive Header
+              TOP INFORMATION BAR — Matte Dark-Slate Reference Header
+              Strict 2-State Clock (Pause ⏸ / Play ▶ — 30s = 1 full day)
              ================================================================ */}
           <header
             aria-label="Yönetici Üst Bilgi Şeridi"
             data-testid="top-hud"
-            className="z-[600] flex h-[44px] shrink-0 items-center justify-between gap-1.5 border-b border-slate-800/90 bg-[#0A1120]/95 px-2 backdrop-blur-md lg:h-[54px] lg:gap-3 lg:px-4"
+            className="z-[600] flex h-[48px] shrink-0 items-center justify-between gap-2 border-b border-[#2A3444] bg-[#181F29] px-3 lg:h-[58px] lg:gap-3 lg:px-5"
           >
-            {/* Left: Brand Emblem + MÜLK İMPARATORLUĞU + Active Sub-Screen Name */}
-            <div className="flex shrink-0 items-center gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-rose-400/55 bg-gradient-to-br from-rose-500/30 to-amber-500/20 p-0.5 shadow-[0_0_16px_rgba(244,63,94,0.3)] lg:h-9 lg:w-9">
-                <img
-                  src="./icon.png"
-                  alt="Mülk İmparatorluğu Logosu"
-                  className="h-full w-full rounded-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
+            {/* Left: Minimal Golden Crown Emblem + MÜLK İMPARATORLUĞU */}
+            <div className="flex shrink-0 items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#D8A338]/75 bg-[#222B38] text-[#D8A338] lg:h-9 lg:w-9">
+                <Crown className="h-4.5 w-4.5 lg:h-5 lg:w-5" strokeWidth={1.5} />
               </div>
-              <div className="leading-tight">
-                <h1 className="text-[11.5px] font-extrabold tracking-wide text-white lg:text-base whitespace-nowrap">
-                  MÜLK İMPARATORLUĞU
-                </h1>
-                <p
-                  data-testid="top-bar-subtitle"
-                  className="text-[8.5px] font-semibold tracking-wider text-slate-400 lg:text-[10.5px] whitespace-nowrap"
-                >
-                  {activeNavSubtitle[activeNav]}
-                </p>
-              </div>
+              <h1 className="hidden text-xs font-semibold tracking-wider text-slate-100 whitespace-nowrap min-[900px]:block lg:text-[15px]">
+                MÜLK İMPARATORLUĞU
+              </h1>
             </div>
 
-            {/* Center: Ultra-Compact Game Clock & Speed Controls (Durdur / 1x / 2x / 4x / Gün+) */}
-            <div className="hidden shrink-0 items-center gap-1 min-[780px]:flex lg:gap-1.5">
-              <div
-                data-testid="time-speed-capsule"
-                className={`flex shrink-0 items-center gap-0.5 rounded-xl border px-1 py-0.5 transition-colors lg:gap-1 lg:px-1.5 ${
-                  gameSpeed === 0
-                    ? 'border-amber-400/70 bg-amber-950/60'
-                    : gameSpeed === 'day'
-                    ? 'border-emerald-400/70 bg-emerald-950/60'
-                    : 'border-slate-700/80 bg-[#111B30]/90'
-                }`}
+            {/* Center & Right Matte Metric Pills + Mağaza + 2-State Day Clock */}
+            <div className="no-scrollbar flex min-w-0 items-center gap-1.5 overflow-x-auto lg:gap-2.5">
+              {/* Tanınırlık %X */}
+              <button
+                type="button"
+                data-testid="topbar-brand-recognition"
+                onClick={() => handleSelectExecutiveNav('office')}
+                title="Firma Tanınırlığı"
+                className="flex h-7 shrink-0 items-center rounded-full bg-[#C8AE7D] px-2.5 text-[10.5px] font-semibold text-[#181F29] hover:bg-[#D2BB8E] whitespace-nowrap lg:h-8 lg:px-3.5 lg:text-xs"
               >
+                Tanınırlık <span className="ml-1 font-mono-num font-bold">%{dashboardMetrics.brandRecognitionPct}</span>
+              </button>
+
+              {/* Toplam Kasa (Matte Sage Green #7A9E7E Pill) */}
+              <div className="relative shrink-0">
                 <div
-                  data-testid="hud-game-clock"
-                  title={gameClock.totalDaysLabel}
-                  className="flex items-center gap-1 pl-0.5 pr-0.5 whitespace-nowrap lg:pl-1"
+                  data-testid="hud-cash"
+                  className={`flex h-7 items-center rounded-full px-2.5 font-mono-num text-[10.5px] font-bold whitespace-nowrap lg:h-8 lg:px-4 lg:text-xs ${
+                    empire.cash < 0
+                      ? 'bg-[#B86B5E] text-white'
+                      : 'bg-[#7A9E7E] text-[#111C16]'
+                  }`}
                 >
-                  <Clock className="h-2.5 w-2.5 shrink-0 text-cyan-300 lg:h-3 lg:w-3" />
-                  <span className="font-mono-num text-[9.5px] font-bold text-slate-100 lg:text-[10.5px]">
-                    {gameClock.compactLabel}
+                  <span className="mr-1 font-sans font-semibold hidden lg:inline">Toplam Kasa:</span>
+                  <span className="mr-1 font-sans font-semibold lg:hidden">Kasa:</span>
+                  {formatTL(empire.cash)}
+                </div>
+                {cashPopups.map((p) => (
+                  <span
+                    key={p.id}
+                    className="animate-float-cash pointer-events-none absolute -bottom-5 right-2 font-mono-num text-[11px] font-bold text-[#7A9E7E] whitespace-nowrap"
+                  >
+                    +{formatTL(p.amount)}
                   </span>
-                </div>
-                <div className="h-3.5 w-px bg-slate-700/80 lg:h-4" />
-                <div role="group" aria-label="Oyun Zaman Hızı" className="flex items-center gap-0.5">
-                  {(
-                    [
-                      { speed: 0 as GameSpeed, label: 'Durdur', short: '⏸' },
-                      { speed: 1 as GameSpeed, label: 'Normal 1x', short: '1x' },
-                      { speed: 2 as GameSpeed, label: 'Hızlı 2x', short: '2x' },
-                      { speed: 4 as GameSpeed, label: 'Çok Hızlı 4x', short: '4x' },
-                      { speed: 'day' as GameSpeed, label: 'Gün Gün Hızlı İlerleme', short: 'Gün+' },
-                    ] as const
-                  ).map((item) => {
-                    const active = gameSpeed === item.speed;
-                    return (
-                      <button
-                        key={String(item.speed)}
-                        type="button"
-                        data-testid={`speed-btn-${item.speed}`}
-                        aria-label={item.label}
-                        aria-pressed={active}
-                        title={item.label}
-                        onClick={() => handleSetGameSpeed(item.speed)}
-                        className={`flex h-5 min-w-[19px] items-center justify-center gap-0.5 rounded-md px-1 font-mono-num text-[9px] font-bold transition-colors whitespace-nowrap lg:h-6 lg:min-w-[22px] lg:rounded-lg lg:px-1.5 lg:text-[10px] ${
-                          active
-                            ? item.speed === 0
-                              ? 'bg-amber-400 text-slate-950'
-                              : item.speed === 'day'
-                              ? 'bg-emerald-400 text-slate-950'
-                              : 'bg-cyan-400 text-slate-950'
-                            : item.speed === 'day'
-                            ? 'text-emerald-300 hover:bg-emerald-900/50'
-                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {item.speed === 0 ? (
-                          <Pause className="h-2.5 w-2.5" />
-                        ) : item.speed === 'day' ? (
-                          <>
-                            <FastForward className="h-2.5 w-2.5 shrink-0" />
-                            <span>{item.short}</span>
-                          </>
-                        ) : (
-                          item.short
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                ))}
               </div>
 
+              {/* Seviye N */}
+              <div
+                data-testid="topbar-level-pill"
+                className="hidden h-7 shrink-0 items-center rounded-full bg-[#334155] px-3 text-[11px] font-semibold text-slate-100 whitespace-nowrap sm:flex lg:h-8 lg:px-3.5 lg:text-xs"
+              >
+                Seviye <span className="ml-1 font-mono-num font-bold">{companyTier.level}</span>
+              </div>
+
+              {/* XP / RP */}
+              <div
+                data-testid="topbar-rp-pill"
+                title="Holding İtibar & Deneyim Puanı (XP)"
+                className="hidden h-7 shrink-0 items-center gap-1.5 rounded-full bg-[#C8AE7D] px-2.5 text-[11px] font-bold text-[#181F29] whitespace-nowrap md:flex lg:h-8 lg:px-3.5 lg:text-xs"
+              >
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#181F29]/15 text-[9px] font-extrabold">
+                  XP
+                </span>
+                <span className="font-mono-num">{(empire.companyXp ?? 0).toLocaleString('tr-TR')}</span>
+              </div>
+
+              {/* Mağaza (Matte Sand/Gold Button) */}
+              <button
+                type="button"
+                data-testid="topbar-store-btn"
+                onClick={() => {
+                  soundEngine.playClick();
+                  closeAllInGameOverlays();
+                  setStoreModalOpen(true);
+                }}
+                className="flex h-7 shrink-0 items-center rounded-full bg-[#C8AE7D] px-3 text-[11px] font-bold text-[#181F29] hover:bg-[#D2BB8E] whitespace-nowrap lg:h-8 lg:px-4 lg:text-xs"
+              >
+                Mağaza
+              </button>
+
+              {/* Pending 00:00 Day-End Report Quick Trigger */}
               {(empire.pendingDayEndReports ?? []).length > 0 && (
                 <button
                   type="button"
@@ -3226,134 +3379,88 @@ export default function App() {
                     soundEngine.playClick();
                     setDayEndModalOpen(true);
                   }}
-                  title="00:00 Gün Sonu Raporu & Hasılat Tahsilatı"
-                  className="flex h-6 items-center gap-1 rounded-lg border border-emerald-400/70 bg-emerald-500/20 px-1.5 font-mono-num text-[9px] font-extrabold text-emerald-200 hover:bg-emerald-500/30 whitespace-nowrap lg:h-7 lg:rounded-xl lg:px-2 lg:text-[10px]"
+                  title="00:00 Gün Sonu Hasılat Tahsilatı"
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-[#6EB288]/65 bg-[#222B38] px-2.5 font-mono-num text-[10.5px] font-bold text-[#6EB288] hover:bg-[#2C3647] whitespace-nowrap lg:h-8 lg:px-3"
                 >
-                  <CalendarCheck2 className="h-3 w-3 shrink-0" />
+                  <CalendarCheck2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                   <span>00:00 ({empire.pendingDayEndReports?.length})</span>
                 </button>
               )}
-            </div>
 
-            {/* Right: Firma Tanınırlığı (%), Ofis Prestiji, Toplam Kasa (₺) + Profile & Settings Icons */}
-            <div className="flex shrink-0 items-center gap-2 lg:gap-4">
-              {/* Firma Tanınırlığı (%) */}
-              <button
-                type="button"
-                data-testid="topbar-brand-recognition"
-                onClick={() => handleSelectExecutiveNav('office')}
-                title="Firma Tanınırlığı"
-                className="hidden items-center gap-1 text-left min-[600px]:flex lg:gap-1.5"
+              {/* Rightmost: STRICT 2-State Time Control (Pause ⏸ / Play ▶) + Gün X • Gün Adı + Thin 0-30s Progress Bar */}
+              <div
+                data-testid="time-speed-capsule"
+                className="relative flex h-8 shrink-0 items-center gap-2 overflow-hidden rounded-full border border-[#334155] bg-[#222B38] pl-1.5 pr-3 lg:h-9 lg:pl-2 lg:pr-3.5"
+                title={
+                  gameSpeed === 0
+                    ? 'Zaman Duraklatıldı · Başlatmak için tıklayın (1 Oyun Günü = 30 sn)'
+                    : 'Normal Akış Aktif (1 Oyun Günü = 30 sn) · Duraklatmak için tıklayın'
+                }
               >
-                <Sparkles className="h-3 w-3 shrink-0 text-amber-400 lg:h-3.5 lg:w-3.5" />
-                <div className="leading-tight">
-                  <div className="text-[8px] font-medium text-slate-400 whitespace-nowrap lg:text-[9px]">
-                    Tanınırlık
-                  </div>
-                  <div className="font-mono-num text-[10px] font-extrabold text-amber-300 whitespace-nowrap lg:text-[11px]">
-                    %{dashboardMetrics.brandRecognitionPct}
-                  </div>
-                </div>
-              </button>
-
-              {/* Ofis Prestiji */}
-              <button
-                type="button"
-                data-testid="topbar-office-prestige"
-                onClick={() => handleSelectExecutiveNav('office')}
-                title="Ofis Prestij Puanı"
-                className="hidden items-center gap-1 text-left min-[680px]:flex lg:gap-1.5"
-              >
-                <Crown className="h-3 w-3 shrink-0 text-orange-400 lg:h-3.5 lg:w-3.5" />
-                <div className="leading-tight">
-                  <div className="text-[8px] font-medium text-slate-400 whitespace-nowrap lg:text-[9px]">
-                    Prestij
-                  </div>
-                  <div className="font-mono-num text-[10px] font-extrabold text-orange-300 whitespace-nowrap lg:text-[11px]">
-                    {dashboardMetrics.officePrestige}/100
-                  </div>
-                </div>
-              </button>
-
-              {/* Toplam Kasa (₺) */}
-              <div className="relative text-right leading-tight">
-                <div className="text-[8px] font-medium text-slate-400 whitespace-nowrap lg:text-[9px]">
-                  Toplam Kasa
-                </div>
-                <div
-                  data-testid="hud-cash"
-                  className={`font-mono-num text-[11.5px] font-extrabold lg:text-base whitespace-nowrap ${
-                    empire.cash < 0 ? 'text-rose-400' : 'text-white'
-                  }`}
-                >
-                  {formatTL(empire.cash)}
-                </div>
-                {cashPopups.map((p) => (
-                  <span
-                    key={p.id}
-                    className="animate-float-cash pointer-events-none absolute -bottom-5 right-0 font-mono-num text-[11px] font-extrabold text-emerald-400 whitespace-nowrap"
-                  >
-                    +{formatTL(p.amount)}
-                  </span>
-                ))}
-              </div>
-
-              {/* Profile / Notifications & Settings Icons */}
-              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  data-testid="topbar-profile-btn"
-                  onClick={() => {
-                    soundEngine.playClick();
-                    setNotifOpen(true);
-                  }}
-                  aria-label={`Profil ve Bildirimler (${unreadNotifCount} okunmamış)`}
-                  title={`${user?.name ?? 'Patron'} · Bildirimler`}
-                  className="relative flex h-7 w-7 items-center justify-center rounded-full border border-slate-700/80 bg-[#131E34] text-slate-200 hover:border-cyan-400/60 hover:text-white lg:h-8 lg:w-8"
+                  data-testid={gameSpeed === 0 ? 'speed-btn-1' : 'speed-btn-0'}
+                  aria-label={gameSpeed === 0 ? 'Zamanı Başlat' : 'Zamanı Duraklat'}
+                  aria-pressed={gameSpeed === 0}
+                  onClick={handleTogglePlayPause}
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
+                    gameSpeed === 0
+                      ? 'bg-[#D8A338] text-[#181F29] hover:bg-[#E2AF48]'
+                      : 'bg-[#334155] text-slate-100 hover:bg-[#475569]'
+                  }`}
                 >
-                  <User className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                  {unreadNotifCount > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-cyan-400 px-1 font-mono-num text-[8.5px] font-black text-slate-950">
-                      {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
-                    </span>
+                  {gameSpeed === 0 ? (
+                    <Play className="h-3.5 w-3.5 translate-x-[0.5px]" strokeWidth={1.75} />
+                  ) : (
+                    <Pause className="h-3.5 w-3.5" strokeWidth={1.75} />
                   )}
                 </button>
 
-                <button
-                  type="button"
-                  data-testid="topbar-settings-btn"
-                  onClick={() => {
-                    soundEngine.playClick();
-                    setSettingsOpen(true);
-                  }}
-                  aria-label="Ayarlar"
-                  title="Ayarlar"
-                  className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-700/80 bg-[#131E34] text-slate-200 hover:border-cyan-400/60 hover:text-white lg:h-8 lg:w-8"
+                <div
+                  data-testid="hud-game-clock"
+                  className="flex items-center gap-1.5 whitespace-nowrap text-[11px] font-medium text-slate-200 lg:text-xs"
                 >
-                  <Settings className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                </button>
+                  <span>{gameClock.dayHeaderLabel}</span>
+                  {gameSpeed === 0 && (
+                    <span className="text-[10px] font-bold text-[#D8A338]">(Duraklatıldı)</span>
+                  )}
+                </div>
+
+                {/* Thin 0-30s Day Progress Bar */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-3 bottom-0.5 h-[2px] overflow-hidden rounded-full bg-[#334155]/80"
+                >
+                  <div
+                    data-testid="day-progress-bar"
+                    className={`h-full rounded-full transition-all duration-200 ${
+                      gameSpeed === 0 ? 'bg-[#D8A338]' : 'bg-[#6EB288]'
+                    }`}
+                    style={{ width: `${gameClock.dayProgressPct.toFixed(1)}%` }}
+                  />
+                </div>
               </div>
             </div>
           </header>
 
           {/* ================================================================
-              BODY: LEFT VERTICAL NAVIGATION RAIL + MAIN WORKSPACE CANVAS
+              BODY: FRAMELESS LEFT VERTICAL NAVIGATION RAIL + MAIN CANVAS
              ================================================================ */}
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            {/* Left Vertical Navigation Rail (6 Concise Executive Sections) */}
+            {/* Frameless Left Vertical Navigation Rail (Sits directly on #181F29) */}
             <nav
               aria-label="Ana Kontrol Paneli Menüsü"
               data-testid="left-nav-rail"
-              className="z-[550] flex w-[68px] shrink-0 flex-col items-center justify-between border-r border-slate-800/90 bg-[#0A1120]/95 py-1.5 sm:w-[74px] lg:w-[84px] lg:py-2"
+              className="z-[550] flex w-[76px] shrink-0 flex-col items-center justify-between bg-[#181F29] px-1.5 py-3 lg:w-[92px] lg:px-2 lg:py-4"
             >
-              <div className="flex w-full flex-col items-center gap-0.5 px-1 lg:gap-1 lg:px-1.5">
+              <div className="flex w-full flex-col items-center gap-2 lg:gap-3">
                 {(
                   [
                     { id: 'overview' as const, label: 'Genel Bakış', icon: Home },
-                    { id: 'map' as const, label: 'Harita', icon: MapPin },
-                    { id: 'finance' as const, label: 'Finans', icon: Landmark },
-                    { id: 'businesses' as const, label: 'İşletmeler', icon: Building2 },
-                    { id: 'office' as const, label: 'Ofisim', icon: Briefcase },
+                    { id: 'map' as const, label: 'Harita', icon: MapIcon },
+                    { id: 'finance' as const, label: 'Finans', icon: Wallet },
+                    { id: 'businesses' as const, label: 'İşletmeler', icon: Store },
+                    { id: 'office' as const, label: 'Ofisim', icon: Building2 },
                   ] as const
                 ).map((item) => {
                   const Icon = item.icon;
@@ -3365,14 +3472,14 @@ export default function App() {
                       data-testid={`nav-rail-${item.id}`}
                       aria-current={isActive ? 'page' : undefined}
                       onClick={() => handleSelectExecutiveNav(item.id)}
-                      className={`group flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1.5 text-center transition-all lg:px-1 lg:py-2 ${
+                      className={`group flex w-full flex-col items-center justify-center gap-1 rounded-[16px] px-1 py-2 text-center transition-colors lg:py-2.5 ${
                         isActive
-                          ? 'border-cyan-400/50 bg-gradient-to-b from-cyan-500/20 to-sky-500/10 text-cyan-300 shadow-[0_0_16px_rgba(34,211,238,0.18)]'
-                          : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+                          ? 'bg-[#334155] text-white'
+                          : 'bg-transparent text-slate-400 hover:bg-[#222B38] hover:text-slate-200'
                       }`}
                     >
-                      <Icon className={`h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 ${isActive ? 'text-cyan-300' : ''}`} />
-                      <span className="w-full text-[8.5px] font-bold leading-tight whitespace-nowrap lg:text-[10px]">
+                      <Icon className="h-5 w-5 lg:h-[22px] lg:w-[22px]" strokeWidth={1.5} />
+                      <span className="w-full text-[10px] font-medium leading-tight whitespace-nowrap lg:text-[11px]">
                         {item.label}
                       </span>
                     </button>
@@ -3380,7 +3487,7 @@ export default function App() {
                 })}
               </div>
 
-              <div className="w-full px-1 lg:px-1.5">
+              <div className="w-full">
                 <button
                   type="button"
                   data-testid="nav-rail-settings"
@@ -3388,10 +3495,10 @@ export default function App() {
                     soundEngine.playClick();
                     setSettingsOpen(true);
                   }}
-                  className="flex w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-transparent px-0.5 py-1.5 text-center text-slate-400 transition-all hover:bg-slate-800/60 hover:text-slate-100 lg:px-1 lg:py-2"
+                  className="flex w-full flex-col items-center justify-center gap-1 rounded-[16px] px-1 py-2 text-center text-slate-400 transition-colors hover:bg-[#222B38] hover:text-slate-200 lg:py-2.5"
                 >
-                  <Settings className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5" />
-                  <span className="w-full text-[8.5px] font-bold leading-tight whitespace-nowrap lg:text-[10px]">
+                  <Settings className="h-5 w-5 lg:h-[22px] lg:w-[22px]" strokeWidth={1.5} />
+                  <span className="w-full text-[10px] font-medium leading-tight whitespace-nowrap lg:text-[11px]">
                     Ayarlar
                   </span>
                 </button>
@@ -3436,24 +3543,27 @@ export default function App() {
                 />
               </div>
 
-              {/* VIEW 1: 3-Column Executive Dashboard ("Genel Bakış") */}
+              {/* VIEW 1: Matte Dark-Slate Executive Dashboard ("Genel Bakış") */}
               {activeNav === 'overview' && (
                 <ExecutiveDashboard
+                  state={empire}
                   metrics={dashboardMetrics}
-                  selectedAccountId={selectedAccountId}
-                  onSelectAccount={(id) => {
+                  now={now}
+                  franchiseOfferCount={allFranchises.length}
+                  onQuickAction={handleOverviewQuickAction}
+                  onManageBranch={(id) => {
                     soundEngine.playClick();
-                    setSelectedAccountId(id);
+                    setOverviewManagedBranchId(id);
                   }}
-                  onOpenAccountDetail={(id) => {
+                  onDiscoverBranches={() => {
                     soundEngine.playClick();
-                    setSelectedAccountId(id);
-                    setDashboardDetail({ kind: 'account', id });
+                    closeAllInGameOverlays();
+                    setActiveNav('map');
+                    setPinDropMode(true);
                   }}
-                  onManageOperation={handleManageOperation}
-                  onDetailOperation={(id) => {
+                  onOpenSettings={() => {
                     soundEngine.playClick();
-                    setDashboardDetail({ kind: 'operation', id });
+                    setSettingsOpen(true);
                   }}
                 />
               )}
@@ -3470,13 +3580,13 @@ export default function App() {
                       }}
                       aria-label="Şehir Seç veya Değiştir"
                       data-testid="city-switcher-btn"
-                      className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-xl border border-amber-400/50 bg-[#0B1221]/92 px-3 text-xs font-bold text-amber-200 shadow-lg backdrop-blur-md hover:bg-slate-900 whitespace-nowrap"
+                      className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-full border border-[#334155] bg-[#222B38] px-3 text-xs font-semibold text-slate-100 hover:bg-[#2A3444] whitespace-nowrap"
                     >
-                      <Globe2 className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                      <Globe2 className="h-3.5 w-3.5 shrink-0 text-[#C8AE7D]" strokeWidth={1.5} />
                       <span className="font-mono-num">{activeProvince.code}</span>
                       <span>{activeProvince.name}</span>
-                      <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-emerald-400 sm:inline-flex">
-                        · <Radio className="h-3 w-3" />
+                      <span className="hidden items-center gap-0.5 text-[10px] font-semibold text-[#7A9E7E] sm:inline-flex">
+                        · <Radio className="h-3 w-3" strokeWidth={1.5} />
                         {roomStatus === 'live' ? 'Canlı' : 'Oda'}
                       </span>
                     </button>
@@ -3494,10 +3604,10 @@ export default function App() {
                           ? worldDbStats.error
                           : 'Canlı çok oyunculu harita veritabanı durumu — yenilemek için tıklayın'
                       }
-                      className={`pointer-events-auto flex max-w-[min(85vw,380px)] items-center gap-1.5 rounded-xl border px-3 py-1 font-mono-num text-[11px] font-bold shadow-lg backdrop-blur-md transition-colors ${
+                      className={`pointer-events-auto flex max-w-[min(85vw,380px)] items-center gap-1.5 rounded-full border px-3 py-1 font-mono-num text-[11px] font-semibold transition-colors ${
                         worldDbStats.error
-                          ? 'border-rose-400/70 bg-rose-600/95 text-white hover:bg-rose-700'
-                          : 'border-cyan-400/35 bg-[#0B1221]/92 text-slate-100 hover:bg-slate-900'
+                          ? 'border-[#B86B5E] bg-[#B86B5E] text-white hover:bg-[#A65D51]'
+                          : 'border-[#334155] bg-[#222B38] text-slate-100 hover:bg-[#2A3444]'
                       }`}
                     >
                       <span
@@ -3506,8 +3616,8 @@ export default function App() {
                           worldDbStats.error
                             ? 'bg-white'
                             : worldDbStats.loading
-                            ? 'bg-amber-400 animate-pulse'
-                            : 'bg-emerald-400'
+                            ? 'bg-[#C8AE7D]'
+                            : 'bg-[#7A9E7E]'
                         }`}
                       />
                       <span className="truncate">
@@ -3524,23 +3634,23 @@ export default function App() {
                   {(chainCloneDraft || preselectedFranchise) && !droppedPin && (
                     <div
                       data-testid="map-special-placement-banner"
-                      className="pointer-events-auto absolute bottom-3 left-1/2 z-[520] flex w-[min(90%,470px)] -translate-x-1/2 items-center justify-between gap-2 rounded-xl border border-amber-400 bg-[#0B1221]/95 px-3 py-2 text-xs text-white shadow-xl"
+                      className="pointer-events-auto absolute bottom-3 left-1/2 z-[520] flex w-[min(90%,470px)] -translate-x-1/2 items-center justify-between gap-2 rounded-[16px] border border-[#C8AE7D]/60 bg-[#222B38] px-3.5 py-2 text-xs text-slate-100"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         {chainCloneDraft ? (
-                          <Link2 className="h-4 w-4 shrink-0 text-amber-400" />
+                          <Link2 className="h-4 w-4 shrink-0 text-[#C8AE7D]" strokeWidth={1.5} />
                         ) : (
-                          <Store className="h-4 w-4 shrink-0 text-emerald-400" />
+                          <Store className="h-4 w-4 shrink-0 text-[#7A9E7E]" strokeWidth={1.5} />
                         )}
                         <p className="truncate">
                           {chainCloneDraft ? (
                             <>
-                              <strong className="text-amber-300">Zincir Şube:</strong>{' '}
+                              <strong className="text-[#C8AE7D]">Zincir Şube:</strong>{' '}
                               {chainCloneDraft.suggestedName} için haritada kara üzerine tıklayın
                             </>
                           ) : (
                             <>
-                              <strong className="text-emerald-300">Franchise:</strong>{' '}
+                              <strong className="text-[#7A9E7E]">Franchise:</strong>{' '}
                               {preselectedFranchise?.brandName} şubesi için haritada kara üzerine tıklayın
                             </>
                           )}
@@ -3552,9 +3662,9 @@ export default function App() {
                           setChainCloneDraft(null);
                           setPreselectedFranchise(null);
                         }}
-                        className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-700"
+                        className="flex shrink-0 items-center gap-1 rounded-[10px] border border-[#334155] bg-[#181F29] px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-[#2A3444]"
                       >
-                        <X className="h-3 w-3" /> İptal
+                        <X className="h-3 w-3" strokeWidth={1.5} /> İptal
                       </button>
                     </div>
                   )}
@@ -3565,8 +3675,8 @@ export default function App() {
                     !preselectedFranchise &&
                     !droppedPin &&
                     !selectedCompetitor && (
-                      <div className="pointer-events-none absolute bottom-3 left-1/2 z-[500] w-[min(90%,430px)] -translate-x-1/2 rounded-xl border border-cyan-400/40 bg-[#0B1221]/92 px-3 py-1.5 text-center text-xs text-slate-200 shadow-lg backdrop-blur-md">
-                        <strong className="text-cyan-300">
+                      <div className="pointer-events-none absolute bottom-3 left-1/2 z-[500] w-[min(90%,430px)] -translate-x-1/2 rounded-[16px] border border-[#334155] bg-[#222B38] px-3.5 py-2 text-center text-xs text-slate-200">
+                        <strong className="text-[#C8AE7D]">
                           {activeProvince.code} {activeProvince.name}:
                         </strong>{' '}
                         Kara üzerinde bir caddeye tıklayıp pin bırakın; ilk işletmeniz Merkez Üssünüz olur.
@@ -4116,6 +4226,72 @@ export default function App() {
         onGoMainMenu={handleReturnToMainMenu}
         onClose={() => setHubMenuOpen(false)}
       />
+
+      <AdsPromotionModal
+        open={adsModalOpen}
+        state={empire}
+        onLaunchPromo={handleLaunchHoldingPromo}
+        onClose={() => setAdsModalOpen(false)}
+      />
+
+      <RentalListingsModal
+        open={rentalsModalOpen}
+        state={empire}
+        onBuyProperty={handleBuyRentalProperty}
+        onSignLease={handleSignRentalLease}
+        onTerminateLease={handleTerminateRentalLease}
+        onClose={() => setRentalsModalOpen(false)}
+      />
+
+      <DailyOffersModal
+        open={offersModalOpen}
+        state={empire}
+        onAcceptOffer={handleAcceptDailyOffer}
+        onDeclineOffer={handleDeclineDailyOffer}
+        onClose={() => setOffersModalOpen(false)}
+      />
+
+      <HoldingStoreModal
+        open={storeModalOpen}
+        state={empire}
+        onPurchaseItem={handlePurchaseStorePerk}
+        onClose={() => setStoreModalOpen(false)}
+      />
+
+      {overviewReportsOpen && (
+        <HoldingReportsModal
+          state={empire}
+          now={now}
+          onClose={() => setOverviewReportsOpen(false)}
+          onNavigateToBranch={(id) => {
+            setOverviewReportsOpen(false);
+            setOverviewManagedBranchId(id);
+          }}
+          onLaunchBulkAds={handleLaunchHoldingBulkAds}
+          onDistributeBulkBonus={handleDistributeHoldingBonus}
+        />
+      )}
+
+      {overviewManagedBranchId &&
+        (() => {
+          const targetBranch = empire.businesses.find((b) => b.id === overviewManagedBranchId);
+          if (!targetBranch) return null;
+          return (
+            <BranchManagementModal
+              state={empire}
+              business={targetBranch}
+              now={now}
+              onBackToSelector={() => {
+                setOverviewManagedBranchId(null);
+                setActiveNav('businesses');
+              }}
+              onClose={() => setOverviewManagedBranchId(null)}
+              onCustomizeBranch={handleCustomizeBranch}
+              onLaunchMarketing={handleLaunchBranchMarketing}
+              onUpgradeFacility={handleUpgradeBranchFacility}
+            />
+          );
+        })()}
 
       <LeaderboardModal
         open={leaderboardModalOpen}

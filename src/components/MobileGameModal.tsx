@@ -49,31 +49,31 @@ export const MobileGameModal: React.FC<MobileGameModalProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-stretch justify-center bg-slate-950/75 backdrop-blur-sm`}
+      className={`fixed inset-0 ${zIndexClass} flex items-stretch justify-center bg-black/70`}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
       <div
-        className="fixed inset-2 md:inset-6 mx-auto flex max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950/95 text-slate-100 shadow-[0_24px_70px_rgba(0,0,0,0.75)] backdrop-blur-xl"
+        className="fixed inset-2 md:inset-6 mx-auto flex max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#181F29] text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Fixed Top Header (max 44px) */}
-        <header className="flex h-11 max-h-[44px] shrink-0 items-center justify-between gap-2 border-b border-slate-800/90 bg-slate-900/90 px-3">
-          <div className="flex min-w-0 items-center gap-2">
+        {/* Fixed Matte Top Header */}
+        <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-[#334155] bg-[#222B38] px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
             {icon && (
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-400/30 bg-amber-400/15 text-amber-300">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border border-[#334155] bg-[#181F29] text-[#C8AE7D]">
                 {icon}
               </span>
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="truncate text-sm font-black tracking-tight text-white">
+                <h2 className="truncate text-sm font-bold tracking-tight text-slate-100">
                   {title}
                 </h2>
                 {subtitle && (
-                  <span className="hidden truncate text-xs font-semibold text-slate-400 sm:inline">
+                  <span className="hidden truncate text-xs text-slate-400 sm:inline">
                     · {subtitle}
                   </span>
                 )}
@@ -87,9 +87,9 @@ export const MobileGameModal: React.FC<MobileGameModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Pencereyi kapat"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-500/60 bg-slate-800/90 text-slate-100 transition-all duration-200 ease-out hover:border-rose-400/75 hover:bg-rose-500/20 hover:text-rose-200 active:scale-[0.98]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#334155] bg-[#181F29] text-slate-300 hover:border-[#B86B5E]/70 hover:text-slate-100"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4" strokeWidth={1.5} />
             </button>
           </div>
         </header>
@@ -98,7 +98,7 @@ export const MobileGameModal: React.FC<MobileGameModalProps> = ({
         {tabs && tabs.length > 0 && (
           <nav
             aria-label="Sekmeler"
-            className="shrink-0 border-b border-slate-800/80 bg-slate-900/65 px-3 py-1.5"
+            className="shrink-0 border-b border-[#334155] bg-[#1D2532] px-3 py-2"
           >
             <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto whitespace-nowrap">
               {tabs.map((tab) => {
@@ -110,22 +110,22 @@ export const MobileGameModal: React.FC<MobileGameModalProps> = ({
                     disabled={tab.disabled}
                     title={tab.disabled ? tab.disabledHint : undefined}
                     onClick={() => !tab.disabled && onSelectTab?.(tab.id)}
-                    className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] whitespace-nowrap ${
+                    className={`inline-flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-[12px] border px-3.5 text-xs font-semibold whitespace-nowrap ${
                       tab.disabled
-                        ? 'cursor-not-allowed border-slate-700/80 bg-slate-900/60 text-slate-500 opacity-65'
+                        ? 'cursor-not-allowed border-[#334155]/60 bg-[#181F29] text-slate-500 opacity-65'
                         : isActive
-                        ? 'border-amber-300/85 bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-500/20'
-                        : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700/85 hover:text-white'
+                        ? 'border-[#C8AE7D] bg-[#C8AE7D] text-[#181F29] font-bold'
+                        : 'border-[#334155] bg-[#222B38] text-slate-200 hover:bg-[#2A3444]'
                     }`}
                   >
                     {tab.icon}
                     <span>{tab.label}</span>
                     {tab.badge !== undefined && (
                       <span
-                        className={`rounded-md px-1.5 py-0.5 text-[11px] font-black leading-none ${
+                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
                           isActive
-                            ? 'bg-slate-950/20 text-slate-950'
-                            : 'bg-slate-950/70 text-amber-300'
+                            ? 'bg-[#181F29]/20 text-[#181F29]'
+                            : 'bg-[#181F29] text-[#C8AE7D]'
                         }`}
                       >
                         {tab.badge}
@@ -138,21 +138,21 @@ export const MobileGameModal: React.FC<MobileGameModalProps> = ({
           </nav>
         )}
 
-        {/* Optional Sub-Header (e.g. Calendar Bar or Branch Selector) */}
+        {/* Optional Sub-Header */}
         {subHeader && (
-          <div className="shrink-0 border-b border-slate-800/70 bg-slate-900/45 px-3 py-2">
+          <div className="shrink-0 border-b border-[#334155] bg-[#1E2633] px-3 py-2">
             {subHeader}
           </div>
         )}
 
-        {/* Spacious Scrollable Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-3">
+        {/* Scrollable Body */}
+        <div className="panel-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 space-y-3">
           {children}
         </div>
 
         {/* Optional Sticky Footer */}
         {footer && (
-          <div className="shrink-0 border-t border-slate-800/80 bg-slate-900/90 px-3 py-2">
+          <div className="shrink-0 border-t border-[#334155] bg-[#222B38] px-3.5 py-2.5">
             {footer}
           </div>
         )}

@@ -134,7 +134,7 @@ export function HoldingFranchiseModal({
         subtitle="Franchise & Bayilik Pazaryeri · Çift Yönlü Marka Ağı"
         icon={<Crown className="h-4 w-4" />}
         headerRight={
-          <span className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 px-2.5 py-1.5 font-mono-num text-xs font-bold text-emerald-300 whitespace-nowrap">
+          <span className="rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-2.5 py-1.5 font-mono-num text-xs font-bold text-[#7A9E7E] whitespace-nowrap">
             Telif: {formatTL(state.franchiseRoyaltiesEarned ?? 0, true)}
           </span>
         }
@@ -149,8 +149,8 @@ export function HoldingFranchiseModal({
               onClick={() => setSubTab('publish')}
               className={`min-h-[36px] shrink-0 rounded-xl px-3 text-xs font-bold transition ${
                 subTab === 'publish'
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                  ? 'bg-[#7A9E7E] text-[#181F29]'
+                  : 'border border-[#334155] bg-[#1D2532] text-slate-200 hover:bg-[#2A3444]'
               }`}
             >
               Franchise Ver & Başvurular ({applications.length})
@@ -161,8 +161,8 @@ export function HoldingFranchiseModal({
               onClick={() => setSubTab('market')}
               className={`min-h-[36px] shrink-0 rounded-xl px-3 text-xs font-bold transition ${
                 subTab === 'market'
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                  ? 'bg-[#7A9E7E] text-[#181F29]'
+                  : 'border border-[#334155] bg-[#1D2532] text-slate-200 hover:bg-[#2A3444]'
               }`}
             >
               Pazardan Bayilik Al ({allFranchises.length})
@@ -173,8 +173,8 @@ export function HoldingFranchiseModal({
               onClick={() => setSubTab('chain')}
               className={`min-h-[36px] shrink-0 rounded-xl px-3 text-xs font-bold transition ${
                 subTab === 'chain'
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                  ? 'bg-[#7A9E7E] text-[#181F29]'
+                  : 'border border-[#334155] bg-[#1D2532] text-slate-200 hover:bg-[#2A3444]'
               }`}
             >
               Zincir Markalar & Sanayi ({brandGroups.filter((g) => g.isChain).length})
@@ -191,11 +191,11 @@ export function HoldingFranchiseModal({
               <form
                 onSubmit={handlePublishFranchise}
                 data-testid="publish-franchise-form"
-                className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-3"
+                className="rounded-xl border border-[#334155] bg-[#222B38] p-3.5 space-y-3"
               >
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-bold text-white">İşletmeni Franchise İlanına Çıkar</h3>
-                  <span className="rounded-md bg-amber-400/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                  <span className="rounded-md bg-[#C8AE7D]/15 px-2 py-0.5 text-[10px] font-bold text-[#C8AE7D]">
                     AI + Çok Oyunculu
                   </span>
                 </div>
@@ -206,7 +206,7 @@ export function HoldingFranchiseModal({
                 </p>
 
                 {!elig.eligible ? (
-                  <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">
+                  <div className="rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 p-3 text-xs font-semibold text-[#C8AE7D]">
                     {elig.reason}
                   </div>
                 ) : (
@@ -223,7 +223,7 @@ export function HoldingFranchiseModal({
                           const grp = brandGroups.find((g) => g.key === e.target.value);
                           if (grp) setBrandName(grp.brandName);
                         }}
-                        className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs font-semibold text-white"
+                        className="mt-1 min-h-[42px] w-full rounded-xl border border-[#334155] bg-[#181F29] px-3 text-xs font-semibold text-white"
                       >
                         {brandGroups.map((grp) => (
                           <option key={grp.key} value={grp.key}>
@@ -245,14 +245,14 @@ export function HoldingFranchiseModal({
                         value={brandName}
                         onChange={(e) => setBrandName(e.target.value)}
                         placeholder={activeSourceGroup?.brandName || 'Örn: İmparator Kahve Evi'}
-                        className="mt-1 min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                        className="mt-1 min-h-[42px] w-full rounded-xl border border-[#334155] bg-[#181F29] px-3 text-sm text-white"
                       />
                     </div>
 
-                    <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/75 p-2.5">
+                    <div className="space-y-2 rounded-xl border border-[#334155] bg-black/70 p-2.5">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-slate-300">İsim Hakkı Bedeli</span>
-                        <span className="font-mono-num text-sm font-black text-amber-300">
+                        <span className="font-mono-num text-sm font-black text-[#C8AE7D]">
                           {formatTL(licenseFee)}
                         </span>
                       </div>
@@ -267,7 +267,7 @@ export function HoldingFranchiseModal({
                       />
                       <div className="flex items-center justify-between text-xs pt-1">
                         <span className="font-semibold text-slate-300">Saatlik Ciro Payı</span>
-                        <span className="font-mono-num text-sm font-black text-emerald-400">
+                        <span className="font-mono-num text-sm font-black text-[#7A9E7E]">
                           %{royaltyPct}
                         </span>
                       </div>
@@ -286,7 +286,7 @@ export function HoldingFranchiseModal({
                       type="submit"
                       data-testid="publish-franchise-btn"
                       disabled={effectiveBrandName.length < 3}
-                      className="min-h-[44px] w-full rounded-xl bg-amber-400 px-4 text-sm font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                      className="min-h-[44px] w-full rounded-xl bg-[#C8AE7D] px-4 text-sm font-bold text-[#181F29] hover:bg-[#D2BB8E] disabled:cursor-not-allowed disabled:bg-[#1D2532] disabled:text-slate-500"
                     >
                       Franchise İlanını Yayınla ({effectiveBrandName || 'Marka'})
                     </button>
@@ -309,8 +309,8 @@ export function HoldingFranchiseModal({
                       }
                       className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition whitespace-nowrap ${
                         state.autoApproveFranchiseApps !== false
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                          : 'bg-slate-800 text-slate-300 border border-slate-700'
+                          ? 'bg-[#7A9E7E]/15 text-[#7A9E7E] border border-[#7A9E7E]/45'
+                          : 'bg-[#1D2532] text-slate-300 border border-[#334155]'
                       }`}
                     >
                       Oto AI Onay: {state.autoApproveFranchiseApps !== false ? 'Açık' : 'Kapalı'}
@@ -319,7 +319,7 @@ export function HoldingFranchiseModal({
                 </div>
 
                 {(state.ownFranchises ?? []).length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
+                  <div className="rounded-xl border border-dashed border-[#334155] p-6 text-center text-xs text-slate-400">
                     Henüz yayınladığınız bir franchise markası yok. Soldaki formdan ilk ilanınızı
                     yayınlayıp AI ve oyuncu girişimcilerden gelir elde edin.
                   </div>
@@ -329,7 +329,7 @@ export function HoldingFranchiseModal({
                       <div
                         key={f.id}
                         data-testid={`own-franchise-card-${f.id}`}
-                        className="rounded-xl border border-emerald-500/35 bg-emerald-950/20 p-3 space-y-2"
+                        className="rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 p-3 space-y-2"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-2.5">
@@ -345,10 +345,10 @@ export function HoldingFranchiseModal({
                             </div>
                           </div>
                           <div className="shrink-0 text-right font-mono-num">
-                            <div className="text-xs font-bold text-emerald-400">
+                            <div className="text-xs font-bold text-[#7A9E7E]">
                               {f.branchCount} Bayi
                             </div>
-                            <div className="text-xs font-bold text-amber-300">
+                            <div className="text-xs font-bold text-[#C8AE7D]">
                               %{Math.round(f.royaltyRate * 100)} Pay
                             </div>
                           </div>
@@ -359,7 +359,7 @@ export function HoldingFranchiseModal({
                             type="button"
                             data-testid={`scan-ai-applicant-${f.id}`}
                             onClick={() => onScanAiApplicant(f.id)}
-                            className="inline-flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-xl border border-amber-400/45 bg-amber-400/15 px-3 text-xs font-bold text-amber-200 hover:bg-amber-400/25"
+                            className="inline-flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-3 text-xs font-bold text-[#C8AE7D] hover:bg-[#C8AE7D]/15"
                           >
                             <Radar className="h-3.5 w-3.5" />
                             <span>Yeni AI Girişimci Başvurusu Tara (81 İl)</span>
@@ -373,10 +373,10 @@ export function HoldingFranchiseModal({
             </div>
 
             {/* Incoming AI & Multiplayer Franchise Applications */}
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-2.5">
+            <section className="rounded-xl border border-[#334155] bg-[#222B38] p-3.5 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 text-sm font-bold text-white">
-                  <UserCheck className="h-4 w-4 text-emerald-400" />
+                  <UserCheck className="h-4 w-4 text-[#7A9E7E]" />
                   <span>Gelen Bayilik Başvuruları & Açılan Şubeler ({applications.length})</span>
                 </div>
                 <span className="text-xs text-slate-400">
@@ -397,14 +397,14 @@ export function HoldingFranchiseModal({
                       data-testid={`franchise-app-${app.id}`}
                       className={`flex items-center justify-between gap-2.5 rounded-xl border p-2.5 text-xs ${
                         app.status === 'approved'
-                          ? 'border-emerald-500/35 bg-emerald-950/20'
-                          : 'border-amber-400/45 bg-amber-500/10'
+                          ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15'
+                          : 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15'
                       }`}
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate font-bold text-white">{app.applicantName}</span>
-                          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-sky-300">
+                          <span className="rounded bg-[#1D2532] px-1.5 py-0.5 text-[10px] font-bold text-[#7E96B0]">
                             {app.applicantType === 'ai' ? 'AI Girişimci' : 'Oyuncu'}
                           </span>
                         </div>
@@ -412,14 +412,14 @@ export function HoldingFranchiseModal({
                           {app.brandName} · {String(app.cityPlate).padStart(2, '0')} {app.cityName} (
                           {app.districtName})
                         </div>
-                        <div className="font-mono-num font-bold text-amber-300">
+                        <div className="font-mono-num font-bold text-[#C8AE7D]">
                           +{formatTL(app.licenseFee, true)} · %{Math.round(app.royaltyRate * 100)}{' '}
                           ciro payı
                         </div>
                       </div>
 
                       {app.status === 'approved' ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#7A9E7E]/15 px-2.5 py-1 text-[11px] font-bold text-[#7A9E7E]">
                           <CheckCircle2 className="h-3.5 w-3.5" /> Açıldı
                         </span>
                       ) : (
@@ -428,7 +428,7 @@ export function HoldingFranchiseModal({
                             type="button"
                             data-testid={`approve-app-btn-${app.id}`}
                             onClick={() => onApproveFranchiseApp(app.id)}
-                            className="min-h-[38px] shrink-0 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
+                            className="min-h-[38px] shrink-0 rounded-xl bg-[#7A9E7E] px-3 text-xs font-bold text-[#181F29] hover:bg-[#7A9E7E] whitespace-nowrap"
                           >
                             Onayla (+{formatTL(app.licenseFee, true)})
                           </button>
@@ -447,7 +447,7 @@ export function HoldingFranchiseModal({
             {allFranchises.map((f) => (
               <div
                 key={f.id}
-                className="flex flex-col justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
+                className="flex flex-col justify-between gap-2.5 rounded-xl border border-[#334155] bg-[#222B38] p-3"
               >
                 <div className="flex items-start justify-between gap-2.5">
                   <div className="flex min-w-0 items-center gap-2.5">
@@ -459,14 +459,14 @@ export function HoldingFranchiseModal({
                       </div>
                     </div>
                   </div>
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-500/20 px-2 py-1 text-xs font-bold text-emerald-300">
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#7A9E7E]/15 px-2 py-1 text-xs font-bold text-[#7A9E7E]">
                     <Sparkles className="h-3.5 w-3.5" /> +%35 Ciro
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-slate-800 pt-2 font-mono-num text-xs text-slate-300">
+                <div className="flex items-center justify-between border-t border-[#334155] pt-2 font-mono-num text-xs text-slate-300">
                   <span>Lisans: {formatTL(f.licenseFee)}</span>
-                  <span className="font-bold text-amber-300">
+                  <span className="font-bold text-[#C8AE7D]">
                     Pay: %{Math.round(f.royaltyRate * 100)}
                   </span>
                   <span className="text-slate-400">{f.branchCount} şube</span>
@@ -476,7 +476,7 @@ export function HoldingFranchiseModal({
                   <button
                     type="button"
                     onClick={() => onOpenFranchiseOnMap(f)}
-                    className="inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400"
+                    className="inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#7A9E7E] px-3 text-xs font-bold text-[#181F29] hover:bg-[#7A9E7E]"
                   >
                     <MapPin className="h-3.5 w-3.5" />
                     <span>Haritada Bu Markadan Şube Aç</span>
@@ -490,9 +490,9 @@ export function HoldingFranchiseModal({
         {subTab === 'chain' && (
           <div className="space-y-3">
             {/* Cloned Zincir Markalar Summary */}
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-2.5">
+            <section className="rounded-xl border border-[#334155] bg-[#222B38] p-3.5 space-y-2.5">
               <div className="flex items-center gap-2 text-sm font-black text-white">
-                <Link2 className="h-4 w-4 text-sky-400" />
+                <Link2 className="h-4 w-4 text-[#7E96B0]" />
                 <span>Otomatik Zincir Markalarınız (2+ Şube)</span>
               </div>
               {brandGroups.filter((g) => g.isChain).length === 0 ? (
@@ -508,7 +508,7 @@ export function HoldingFranchiseModal({
                     .map((grp) => (
                       <div
                         key={grp.key}
-                        className="flex items-center justify-between gap-2.5 rounded-xl border border-sky-500/35 bg-sky-950/25 p-3"
+                        className="flex items-center justify-between gap-2.5 rounded-xl border border-[#334155] bg-[#7E96B0]/15 p-3"
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <BrandLogo brandKey={grp.brandName} size={38} />
@@ -522,10 +522,10 @@ export function HoldingFranchiseModal({
                           </div>
                         </div>
                         <div className="shrink-0 text-right text-xs font-bold">
-                          <div className="text-emerald-400">
+                          <div className="text-[#7A9E7E]">
                             -%{Math.round(grp.supplyDiscount * 100)} Tedarik
                           </div>
-                          <div className="text-amber-300">
+                          <div className="text-[#C8AE7D]">
                             +%{Math.round(grp.revenueBonus * 100)} Ciro
                           </div>
                         </div>
@@ -537,7 +537,7 @@ export function HoldingFranchiseModal({
 
             {/* Industrial & Parking Synergy */}
             <section className="grid grid-cols-1 gap-2 min-[900px]:grid-cols-2">
-              <div className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+              <div className="flex items-center gap-2.5 rounded-xl border border-[#334155] bg-[#222B38] p-3">
                 <Factory className="h-5 w-5 shrink-0 text-orange-400" />
                 <div className="min-w-0 text-xs">
                   <div className="text-slate-400">Fabrika & Otopark Sinerjisi</div>
@@ -548,11 +548,11 @@ export function HoldingFranchiseModal({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
-                <Car className="h-5 w-5 shrink-0 text-sky-400" />
+              <div className="flex items-center gap-2.5 rounded-xl border border-[#334155] bg-[#222B38] p-3">
+                <Car className="h-5 w-5 shrink-0 text-[#7E96B0]" />
                 <div className="min-w-0 text-xs">
                   <div className="text-slate-400">Toplam Franchise Telif Geliri</div>
-                  <div className="font-mono-num text-sm font-black text-emerald-400">
+                  <div className="font-mono-num text-sm font-black text-[#7A9E7E]">
                     {formatTL(state.franchiseRoyaltiesEarned ?? 0)}
                   </div>
                 </div>
@@ -560,14 +560,14 @@ export function HoldingFranchiseModal({
             </section>
 
             {/* Supermarket Chain */}
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
+            <section className="rounded-xl border border-[#334155] bg-[#222B38] p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-black text-white">
-                <Store className="h-5 w-5 text-emerald-400" />
+                <Store className="h-5 w-5 text-[#7A9E7E]" />
                 <span>Süpermarket Zincir Ağı ({smCount}/{SUPERMARKET_CHAIN_MIN_COUNT})</span>
               </div>
               {state.supermarketChain ? (
-                <div className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3.5 text-xs text-emerald-200">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+                <div className="flex items-center gap-3 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 p-3.5 text-xs text-[#7A9E7E]">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-[#7A9E7E]" />
                   <div>
                     <div className="text-sm font-bold text-white">
                       Aktif Zincir Markanız: {state.supermarketChain.name}
@@ -583,7 +583,7 @@ export function HoldingFranchiseModal({
                     onChange={(e) => setChainName(e.target.value)}
                     disabled={smCount < SUPERMARKET_CHAIN_MIN_COUNT}
                     placeholder="Örn: Anadolu Ekspres Marketler"
-                    className="min-h-[42px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white disabled:opacity-50"
+                    className="min-h-[42px] w-full rounded-xl border border-[#334155] bg-[#181F29] px-3 text-sm text-white disabled:opacity-50"
                   />
                   <button
                     type="button"
@@ -592,7 +592,7 @@ export function HoldingFranchiseModal({
                       onFormSupermarketChain(chainName.trim());
                       setChainName('');
                     }}
-                    className="min-h-[44px] w-full rounded-xl bg-emerald-500 px-4 text-sm font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                    className="min-h-[44px] w-full rounded-xl bg-[#7A9E7E] px-4 text-sm font-bold text-[#181F29] hover:bg-[#7A9E7E] disabled:cursor-not-allowed disabled:bg-[#1D2532] disabled:text-slate-500"
                   >
                     Zincir Market Markasını Kur (%20 Tedarik İndirimi)
                   </button>

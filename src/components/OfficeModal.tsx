@@ -194,12 +194,12 @@ export function OfficeModal({
         {activeTab === 'design' && (
           <div className="space-y-3" data-testid="office-tab-design">
             {/* Hero Office Showcase & Live B2B Perks */}
-            <section className="rounded-xl border border-amber-400/40 bg-slate-900/90 p-3.5 space-y-3">
+            <section className="rounded-xl border border-[#C8AE7D]/45 bg-[#222B38] p-3.5 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <OfficeArchitecturePreview tierId={benefits.tier.id} />
                   <div className="min-w-0">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-[#C8AE7D]">
                       Seviye {benefits.tier.level}/4 · Mevcut Merkez Ofis
                     </div>
                     <h3 className="text-base font-black text-white truncate">{benefits.tier.name}</h3>
@@ -212,7 +212,7 @@ export function OfficeModal({
                   <div className="text-[11px] text-slate-400">Ofis Prestiji</div>
                   <div
                     data-testid="office-prestige-value"
-                    className="font-mono-num text-2xl font-black text-amber-300"
+                    className="font-mono-num text-2xl font-black text-[#C8AE7D]"
                   >
                     {benefits.officePrestige}
                     <span className="text-xs text-slate-400">/100</span>
@@ -222,7 +222,7 @@ export function OfficeModal({
 
               {/* Prestige Progress Bar */}
               <div className="space-y-1">
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-sky-400 via-amber-400 to-emerald-400 transition-all duration-300"
                     style={{ width: `${Math.max(4, benefits.officePrestige)}%` }}
@@ -231,7 +231,7 @@ export function OfficeModal({
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
                   <span>
                     Firma Tanınırlığı:{' '}
-                    <strong className="font-mono-num text-sky-300">
+                    <strong className="font-mono-num text-[#7E96B0]">
                       %{brandRecognition.toFixed(1)}
                     </strong>
                   </span>
@@ -239,7 +239,7 @@ export function OfficeModal({
                     Banka Kredi Prestij Barajı:{' '}
                     <strong
                       className={
-                        benefits.officePrestige >= 20 ? 'text-emerald-400' : 'text-rose-400'
+                        benefits.officePrestige >= 20 ? 'text-[#7A9E7E]' : 'text-[#B86B5E]'
                       }
                     >
                       {benefits.officePrestige >= 20 ? 'Sağlandı (20+)' : `${benefits.officePrestige}/20`}
@@ -250,33 +250,33 @@ export function OfficeModal({
 
               {/* Real B2B Perks Summary */}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-lg border border-emerald-500/35 bg-emerald-950/30 p-2.5">
-                  <div className="text-[10.5px] text-emerald-200/80">Toptancı İndirimi</div>
+                <div className="rounded-lg border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 p-2.5">
+                  <div className="text-[10.5px] text-[#7A9E7E]/80">Toptancı İndirimi</div>
                   <div
                     data-testid="office-supply-discount"
-                    className="mt-0.5 font-mono-num text-sm font-black text-emerald-300"
+                    className="mt-0.5 font-mono-num text-sm font-black text-[#7A9E7E]"
                   >
                     -%{(benefits.supplyDiscountRate * 100).toFixed(1)}
                   </div>
                   <div className="text-[10px] text-slate-400">Tedarik & hammadde</div>
                 </div>
-                <div className="rounded-lg border border-sky-500/35 bg-sky-950/30 p-2.5">
-                  <div className="text-[10.5px] text-sky-200/80">Banka Faiz İndirimi</div>
-                  <div className="mt-0.5 font-mono-num text-sm font-black text-sky-300">
+                <div className="rounded-lg border border-[#334155] bg-[#7E96B0]/15 p-2.5">
+                  <div className="text-[10.5px] text-[#7E96B0]/80">Banka Faiz İndirimi</div>
+                  <div className="mt-0.5 font-mono-num text-sm font-black text-[#7E96B0]">
                     -%{(benefits.loanInterestDiscount * 100).toFixed(1)}
                   </div>
                   <div className="text-[10px] text-slate-400">Kredi maliyeti</div>
                 </div>
-                <div className="rounded-lg border border-amber-500/35 bg-amber-950/30 p-2.5">
-                  <div className="text-[10.5px] text-amber-200/80">Kredi Limit Çarpanı</div>
-                  <div className="mt-0.5 font-mono-num text-sm font-black text-amber-300">
+                <div className="rounded-lg border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 p-2.5">
+                  <div className="text-[10.5px] text-[#C8AE7D]/80">Kredi Limit Çarpanı</div>
+                  <div className="mt-0.5 font-mono-num text-sm font-black text-[#C8AE7D]">
                     {benefits.loanLimitMultiplier.toFixed(2)}×
                   </div>
                   <div className="text-[10px] text-slate-400">Prestij onayı</div>
                 </div>
-                <div className="rounded-lg border border-violet-500/35 bg-violet-950/30 p-2.5">
-                  <div className="text-[10.5px] text-violet-200/80">Üst Düzey İK Erişimi</div>
-                  <div className="mt-0.5 text-xs font-black text-violet-200 leading-tight">
+                <div className="rounded-lg border border-[#334155] bg-[#7E96B0]/15 p-2.5">
+                  <div className="text-[10.5px] text-[#7E96B0]/80">Üst Düzey İK Erişimi</div>
+                  <div className="mt-0.5 text-xs font-black text-[#7E96B0] leading-tight">
                     {EXEC_ROLE_LABEL[benefits.maxHireableExecutive]}
                   </div>
                   <div className="text-[10px] text-slate-400">Yönetici başvurusu</div>
@@ -309,10 +309,10 @@ export function OfficeModal({
                       data-testid={`office-tier-${tier.id}`}
                       className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 ${
                         isCurrent
-                          ? 'border-amber-400/80 bg-amber-500/10'
+                          ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15'
                           : isOwned
-                          ? 'border-emerald-500/40 bg-emerald-950/20'
-                          : 'border-slate-700/80 bg-slate-900/75'
+                          ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15'
+                          : 'border-[#334155] bg-[#222B38]'
                       }`}
                     >
                       <div>
@@ -321,29 +321,29 @@ export function OfficeModal({
                             <div className="text-xs font-black text-white">{tier.name}</div>
                             <div className="text-[11px] text-slate-400">{tier.subtitle}</div>
                           </div>
-                          <span className="rounded-md bg-slate-800 px-2 py-0.5 font-mono-num text-[10.5px] font-bold text-amber-300">
+                          <span className="rounded-md bg-[#1D2532] px-2 py-0.5 font-mono-num text-[10.5px] font-bold text-[#C8AE7D]">
                             +{tier.basePrestige} Prestij
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5 text-[10.5px]">
-                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-semibold text-emerald-300">
+                          <span className="rounded bg-[#7A9E7E]/15 px-1.5 py-0.5 font-semibold text-[#7A9E7E]">
                             Tedarik -%{Math.round(tier.supplyDiscountRate * 100)}
                           </span>
-                          <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-semibold text-sky-300">
+                          <span className="rounded bg-[#7E96B0]/15 px-1.5 py-0.5 font-semibold text-[#7E96B0]">
                             Faiz -%{(tier.loanInterestDiscount * 100).toFixed(1)}
                           </span>
-                          <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-semibold text-violet-300">
+                          <span className="rounded bg-[#7E96B0]/15 px-1.5 py-0.5 font-semibold text-[#7E96B0]">
                             {EXEC_ROLE_LABEL[tier.maxHireableExecutive]}
                           </span>
                         </div>
                       </div>
 
                       {isCurrent ? (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#C8AE7D]">
                           <CheckCircle2 className="h-4 w-4" /> Aktif Merkez Ofis
                         </div>
                       ) : isOwned ? (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#7A9E7E]">
                           <CheckCircle2 className="h-4 w-4" /> Tamamlandı
                         </div>
                       ) : (
@@ -352,7 +352,7 @@ export function OfficeModal({
                           data-testid={`upgrade-tier-btn-${tier.id}`}
                           disabled={!canUpgrade}
                           onClick={() => onUpgradeOfficeTier(tier.id)}
-                          className="flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300/80 bg-amber-400 px-3 text-xs font-black text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400"
+                          className="flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-[#C8AE7D]/45 bg-[#C8AE7D] px-3 text-xs font-black text-[#181F29] hover:bg-[#D2BB8E] disabled:cursor-not-allowed disabled:border-[#334155] disabled:bg-[#1D2532] disabled:text-slate-400"
                         >
                           {!isNext || !brandOk ? <Lock className="h-3.5 w-3.5" /> : <Building2 className="h-3.5 w-3.5" />}
                           <span>
@@ -387,14 +387,14 @@ export function OfficeModal({
                       data-testid={`office-upgrade-${upg.id}`}
                       className={`rounded-xl border p-3 flex flex-col justify-between gap-2 ${
                         owned
-                          ? 'border-emerald-500/45 bg-emerald-950/20'
-                          : 'border-slate-700/80 bg-slate-900/75'
+                          ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15'
+                          : 'border-[#334155] bg-[#222B38]'
                       }`}
                     >
                       <div>
                         <div className="flex items-start justify-between gap-2">
                           <div className="text-xs font-black text-white">{upg.name}</div>
-                          <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 font-mono-num text-[10px] font-bold text-amber-300">
+                          <span className="shrink-0 rounded bg-[#C8AE7D]/15 px-1.5 py-0.5 font-mono-num text-[10px] font-bold text-[#C8AE7D]">
                             +{upg.prestigeBonus} Prestij
                           </span>
                         </div>
@@ -403,23 +403,23 @@ export function OfficeModal({
                         </p>
                         <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] font-semibold">
                           {upg.supplyDiscountBonus > 0 && (
-                            <span className="text-emerald-300">
+                            <span className="text-[#7A9E7E]">
                               Tedarik -%{(upg.supplyDiscountBonus * 100).toFixed(1)}
                             </span>
                           )}
                           {upg.loanInterestDiscountBonus > 0 && (
-                            <span className="text-sky-300">
+                            <span className="text-[#7E96B0]">
                               Faiz -%{(upg.loanInterestDiscountBonus * 100).toFixed(1)}
                             </span>
                           )}
                           {upg.brandBonus > 0 && (
-                            <span className="text-amber-300">Tanınırlık +%{upg.brandBonus}</span>
+                            <span className="text-[#C8AE7D]">Tanınırlık +%{upg.brandBonus}</span>
                           )}
                         </div>
                       </div>
 
                       {owned ? (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#7A9E7E]">
                           <CheckCircle2 className="h-4 w-4" /> Kurulu
                         </div>
                       ) : (
@@ -428,7 +428,7 @@ export function OfficeModal({
                           data-testid={`buy-upgrade-btn-${upg.id}`}
                           disabled={!canBuy}
                           onClick={() => onBuyOfficeUpgrade(upg.id)}
-                          className="flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-lg border border-sky-400/70 bg-sky-500 px-3 text-xs font-black text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400"
+                          className="flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-lg border border-[#334155] bg-[#7E96B0] px-3 text-xs font-black text-[#181F29] hover:bg-[#7E96B0] disabled:cursor-not-allowed disabled:border-[#334155] disabled:bg-[#1D2532] disabled:text-slate-400"
                         >
                           {tierLocked ? <Lock className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
                           <span>
@@ -449,43 +449,43 @@ export function OfficeModal({
         {activeTab === 'phone' && (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="office-tab-phone">
             {/* Executive Smartphone Frame */}
-            <section className="rounded-2xl border-2 border-slate-700 bg-slate-950 p-3.5 shadow-xl space-y-3">
+            <section className="rounded-[20px] border-2 border-[#334155] bg-[#181F29] p-3.5 space-y-3">
               {/* Phone Status Bar */}
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-[11px] font-semibold text-slate-300">
+              <div className="flex items-center justify-between border-b border-[#334155] pb-2 text-[11px] font-semibold text-slate-300">
                 <span className="flex items-center gap-1.5">
-                  <Smartphone className="h-3.5 w-3.5 text-sky-400" />
+                  <Smartphone className="h-3.5 w-3.5 text-[#7E96B0]" />
                   <strong className="text-white">{companyName}</strong>
                 </span>
-                <span className="font-mono-num text-amber-300">{clock.compactLabel}</span>
+                <span className="font-mono-num text-[#C8AE7D]">{clock.compactLabel}</span>
               </div>
 
               {/* Phone KPI Grid */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-slate-900 border border-slate-800 p-2.5">
+                <div className="rounded-xl bg-[#222B38] border border-[#334155] p-2.5">
                   <div className="text-[10px] text-slate-400">Nakit Kasa</div>
                   <div
                     className={`font-mono-num text-sm font-black ${
-                      state.cash < 0 ? 'text-rose-400' : 'text-emerald-400'
+                      state.cash < 0 ? 'text-[#B86B5E]' : 'text-[#7A9E7E]'
                     }`}
                   >
                     {formatTL(state.cash, true)}
                   </div>
                 </div>
-                <div className="rounded-xl bg-slate-900 border border-slate-800 p-2.5">
+                <div className="rounded-xl bg-[#222B38] border border-[#334155] p-2.5">
                   <div className="text-[10px] text-slate-400">Net Şirket Değeri</div>
                   <div className="font-mono-num text-sm font-black text-white">
                     {formatTL(netWorth, true)}
                   </div>
                 </div>
-                <div className="rounded-xl bg-slate-900 border border-slate-800 p-2.5">
+                <div className="rounded-xl bg-[#222B38] border border-[#334155] p-2.5">
                   <div className="text-[10px] text-slate-400">Firma Tanınırlığı</div>
-                  <div className="font-mono-num text-sm font-black text-sky-300">
+                  <div className="font-mono-num text-sm font-black text-[#7E96B0]">
                     %{brandRecognition.toFixed(1)}
                   </div>
                 </div>
-                <div className="rounded-xl bg-slate-900 border border-slate-800 p-2.5">
+                <div className="rounded-xl bg-[#222B38] border border-[#334155] p-2.5">
                   <div className="text-[10px] text-slate-400">Ortalama Hizmet</div>
-                  <div className="font-mono-num text-sm font-black text-amber-300">
+                  <div className="font-mono-num text-sm font-black text-[#C8AE7D]">
                     {avgServiceStars > 0 ? `${avgServiceStars.toFixed(1)} ★` : '—'}
                   </div>
                 </div>
@@ -494,7 +494,7 @@ export function OfficeModal({
               {/* Quick Executive Call Shortcuts */}
               <div className="space-y-1.5">
                 <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                  <PhoneCall className="h-3.5 w-3.5 text-emerald-400" />
+                  <PhoneCall className="h-3.5 w-3.5 text-[#7A9E7E]" />
                   Hızlı Yönetici Hatları
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -504,7 +504,7 @@ export function OfficeModal({
                       onClose();
                       onQuickNavigate?.('banking');
                     }}
-                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-2.5 text-xs font-bold text-amber-200 hover:bg-amber-500/20"
+                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-2.5 text-xs font-bold text-[#C8AE7D] hover:bg-[#C8AE7D]/15"
                   >
                     <Landmark className="h-4 w-4 shrink-0" />
                     <span>Banka Müşteri Hattı</span>
@@ -515,7 +515,7 @@ export function OfficeModal({
                       onClose();
                       onQuickNavigate?.('hr');
                     }}
-                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-sky-500/35 bg-sky-500/10 px-2.5 text-xs font-bold text-sky-200 hover:bg-sky-500/20"
+                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-2.5 text-xs font-bold text-[#7E96B0] hover:bg-[#7E96B0]/15"
                   >
                     <Users className="h-4 w-4 shrink-0" />
                     <span>İK & Kadro</span>
@@ -526,7 +526,7 @@ export function OfficeModal({
                       onClose();
                       onQuickNavigate?.('accounting');
                     }}
-                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-2.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/20"
+                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-2.5 text-xs font-bold text-[#7A9E7E] hover:bg-[#7A9E7E]/15"
                   >
                     <Calculator className="h-4 w-4 shrink-0" />
                     <span>Mali Müşavir</span>
@@ -537,7 +537,7 @@ export function OfficeModal({
                       onClose();
                       onQuickNavigate?.('dayend');
                     }}
-                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-violet-500/35 bg-violet-500/10 px-2.5 text-xs font-bold text-violet-200 hover:bg-violet-500/20"
+                    className="flex min-h-[42px] items-center gap-2 rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-2.5 text-xs font-bold text-[#7E96B0] hover:bg-[#7E96B0]/15"
                   >
                     <CalendarCheck2 className="h-4 w-4 shrink-0" />
                     <span>00:00 Gün Sonu</span>
@@ -547,17 +547,17 @@ export function OfficeModal({
             </section>
 
             {/* Live Customer Reviews & B2B Alerts */}
-            <section className="rounded-xl border border-slate-700/80 bg-slate-900/85 p-3.5 space-y-2.5">
+            <section className="rounded-xl border border-[#334155] bg-[#222B38] p-3.5 space-y-2.5">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-black text-white flex items-center gap-1.5">
-                  <Star className="h-4 w-4 text-amber-400" />
+                  <Star className="h-4 w-4 text-[#C8AE7D]" />
                   Canlı Müşteri Yorumları & Hizmet Puanları
                 </h4>
                 <span className="text-[11px] text-slate-400">{branchQualityRows.length} Şube</span>
               </div>
 
               {branchQualityRows.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-700 p-4 text-center text-xs text-slate-400">
+                <div className="rounded-lg border border-dashed border-[#334155] p-4 text-center text-xs text-slate-400">
                   Henüz açık bir şubeniz yok. İlk şubenizi kurduğunuzda müşteri puanları ve yorumları telefonunuza anlık düşecektir.
                 </div>
               ) : (
@@ -567,15 +567,15 @@ export function OfficeModal({
                       key={business.id}
                       className={`rounded-xl border p-2.5 text-xs space-y-1 ${
                         report.stars >= 3.5
-                          ? 'border-emerald-500/35 bg-emerald-950/20'
+                          ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15'
                           : report.stars >= 2.5
-                          ? 'border-amber-500/35 bg-amber-950/20'
-                          : 'border-rose-500/45 bg-rose-950/30'
+                          ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15'
+                          : 'border-[#B86B5E]/45 bg-[#B86B5E]/15'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-bold text-white truncate">{business.customName}</span>
-                        <span className="font-mono-num font-black text-amber-300 shrink-0">
+                        <span className="font-mono-num font-black text-[#C8AE7D] shrink-0">
                           {report.stars.toFixed(1)} ★ · %{report.customerTrafficPct} Trafik
                         </span>
                       </div>
@@ -589,8 +589,8 @@ export function OfficeModal({
                 </div>
               )}
 
-              <div className="rounded-lg border border-slate-700 bg-slate-950/80 p-2.5 text-[11px] text-slate-300 flex items-start gap-2">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-sky-400 mt-0.5" />
+              <div className="rounded-lg border border-[#334155] bg-black/70 p-2.5 text-[11px] text-slate-300 flex items-start gap-2">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-[#7E96B0] mt-0.5" />
                 <span>
                   Hizmet kalitesi <strong>2.5★</strong> altına düşen şubelerde müşteri trafiği hızla erir ve şube zarar edebilir. Personel kadrosunu tamamlayın ve kalite yatırımı yapın.
                 </span>
@@ -601,9 +601,9 @@ export function OfficeModal({
 
         {activeTab === 'assets' && (
           <div className="space-y-3" data-testid="office-tab-assets">
-            <section className="rounded-xl border border-amber-400/35 bg-slate-900/90 p-3 flex flex-wrap items-center justify-between gap-2">
+            <section className="rounded-xl border border-[#C8AE7D]/45 bg-[#222B38] p-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
-                <Award className="h-5 w-5 text-amber-400 shrink-0" />
+                <Award className="h-5 w-5 text-[#C8AE7D] shrink-0" />
                 <div>
                   <div className="text-xs font-black text-white">Kişisel Prestij Portföyü</div>
                   <div className="text-[11px] text-slate-400">
@@ -613,7 +613,7 @@ export function OfficeModal({
               </div>
               <div className="text-right font-mono-num">
                 <div className="text-[10.5px] text-slate-400">Kişisel Varlık Toplamı</div>
-                <div className="text-sm font-black text-amber-300">
+                <div className="text-sm font-black text-[#C8AE7D]">
                   {formatTL(personalAssetsVal, true)}
                 </div>
               </div>
@@ -629,35 +629,35 @@ export function OfficeModal({
                     data-testid={`personal-asset-${asset.id}`}
                     className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 ${
                       owned
-                        ? 'border-emerald-500/45 bg-emerald-950/25'
-                        : 'border-slate-700/80 bg-slate-900/80'
+                        ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15'
+                        : 'border-[#334155] bg-[#222B38]'
                     }`}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-sky-300">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#7E96B0]">
                             {asset.category}
                           </span>
                           <div className="text-sm font-black text-white">{asset.name}</div>
                         </div>
-                        <span className="font-mono-num text-xs font-black text-amber-300 shrink-0">
+                        <span className="font-mono-num text-xs font-black text-[#C8AE7D] shrink-0">
                           {formatTL(asset.cost, true)}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-slate-400 leading-snug">{asset.description}</p>
                       <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold">
-                        <span className="rounded bg-amber-500/15 px-2 py-0.5 text-amber-300">
+                        <span className="rounded bg-[#C8AE7D]/15 px-2 py-0.5 text-[#C8AE7D]">
                           +{asset.prestigeBonus} Ofis Prestiji
                         </span>
-                        <span className="rounded bg-sky-500/15 px-2 py-0.5 text-sky-300">
+                        <span className="rounded bg-[#7E96B0]/15 px-2 py-0.5 text-[#7E96B0]">
                           +%{asset.brandBonus} Firma Tanınırlığı
                         </span>
                       </div>
                     </div>
 
                     {owned ? (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#7A9E7E]">
                         <CheckCircle2 className="h-4 w-4" /> Koleksiyonunuzda
                       </div>
                     ) : (
@@ -666,7 +666,7 @@ export function OfficeModal({
                         data-testid={`buy-asset-btn-${asset.id}`}
                         disabled={!canAfford}
                         onClick={() => onBuyPersonalAsset(asset.id)}
-                        className="flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300/80 bg-amber-400 px-3 text-xs font-black text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400"
+                        className="flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-lg border border-[#C8AE7D]/45 bg-[#C8AE7D] px-3 text-xs font-black text-[#181F29] hover:bg-[#D2BB8E] disabled:cursor-not-allowed disabled:border-[#334155] disabled:bg-[#1D2532] disabled:text-slate-400"
                       >
                         <TrendingUp className="h-3.5 w-3.5" />
                         <span>Satın Al · {formatTL(asset.cost, true)}</span>

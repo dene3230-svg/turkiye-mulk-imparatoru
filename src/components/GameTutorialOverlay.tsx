@@ -4,7 +4,7 @@ import {
   Clock,
   Users,
   Landmark,
-  Trophy,
+  Briefcase,
   ChevronRight,
   ChevronLeft,
   FastForward,
@@ -28,44 +28,44 @@ interface TutorialStep {
 
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
-    title: '1. Haritada Pin Bırak & Merkez Üssünü Kur',
-    badge: 'Harita & Merkez Üs (HQ)',
-    body: 'Türkiye haritasında kara üzerinde herhangi bir caddeye tıklayarak 13 sektörden birini (Kafe, Restoran, Süpermarket, Otopark, Fabrika, AVM...) kurabilirsiniz. Kurduğunuz ilk işletme kalıcı Merkez Üssünüz (HQ) olur.',
-    tip: 'Alt bardaki "Harita" butonu sizi doğrudan Merkez Üssünüze odaklar; deniz/göl alanları ve 75m içindeki şubeler otomatik korunur.',
+    title: '1. Haritada Pin Bırak & İlk Şubeni Kur',
+    badge: 'Harita & Merkez Üs',
+    body: 'Sol menüdeki "Harita" sekmesinden Türkiye haritasında dilediğiniz noktaya pin bırakıp 14 sektörden birini kurabilirsiniz. İlk işletmeniz holdinginizin Merkez Üssü (HQ) olur.',
+    tip: 'Sağ alttaki "İşletmeleri Keşfet →" veya "+ Yeni İşletme / Şube Kur" kartı sizi doğrudan haritaya taşır.',
     icon: MapPin,
-    positionClass: 'bottom-[max(76px,calc(var(--safe-bottom)+72px))] left-1/2 -translate-x-1/2',
+    positionClass: 'bottom-[max(44px,calc(var(--safe-bottom)+32px))] left-1/2 -translate-x-1/2',
   },
   {
-    title: '2. Hasılatı Yönet & Zaman Hızını Kontrol Et',
-    badge: 'Zaman Kontrolü (⏸ / 1x / 2x / 4x)',
-    body: 'Üst bardaki takvim ve zaman kapsülüyle oyunu Durdur (⏸) moduna alıp planlama yapabilir, ya da 2x / 4x hızına alarak ciroları, fabrika üretimini ve borsayı hızlandırabilirsiniz.',
-    tip: 'Şubelerde biriken hasılatı alttaki "Yönetim > İşletmelerim" ekranından tek tek veya "Tümünü Topla" ile kasaya aktarın.',
+    title: '2. 30 Saniyelik Gün Döngüsü & Zaman Kontrolü',
+    badge: 'Duraklat (⏸) / Normal Hız (▶)',
+    body: 'Üst bilgi çubuğundaki "Gün X • Gün Adı" göstergesinin yanından zamanı Duraklat (⏸) veya Normal Hız (▶) konumuna alabilirsiniz. Her 30 saniyede 1 oyun günü tamamlanır.',
+    tip: 'İnce dolum çubuğu her 30 saniyede dolduğunda günlük ciro, giderler, kira ve kredi taksitleri otomatik hesaplanır.',
     icon: Clock,
-    positionClass: 'top-[max(68px,calc(var(--safe-top)+64px))] left-1/2 -translate-x-1/2',
+    positionClass: 'top-[max(68px,calc(var(--safe-top)+60px))] left-1/2 -translate-x-1/2',
   },
   {
-    title: '3. Personel Kadrosu & Tam Otomasyon',
-    badge: 'Yönetim · İK & Çalışanlar',
-    body: 'Alttaki "Yönetim > İK & Çalışanlar" sekmesinden her şube için en fazla 4 Çalışan, 1 Müdür Yardımcısı ve 1 Şube Müdürü işe alın. Şube Müdürü, Bölge Sorumlusu ve Genel Müdür hasılatı her oyun saatinde otomatik tahsil eder!',
-    tip: 'Müdür Yardımcısı stoğu otomatik yeniler; Şube Müdürü ise stok, bakım ve saatlik gelir tahsilatını tamamen otomatikleştirir.',
+    title: '3. 6 Slotlu Personel Kadrosu & Verimlilik',
+    badge: 'İK & Personel Yönetimi',
+    body: 'Her şube için en fazla 4 Çalışan, 1 Müdür Yardımcısı ve 1 Şube Müdürü atayabilirsiniz. Müdürler stok yenileme, bakım ve hasılat takibini otomatikleştirir.',
+    tip: 'Sağ paneldeki "Personel" kartından veya şube kartlarındaki "YÖNET" butonundan ekibinizi yönetin.',
     icon: Users,
-    positionClass: 'bottom-[max(76px,calc(var(--safe-bottom)+72px))] left-1/2 -translate-x-1/2',
+    positionClass: 'bottom-[max(44px,calc(var(--safe-bottom)+32px))] left-1/2 -translate-x-1/2',
   },
   {
-    title: '4. Muhasebe, Kredi Slider, Borsa & Yatırımlarım',
-    badge: 'Finans Merkezi (4 Sekme)',
-    body: 'Alttaki "Finans" panelinde Muhasebe bilançosu, kaydırma çubuklu (slider) Banka & Kredi piyasası, canlı BIST/IPO Borsası ve sahip olduğunuz hisseleri kâr-zararıyla takip ettiğiniz Yatırımlarım ekranı bir aradadır.',
-    tip: 'Fabrika ve Zincir Market indirimlerinin net kârınıza etkisini Muhasebe sekmesinde canlı izleyin.',
+    title: '4. Finans, Banka, Borsa & Kiralık Mülkler',
+    badge: 'Finans & Yatırım',
+    body: 'Sol menüdeki "Finans" sekmesinden veya sağdaki "Yatırımlar & Borsa", "Banka" ve "Kiralık İlanları" kartlarından kredi çekebilir, hisse alıp satabilir ve pasif kira geliri oluşturabilirsiniz.',
+    tip: 'Reklam & Tanıtım kampanyalarıyla tanınırlığınızı artırıp Franchise başvuruları ve Günlük Teklifler kazanın.',
     icon: Landmark,
-    positionClass: 'bottom-[max(76px,calc(var(--safe-bottom)+72px))] left-1/2 -translate-x-1/2',
+    positionClass: 'bottom-[max(44px,calc(var(--safe-bottom)+32px))] left-1/2 -translate-x-1/2',
   },
   {
-    title: '5. Piyasa Haberleri, Dinamik Görevler & Menü',
-    badge: 'Haberler · Görevler · Menü',
-    body: 'Alt bardaki "Haberler" butonuyla ekonomik gündem ve faiz bültenini izleyin, "Görevler" ile sürekli yenilenen hedeflerden Nakit + XP kazanın. Liderlik, Holding & Franchise, Patron Sohbeti ve Ayarlar ise "Menü" altındadır.',
-    tip: 'İstediğiniz zaman Menü > Oyun Rehberi veya Ayarlar üzerinden bu tura geri dönebilirsiniz.',
-    icon: Trophy,
-    positionClass: 'bottom-[max(76px,calc(var(--safe-bottom)+72px))] left-1/2 -translate-x-1/2',
+    title: '5. Ofisim, Günlük Raporlar & Prestij',
+    badge: 'Holding Büyümesi',
+    body: 'Ofisinizi yükselterek banka faiz indirimleri ve prestij bonusları açın. "Günlük Raporlar" ile tüm şubelerinizin kârlılığını ve gider kırılımını analiz edin.',
+    tip: 'İstediğiniz zaman sol menüdeki "Ayarlar" ekranından bu rehberi tekrar başlatabilirsiniz.',
+    icon: Briefcase,
+    positionClass: 'bottom-[max(44px,calc(var(--safe-bottom)+32px))] left-1/2 -translate-x-1/2',
   },
 ];
 
@@ -88,22 +88,24 @@ export function GameTutorialOverlay({
       aria-modal="true"
       aria-label="Başlangıç Rehberi"
       data-testid="tutorial-overlay"
-      className="pointer-events-auto fixed inset-0 z-[1280] bg-slate-950/45"
+      className="pointer-events-auto fixed inset-0 z-[1280] bg-black/60"
     >
       <div
-        className={`fixed ${step.positionClass} w-[min(92vw,470px)] rounded-2xl border-2 border-amber-400/90 bg-white/98 p-3.5 text-slate-900 shadow-2xl dark:border-amber-500/80 dark:bg-slate-900/98 dark:text-slate-100`}
+        className={`fixed ${step.positionClass} w-[min(92vw,470px)] rounded-[20px] border border-[#334155] bg-[#222B38] p-4 text-slate-100`}
       >
-        {/* Top bar: Step badge + Progress dots + Skip button */}
+        {/* Top bar */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
-              <Icon className="h-4 w-4" />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#C8AE7D]/45 bg-[#181F29] text-[#C8AE7D]">
+              <Icon className="h-4 w-4" strokeWidth={1.5} />
             </div>
             <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#7E96B0]">
                 Rehber · {stepIdx + 1} / {TUTORIAL_STEPS.length} · {step.badge}
               </div>
-              <h3 className="truncate text-xs font-extrabold sm:text-sm">{step.title}</h3>
+              <h3 className="truncate text-xs font-bold text-slate-100 sm:text-sm">
+                {step.title}
+              </h3>
             </div>
           </div>
 
@@ -114,33 +116,34 @@ export function GameTutorialOverlay({
               setStepIdx(0);
               onSkip();
             }}
-            className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-700 transition-colors hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 whitespace-nowrap"
+            className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-[12px] border border-[#334155] bg-[#181F29] px-2.5 text-[11px] font-semibold text-slate-300 hover:bg-[#2A3444] whitespace-nowrap"
           >
-            <FastForward className="h-3.5 w-3.5" />
+            <FastForward className="h-3.5 w-3.5" strokeWidth={1.5} />
             <span>Rehberi Atla</span>
           </button>
         </div>
 
-        <p className="mt-2 text-xs leading-relaxed text-slate-700 dark:text-slate-200">
+        <p className="mt-2.5 text-xs leading-relaxed text-slate-300">
           {step.body}
         </p>
 
-        <div className="mt-2 rounded-xl bg-amber-50/90 px-2.5 py-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <strong>İpucu:</strong> {step.tip}
+        <div className="mt-2.5 rounded-[14px] border border-[#334155] bg-[#181F29] px-3 py-2 text-[11px] text-[#C8AE7D]">
+          <strong className="font-semibold">İpucu:</strong>{' '}
+          <span className="text-slate-300">{step.tip}</span>
         </div>
 
         {/* Footer navigation */}
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
+        <div className="mt-3.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
             {TUTORIAL_STEPS.map((_, i) => (
               <span
                 key={i}
                 className={`h-1.5 rounded-full transition-all ${
                   i === stepIdx
-                    ? 'w-5 bg-amber-600'
+                    ? 'w-5 bg-[#C8AE7D]'
                     : i < stepIdx
-                    ? 'w-2 bg-emerald-500'
-                    : 'w-2 bg-slate-300 dark:bg-slate-700'
+                    ? 'w-2 bg-[#7A9E7E]'
+                    : 'w-2 bg-[#334155]'
                 }`}
               />
             ))}
@@ -151,9 +154,9 @@ export function GameTutorialOverlay({
               <button
                 type="button"
                 onClick={() => setStepIdx((i) => Math.max(0, i - 1))}
-                className="flex min-h-[36px] items-center gap-1 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="flex min-h-[36px] items-center gap-1 rounded-[12px] border border-[#334155] bg-[#181F29] px-3 text-xs font-semibold text-slate-200 hover:bg-[#2A3444]"
               >
-                <ChevronLeft className="h-3.5 w-3.5" />
+                <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
                 <span>Geri</span>
               </button>
             )}
@@ -162,10 +165,10 @@ export function GameTutorialOverlay({
                 type="button"
                 data-testid="tutorial-next-btn"
                 onClick={() => setStepIdx((i) => Math.min(TUTORIAL_STEPS.length - 1, i + 1))}
-                className="flex min-h-[36px] items-center gap-1 rounded-xl bg-amber-600 px-3.5 text-xs font-bold text-white shadow-xs hover:bg-amber-700"
+                className="flex min-h-[36px] items-center gap-1 rounded-[12px] bg-[#C8AE7D] px-3.5 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E]"
               >
                 <span>İleri</span>
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
               </button>
             ) : (
               <button
@@ -175,9 +178,9 @@ export function GameTutorialOverlay({
                   setStepIdx(0);
                   onComplete();
                 }}
-                className="flex min-h-[36px] items-center gap-1 rounded-xl bg-emerald-600 px-3.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                className="flex min-h-[36px] items-center gap-1 rounded-[12px] bg-[#7A9E7E] px-3.5 text-xs font-bold text-[#181F29] hover:bg-[#89AE8D]"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" />
+                <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                 <span>Oyuna Başla</span>
               </button>
             )}

@@ -625,30 +625,30 @@ export function BusinessInteriorModal({
       aria-modal="true"
       aria-label={`${business.customName} İç Mekan Yönetimi`}
       data-testid="business-interior-modal"
-      className="fixed inset-0 z-[1260] flex items-center justify-center bg-slate-950/65 p-3 safe-inset"
+      className="fixed inset-0 z-[1260] flex items-center justify-center bg-[#181F29] p-3 safe-inset"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[calc(100dvh-24px)] w-full max-w-2xl lg:max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-2xl lg:max-w-3xl flex-col overflow-hidden rounded-[20px] border border-slate-200 bg-[#222B38] text-slate-100 border-[#334155] bg-[#222B38] dark:text-slate-100"
       >
         {/* Header */}
-        <div className="compact-short-pad flex shrink-0 items-center justify-between border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
+        <div className="compact-short-pad flex shrink-0 items-center justify-between border-b border-slate-200 px-3.5 py-2 border-[#334155] sm:px-4 sm:py-2.5">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-700 dark:text-[#C8AE7D]">
               <span>{bp?.name}</span>
               <span aria-hidden="true">·</span>
               <span className="truncate">{bp?.interiorTheme}</span>
               {avmBonus && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span className="text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                  <span className="text-emerald-600 dark:text-[#7A9E7E] whitespace-nowrap">
                     AVM +%25
                   </span>
                 </>
               )}
             </div>
-            <h2 className="truncate text-sm font-bold text-slate-900 dark:text-white sm:text-base">
+            <h2 className="truncate text-sm font-bold text-slate-100 sm:text-base">
               {business.customName} · {business.cityName} ({business.districtName})
             </h2>
           </div>
@@ -657,7 +657,7 @@ export function BusinessInteriorModal({
             type="button"
             onClick={onClose}
             aria-label="İç Mekan Görünümünü Kapat"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white sm:h-9 sm:w-9"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-[#1D2532] dark:hover:text-white sm:h-9 sm:w-9"
           >
             <X className="h-4 w-4" />
           </button>
@@ -666,14 +666,14 @@ export function BusinessInteriorModal({
         {/* Landscape 2-column body: Live AI Interior Canvas + Quick Management Controls */}
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden p-2.5 min-[600px]:grid-cols-[1fr_240px] lg:grid-cols-[1fr_270px] sm:p-3">
           {/* Live Autonomous Customer Floorplan Canvas */}
-          <div className="relative flex min-h-[160px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-950 dark:border-slate-700">
+          <div className="relative flex min-h-[160px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-[#181F29] border-[#334155]">
             <canvas
               ref={canvasRef}
               data-testid="interior-canvas"
               className="h-full w-full block"
             />
-            <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5 rounded-lg bg-slate-950/80 px-2 py-1 text-[10.5px] font-semibold text-white">
-              <Sparkles className="h-3 w-3 text-amber-400 shrink-0" />
+            <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5 rounded-lg bg-black/70 px-2 py-1 text-[10.5px] font-semibold text-white">
+              <Sparkles className="h-3 w-3 text-[#C8AE7D] shrink-0" />
               <span>Müşteri: {liveVisitorCount}</span>
               <span aria-hidden="true">·</span>
               <span>Hizmet: {servedCount}</span>
@@ -686,22 +686,22 @@ export function BusinessInteriorModal({
           <div className="panel-scroll min-h-0 flex flex-col justify-between gap-2 overflow-y-auto overscroll-contain">
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-950/60">
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">Saatlik Gelir</div>
-                  <div className="font-mono-num text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 border-[#334155] bg-black/70">
+                  <div className="text-[10px] text-slate-400">Saatlik Gelir</div>
+                  <div className="font-mono-num text-xs font-extrabold text-emerald-700 dark:text-[#7A9E7E]">
                     {formatTL(hourlyIncome)}/sa
                   </div>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-950/60">
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">Anlık Akış</div>
-                  <div className="font-mono-num text-xs font-extrabold text-amber-700 dark:text-amber-400">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 border-[#334155] bg-black/70">
+                  <div className="text-[10px] text-slate-400">Anlık Akış</div>
+                  <div className="font-mono-num text-xs font-extrabold text-amber-700 dark:text-[#C8AE7D]">
                     +{formatTL(incomePerSec)}/sn
                   </div>
                 </div>
               </div>
 
-              <p className="text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                <strong className="text-slate-700 dark:text-slate-200">Yükseltme Odağı:</strong>{' '}
+              <p className="text-[11px] leading-snug text-slate-400">
+                <strong className="text-slate-200">Yükseltme Odağı:</strong>{' '}
                 {bp?.upgradeFocus}
               </p>
 
@@ -709,7 +709,7 @@ export function BusinessInteriorModal({
                 type="button"
                 disabled={pendingWhole <= 0}
                 onClick={() => onCollect(business.id)}
-                className="flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800"
+                className="flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#7A9E7E] px-3 text-xs font-bold text-[#181F29] hover:bg-[#89AE8D] disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-[#1D2532]"
               >
                 <Coins className="h-4 w-4" />
                 <span>
@@ -721,14 +721,14 @@ export function BusinessInteriorModal({
                 type="button"
                 disabled={isMaxLevel || cash < upgradeCost}
                 onClick={() => onUpgrade(business.id)}
-                className="flex min-h-[42px] w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold hover:bg-amber-50 disabled:opacity-55 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
+                className="flex min-h-[42px] w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold hover:bg-amber-50 disabled:opacity-55 border-[#334155] bg-[#181F29] dark:hover:bg-[#1D2532]"
               >
                 <span className="flex items-center gap-1.5">
                   <ArrowUpCircle className="h-4 w-4 text-amber-600" />
                   {isMaxLevel ? 'Maksimum Seviye' : `Sv.${business.level + 1} Yükselt`}
                 </span>
                 {!isMaxLevel && (
-                  <span className="font-mono-num text-amber-700 dark:text-amber-400">
+                  <span className="font-mono-num text-amber-700 dark:text-[#C8AE7D]">
                     {formatTL(upgradeCost)}
                   </span>
                 )}
@@ -738,14 +738,14 @@ export function BusinessInteriorModal({
                 type="button"
                 disabled={isMaxStaff || cash < staffCost}
                 onClick={() => onHireStaff(business.id)}
-                className="flex min-h-[42px] w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold hover:bg-sky-50 disabled:opacity-55 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
+                className="flex min-h-[42px] w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold hover:bg-sky-50 disabled:opacity-55 border-[#334155] bg-[#181F29] dark:hover:bg-[#1D2532]"
               >
                 <span className="flex items-center gap-1.5">
                   <Users className="h-4 w-4 text-sky-600" />
                   Personel ({business.staffCount}/{bp?.maxStaff})
                 </span>
                 {!isMaxStaff && (
-                  <span className="font-mono-num text-sky-700 dark:text-sky-400">
+                  <span className="font-mono-num text-sky-700 dark:text-[#7E96B0]">
                     {formatTL(staffCost)}
                   </span>
                 )}
@@ -755,14 +755,14 @@ export function BusinessInteriorModal({
                 type="button"
                 disabled={boostRemainingSec > 0 || cash < boostCost}
                 onClick={() => onBoost(business.id)}
-                className="flex min-h-[42px] w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold hover:bg-indigo-50 disabled:opacity-55 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
+                className="flex min-h-[42px] w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold hover:bg-indigo-50 disabled:opacity-55 border-[#334155] bg-[#181F29] dark:hover:bg-[#1D2532]"
               >
                 <span className="flex items-center gap-1.5">
                   <Megaphone className="h-4 w-4 text-indigo-600" />
                   {boostRemainingSec > 0 ? `2x Aktif (${boostRemainingSec}sn)` : '2x Kampanya'}
                 </span>
                 {boostRemainingSec === 0 && (
-                  <span className="font-mono-num text-indigo-700 dark:text-indigo-400">
+                  <span className="font-mono-num text-indigo-700 dark:text-[#7E96B0]">
                     {formatTL(boostCost)}
                   </span>
                 )}

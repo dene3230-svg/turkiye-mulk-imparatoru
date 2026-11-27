@@ -820,11 +820,77 @@ export interface EmpireState {
   officeUpgradeIds?: string[];
   officeEquipmentLevels?: Partial<Record<OfficeEquipmentId, number>>;
   personalAssetIds?: string[];
+  // v1.6.0 Quick Actions: Rentals (Passive Rent), Holding Promos, Daily Timed Offers & Store Perks
+  rentalProperties?: RentalProperty[];
+  dailyOffers?: DailyBusinessOffer[];
+  dailyOffersDay?: number;
+  activeHoldingPromo?: HoldingPromoCampaign | null;
+  supplyDiscountUntilDay?: number;
+  supplyDiscountPct?: number;
+  storePurchasedIds?: string[];
   activeMissions: MissionDef[]; // Self-renewing dynamic mission pool (always 4 active)
   claimedMissionIds: string[];
   completedMissionsCount: number;
   activeEvent: MarketEvent | null;
   lastSavedAt: number;
+}
+
+export type RentalPropertyKind = 'dukkan' | 'daire' | 'ofis';
+
+export interface TenantOffer {
+  id: string;
+  tenantName: string;
+  sectorLabel: string;
+  monthlyRent: number;
+  leaseDays: number;
+  reliabilityPct: number; // 75..99
+}
+
+export interface RentalProperty {
+  id: string;
+  catalogId: string;
+  name: string;
+  cityLabel: string;
+  kind: RentalPropertyKind;
+  purchasePrice: number;
+  baseMonthlyRent: number;
+  owned: boolean;
+  leasedTenantName?: string;
+  leasedSectorLabel?: string;
+  activeMonthlyRent?: number;
+  leaseRemainingDays?: number;
+  tenantOffers: TenantOffer[];
+}
+
+export type HoldingPromoTierId = 'local_poster' | 'social_media' | 'tv_digital';
+
+export interface HoldingPromoCampaign {
+  tierId: HoldingPromoTierId;
+  name: string;
+  revenueBoost: number; // e.g. 0.14, 0.28, 0.48
+  brandGain: number;
+  startedDay: number;
+  endsAtGameMin: number;
+  durationDays: number;
+}
+
+export type DailyOfferKind = 'supply_discount' | 'partnership_bonus' | 'discounted_property';
+
+export interface DailyBusinessOffer {
+  id: string;
+  kind: DailyOfferKind;
+  title: string;
+  partnerName: string;
+  description: string;
+  cost: number;
+  expiresOnDay: number;
+  status: 'pending' | 'accepted' | 'declined';
+  discountPct?: number; // for supply_discount
+  durationDays?: number;
+  cashReward?: number; // for partnership_bonus
+  brandBonus?: number;
+  xpBonus?: number;
+  rentalCatalogId?: string; // for discounted_property
 }
 
 export interface OtaVersionManifest {
@@ -839,5 +905,6 @@ export interface OtaCheckResult {
   currentVersion: string;
   remoteManifest: OtaVersionManifest | null;
   checkedAt: number;
+  fallbackLocal?: boolean;
   error?: string;
 }

@@ -3,13 +3,11 @@
   "appName": "Türkiye Mülk İmparatoru",
   "webDir": "dist",
   "server": {
-    "url": "https://dene3230-svg.github.io/turkiye-mulk-imparatoru/",
     "cleartext": true,
     "androidScheme": "https",
     "errorPath": "index.html",
     "allowNavigation": [
       "*.supabase.co",
-      "accounts.google.com",
       "*.openstreetmap.org",
       "*.basemaps.cartocdn.com",
       "dene3230-svg.github.io"
@@ -17,7 +15,7 @@
   },
   "android": {
     "allowMixedContent": true,
-    "backgroundColor": "#0F172A"
+    "backgroundColor": "#181F29"
   },
   "plugins": {
     "LocalNotifications": {

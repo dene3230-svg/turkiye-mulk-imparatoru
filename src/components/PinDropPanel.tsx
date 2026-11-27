@@ -214,18 +214,18 @@ export function PinDropPanel({
     <aside
       aria-label="Pin Noktasında İşletme Kur"
       data-testid="pin-drop-panel"
-      className="pointer-events-auto flex h-full max-h-full w-[clamp(300px,42vw,440px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto flex h-full max-h-full w-[clamp(300px,42vw,440px)] flex-col overflow-hidden rounded-[20px] border border-slate-200/95 bg-white/98 text-slate-900 border-[#334155] bg-[#222B38] dark:text-slate-100"
     >
       {/* Fixed Header (shrink-0) */}
-      <div className="compact-short-pad flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800">
+      <div className="compact-short-pad flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2 border-[#334155]">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-400">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 dark:text-[#C8AE7D]">
             <MapPin className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">
               {location.cityCode} {location.cityName} · {location.districtName}
             </span>
           </div>
-          <p className="truncate text-[10px] text-slate-500 dark:text-slate-400 [@media(max-height:420px)]:hidden">
+          <p className="truncate text-[10px] text-slate-400 [@media(max-height:420px)]:hidden">
             {location.resolvedAddress ||
               `${location.regionName} · ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
           </p>
@@ -235,18 +235,18 @@ export function PinDropPanel({
           type="button"
           onClick={onClose}
           aria-label="Pin Panelini Kapat"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white sm:h-8 sm:w-8"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-[#1D2532] dark:hover:text-white sm:h-8 sm:w-8"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
       {/* Fixed Land Verification + Quota Banner (shrink-0) */}
-      <div className="shrink-0 border-b border-slate-200 bg-slate-50/90 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-950/60">
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50/90 px-3 py-1.5 border-[#334155] bg-black/70">
         {isChecking ? (
           <div
             data-testid="land-checking"
-            className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400"
+            className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-[#C8AE7D]"
           >
             <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
             <span>Kara ve adres doğrulaması yapılıyor...</span>
@@ -255,7 +255,7 @@ export function PinDropPanel({
           <div
             role="alert"
             data-testid="water-block-alert"
-            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+            className="flex items-start gap-2 rounded-xl border border-[#B86B5E]/45 bg-red-50 p-2 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-[#B86B5E]"
           >
             <Waves className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
@@ -267,7 +267,7 @@ export function PinDropPanel({
           <div
             role="alert"
             data-testid="distance-block-alert"
-            className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-2 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+            className="flex items-start gap-2 rounded-xl border border-[#B86B5E]/45 bg-red-50 p-2 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-[#B86B5E]"
           >
             <Ruler className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
@@ -277,13 +277,13 @@ export function PinDropPanel({
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2 text-[10.5px]">
-            <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-emerald-700 dark:text-emerald-400">
+            <span className="flex min-w-0 items-center gap-1 truncate font-semibold text-emerald-700 dark:text-[#7A9E7E]">
               <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">
                 Kara Doğrulandı · Arsa x{location.landMultiplier.toFixed(2)}
               </span>
             </span>
-            <span className="shrink-0 font-mono-num font-bold whitespace-nowrap text-slate-700 dark:text-slate-300">
+            <span className="shrink-0 font-mono-num font-bold whitespace-nowrap text-slate-300">
               {ownBranchCount} Aktif Şube
             </span>
           </div>
@@ -293,11 +293,11 @@ export function PinDropPanel({
       {/* Main Content */}
       {isWaterOrInvalid ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-4 text-center">
-          <AlertTriangle className="h-9 w-9 text-red-500" />
-          <h3 className="mt-2 text-sm font-bold text-slate-900 dark:text-white">
+          <AlertTriangle className="h-9 w-9 text-[#B86B5E]" />
+          <h3 className="mt-2 text-sm font-bold text-slate-100">
             İnşaat İzni Reddedildi
           </h3>
-          <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
             Su kütleleri (deniz, boğaz, göl, nehir) ve Türkiye dışı koordinatlar üzerine pin
             bırakılamaz. Lütfen haritada cadde veya yerleşim alanı üzerine tıklayın.
           </p>
@@ -307,16 +307,16 @@ export function PinDropPanel({
           {chainCloneDraft ? (
             <div
               data-testid="chain-clone-banner"
-              className="flex shrink-0 items-center justify-between gap-2 border-b border-sky-300/60 bg-sky-50 px-3 py-2 text-[11px] dark:border-sky-800/70 dark:bg-sky-950/50"
+              className="flex shrink-0 items-center justify-between gap-2 border-b border-[#334155] bg-sky-50 px-3 py-2 text-[11px] dark:border-sky-800/70 dark:bg-sky-950/50"
             >
               <div className="min-w-0">
-                <div className="flex items-center gap-1 font-bold text-sky-800 dark:text-sky-300">
+                <div className="flex items-center gap-1 font-bold text-sky-800 dark:text-[#7E96B0]">
                   <Link2 className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">
                     Zincir Şube: {chainCloneDraft.brandName} ({chainCloneDraft.nextBranchNumber}. Şube)
                   </span>
                 </div>
-                <div className="text-[10px] text-slate-600 dark:text-slate-300">
+                <div className="text-[10px] text-slate-300">
                   Otomatik Zincir Marka · -%12 Tedarik İndirimi & +%10 Ciro
                 </div>
               </div>
@@ -324,7 +324,7 @@ export function PinDropPanel({
                 <button
                   type="button"
                   onClick={onCancelSpecialMode}
-                  className="shrink-0 rounded-lg border border-sky-400/50 px-2 py-1 text-[10px] font-bold text-sky-700 hover:bg-sky-100 dark:text-sky-200 dark:hover:bg-sky-900"
+                  className="shrink-0 rounded-lg border border-[#334155] px-2 py-1 text-[10px] font-bold text-sky-700 hover:bg-sky-100 dark:text-[#7E96B0] dark:hover:bg-sky-900"
                 >
                   Normal Mod
                 </button>
@@ -332,14 +332,14 @@ export function PinDropPanel({
             </div>
           ) : (
             /* Fixed Mode Tabs (shrink-0) */
-            <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/70 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-950/40">
+            <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-slate-200 bg-slate-50/70 px-2 py-1.5 border-[#334155] bg-[#181F29]">
               <button
                 type="button"
                 onClick={() => setMode('independent')}
                 className={`rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
                   mode === 'independent'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'bg-[#C8AE7D] text-[#181F29] '
+                    : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-[#1D2532]'
                 }`}
               >
                 Bağımsız İşletme (13)
@@ -350,8 +350,8 @@ export function PinDropPanel({
                 onClick={() => setMode('franchise')}
                 className={`flex items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
                   mode === 'franchise'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'bg-[#7A9E7E] text-[#181F29] '
+                    : 'text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-[#1D2532]'
                 }`}
               >
                 <Store className="h-3.5 w-3.5 shrink-0" />
@@ -383,8 +383,8 @@ export function PinDropPanel({
                       onClick={() => handleSelectBlueprint(bp)}
                       className={`relative flex items-center gap-1.5 rounded-xl border p-1.5 text-left transition-colors ${
                         isSelected
-                          ? 'border-amber-500 bg-amber-50/90 ring-1 ring-amber-400/50 dark:border-amber-500/80 dark:bg-amber-950/40'
-                          : 'border-slate-200/85 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70'
+                          ? 'border-[#C8AE7D]/45 bg-amber-50/90 ring-1 ring-amber-400/50 dark:border-[#C8AE7D]/45 dark:bg-[#C8AE7D]/15'
+                          : 'border-slate-200/85 bg-white hover:bg-slate-50 border-[#334155] bg-[#222B38] dark:hover:bg-[#1D2532]'
                       } ${locked ? 'opacity-70' : ''}`}
                     >
                       <div
@@ -400,11 +400,11 @@ export function PinDropPanel({
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
-                          <span className="truncate text-[11px] font-bold leading-tight text-slate-900 dark:text-white">
+                          <span className="truncate text-[11px] font-bold leading-tight text-slate-100">
                             {bp.shortName}
                           </span>
                           {isSelected && !locked && (
-                            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-amber-600 text-white">
+                            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[#C8AE7D] text-[#181F29]">
                               <Check className="h-2.5 w-2.5" />
                             </span>
                           )}
@@ -413,21 +413,21 @@ export function PinDropPanel({
                           <span
                             className={`truncate font-mono-num text-[10px] font-extrabold ${
                               locked
-                                ? 'text-slate-500 dark:text-slate-400'
+                                ? 'text-slate-400'
                                 : affordable
-                                ? 'text-slate-900 dark:text-amber-300'
-                                : 'text-red-600 dark:text-red-400'
+                                ? 'text-slate-900 dark:text-[#C8AE7D]'
+                                : 'text-red-600 dark:text-[#B86B5E]'
                             }`}
                           >
                             {formatTL(bpCost, true)}
                           </span>
                           <span className="shrink-0 truncate text-[9px]">
                             {locked ? (
-                              <span className="font-semibold text-amber-700 dark:text-amber-400">
+                              <span className="font-semibold text-amber-700 dark:text-[#C8AE7D]">
                                 Sv.{bp.minCompanyLevel}
                               </span>
                             ) : (
-                              <span className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
+                              <span className="font-mono-num font-semibold text-emerald-700 dark:text-[#7A9E7E]">
                                 {formatTL(bpHourly, true)}/sa · {bp.constructionDays}g
                               </span>
                             )}
@@ -455,8 +455,8 @@ export function PinDropPanel({
                       onClick={() => setSelectedFranchiseId(brand.id)}
                       className={`flex w-full items-center gap-2 rounded-xl border p-2 text-left transition-colors ${
                         isSel
-                          ? 'border-emerald-500 bg-emerald-50/90 dark:bg-emerald-950/35'
-                          : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900'
+                          ? 'border-[#7A9E7E]/45 bg-emerald-50/90 dark:bg-emerald-950/35'
+                          : 'border-slate-200/80 bg-white hover:bg-slate-50 border-[#334155] bg-[#222B38]'
                       }`}
                     >
                       <div
@@ -470,7 +470,7 @@ export function PinDropPanel({
                           <span className="truncate text-xs font-bold">{brand.brandName}</span>
                           <span
                             className={`shrink-0 font-mono-num text-[11px] font-bold ${
-                              affordable ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'
+                              affordable ? 'text-emerald-700 dark:text-[#7A9E7E]' : 'text-red-600'
                             }`}
                           >
                             {formatTL(fullCost, true)}
@@ -480,7 +480,7 @@ export function PinDropPanel({
                           <span className="truncate">
                             {bp.shortName} · Lisans {formatTL(brand.licenseFee, true)}
                           </span>
-                          <span className="shrink-0 font-mono-num font-bold text-amber-700 dark:text-amber-400">
+                          <span className="shrink-0 font-mono-num font-bold text-amber-700 dark:text-[#C8AE7D]">
                             +%35 · %{Math.round(brand.royaltyRate * 100)} Pay
                           </span>
                         </div>
@@ -493,7 +493,7 @@ export function PinDropPanel({
           </div>
 
           {/* Fixed Bottom Name + Establish Action Footer (shrink-0) */}
-          <div className="compact-short-pad shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/80">
+          <div className="compact-short-pad shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-2 border-[#334155] bg-black/70">
             <div className="flex items-center gap-2">
               <label htmlFor="business-name-input" className="sr-only">
                 İşletme Adı
@@ -508,13 +508,13 @@ export function PinDropPanel({
                   setNameEdited(true);
                 }}
                 placeholder="İşletme Adı (Örn: Beşiktaş Altın Kafe)"
-                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-900 outline-none focus:border-[#C8AE7D]/45 focus:ring-2 focus:ring-amber-500/20 border-[#334155] bg-[#222B38] dark:text-white"
               />
               <div className="shrink-0 text-right leading-tight">
-                <div className="font-mono-num text-[10.5px] font-extrabold text-emerald-700 dark:text-emerald-400">
+                <div className="font-mono-num text-[10.5px] font-extrabold text-emerald-700 dark:text-[#7A9E7E]">
                   {formatTL(estHourly, true)}/sa
                 </div>
-                <div className="font-mono-num text-[9.5px] text-amber-700 dark:text-amber-400">
+                <div className="font-mono-num text-[9.5px] text-amber-700 dark:text-[#C8AE7D]">
                   🏗️ {selectedBlueprint.constructionDays}g tadilat · Kira{' '}
                   {formatTL(Math.round(selectedBlueprint.dailyRentBase * location.landMultiplier), true)}/g
                 </div>
@@ -525,7 +525,7 @@ export function PinDropPanel({
               type="submit"
               data-testid="establish-business-btn"
               disabled={!canSubmit}
-              className="compact-short-btn mt-1.5 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
+              className="compact-short-btn mt-1.5 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-xl bg-[#C8AE7D] px-3 py-1.5 text-xs font-bold text-[#181F29] transition-colors hover:bg-[#D2BB8E] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-[#1D2532] dark:disabled:text-slate-500 whitespace-nowrap"
             >
               <span>
                 {isChecking

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Crown } from 'lucide-react';
 import { APP_VERSION } from '../services/otaUpdate';
 
 interface StudioIntroProps {
@@ -6,7 +7,7 @@ interface StudioIntroProps {
 }
 
 export function StudioIntro({ onComplete }: StudioIntroProps) {
-  const [progress, setProgress] = useState(12);
+  const [progress, setProgress] = useState(14);
   const [fading, setFading] = useState(false);
   const onCompleteRef = useRef(onComplete);
   const completedRef = useRef(false);
@@ -47,40 +48,36 @@ export function StudioIntro({ onComplete }: StudioIntroProps) {
     <div
       data-testid="studio-intro"
       onClick={finishIntro}
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#080E1C] text-white transition-opacity duration-300 safe-inset cursor-pointer ${
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#181F29] text-slate-100 transition-opacity duration-300 safe-inset cursor-pointer ${
         fading ? 'opacity-0' : 'opacity-100'
       }`}
     >
-      <div className="flex flex-col items-center px-6 text-center">
-        {/* Framed App Logo */}
-        <div className="relative mb-5 rounded-[26px] p-1 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 shadow-[0_18px_50px_rgba(217,119,6,0.28)]">
-          <div className="h-[clamp(80px,18vh,124px)] w-[clamp(80px,18vh,124px)] overflow-hidden rounded-[22px] bg-[#0B1426]">
-            <img
-              src="./icon.png"
-              alt="Türkiye Mülk İmparatoru Logosu"
-              className="h-full w-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+      <div className="flex flex-col items-center rounded-[20px] border border-[#334155] bg-[#222B38] px-10 py-8 text-center">
+        {/* Minimal Matte Crown Emblem */}
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-[#C8AE7D]/55 bg-[#181F29]">
+          <Crown className="h-8 w-8 text-[#C8AE7D]" strokeWidth={1.5} />
         </div>
 
-        {/* fu Games Studio Wordmark */}
-        <div className="text-[clamp(1.65rem,3.4vw,2.5rem)] font-extrabold tracking-tight text-white">
-          <span className="text-amber-400">fu</span> Games
-        </div>
-        <p className="mt-1 font-display text-[clamp(0.85rem,1.5vw,1.1rem)] tracking-[0.14em] text-amber-200/90">
-          TÜRKİYE MÜLK İMPARATORU
+        {/* Studio & Game Title */}
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#7E96B0]">
+          fu Games
+        </p>
+        <h1 className="mt-1.5 text-[clamp(1.25rem,2.4vw,1.8rem)] font-bold tracking-[0.14em] text-slate-100">
+          MÜLK İMPARATORLUĞU
+        </h1>
+        <p className="mt-1 text-xs text-slate-400">
+          Türkiye Ticaret &amp; Gayrimenkul Simülasyonu
         </p>
 
-        {/* Smooth loading progress bar */}
-        <div className="mt-6 w-[clamp(180px,28vw,280px)] overflow-hidden rounded-full bg-slate-800/90 h-1.5">
+        {/* Matte Progress Bar */}
+        <div className="mt-6 h-1.5 w-[clamp(190px,28vw,270px)] overflow-hidden rounded-full bg-[#181F29] border border-[#334155]/70">
           <div
-            className="h-full rounded-full bg-amber-400 transition-all duration-700 ease-out"
+            className="h-full rounded-full bg-[#C8AE7D] transition-all duration-700 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
 
-        <p className="mt-3 text-xs text-slate-400">
+        <p className="mt-3 text-[11px] text-slate-400 font-mono-num">
           Sürüm {APP_VERSION} · Geçmek için dokunun
         </p>
       </div>

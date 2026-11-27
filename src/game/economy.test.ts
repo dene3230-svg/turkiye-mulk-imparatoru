@@ -159,7 +159,18 @@ import {
   processAutoFranchiseApplications,
   toggleGeneralManagerAutoAds,
 } from './strategyEngine.ts';
-import { APP_VERSION, compareSemver } from '../services/otaUpdate.ts';
+import { APP_VERSION, checkForOtaUpdate, compareSemver } from '../services/otaUpdate.ts';
+import {
+  acceptDailyOffer,
+  buyRentalProperty,
+  calculateDailyRentalIncome,
+  declineDailyOffer,
+  ensureDailyOffersForDay,
+  getMergedRentalProperties,
+  launchHoldingPromotion,
+  purchaseStorePerk,
+  signLeaseContract,
+} from './quickActionsEngine.ts';
 import {
   BRANCH_BRAND_COLORS,
   BRANCH_MARKETING_CAMPAIGNS,
@@ -643,7 +654,8 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.5.8');
+  assert.equal(APP_VERSION, '1.7.0');
+  assert.equal(compareSemver('1.6.0', '1.7.0'), 1);
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -654,14 +666,15 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.ok(getCompanyTier(BANK_MIN_NET_WORTH).level >= 7);
 });
 
-test('v1.3.0 Accelerated Time & Calendar controls: pause freezes clock/income, 1x/2x/4x scale accurately, formatGameClock shows Gün/Ay/HH:MM', () => {
+test('v1.6.0 Strict 2-State Time Control (Pause / Normal 30s = 1 Day): 48 min/sec, weekday header, dayProgressPct & zero acceleration', () => {
   const now = 300_000;
   let state = createInitialEmpireState(now);
   assert.equal(state.gameMinutes, STARTING_GAME_MINUTES);
-  assert.equal(GAME_MINUTES_PER_REAL_SEC, 36);
+  assert.equal(GAME_MINUTES_PER_REAL_SEC, 48);
   const startClock = formatGameClock(STARTING_GAME_MINUTES);
   assert.equal(startClock.label, 'Gün 1 • 1. Ay • 09:00');
-  assert.equal(startClock.totalDaysLabel, 'Toplam 1. Gün');
+  assert.equal(startClock.dayHeaderLabel, 'Gün 1 • Pazartesi');
+  assert.equal(startClock.dayProgressPct, 37.5);
 
   const owner = { id: 'p1', name: 'Patron' };
   const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Saat Kafe', owner, [], now);
@@ -676,24 +689,21 @@ test('v1.3.0 Accelerated Time & Calendar controls: pause freezes clock/income, 1
   assert.equal(pausedTick.daysPassed, 0);
   assert.equal(pausedTick.dayEndSummary, null);
 
-  // 1x = 36 min/real-sec (~1.67s/hr, 40s/day), 2x = ~0.80s/hr, 4x = ~0.35s/hr
-  const dt1x = getEffectiveSimSeconds(1, 1);
-  const dt2x = getEffectiveSimSeconds(1, 2);
-  const dt4x = getEffectiveSimSeconds(1, 4);
-  assert.equal(dt1x, 1);
-  assert.ok(dt2x > 2.0 && dt2x < 2.2, '2x should advance ~1 in-game hour every 0.80s');
-  assert.ok(dt4x > 4.6 && dt4x < 4.9, '4x should advance ~1 in-game hour every 0.35s');
+  // Strict 2-state: paused returns 0, any active speed is locked strictly to 1x (no 2x/4x/day multiplier)
+  assert.equal(getEffectiveSimSeconds(1, 0), 0);
+  assert.equal(getEffectiveSimSeconds(1, 1), 1);
+  assert.equal(getEffectiveSimSeconds(1, 2), 1);
+  assert.equal(getEffectiveSimSeconds(1, 4), 1);
+  assert.equal(getEffectiveSimSeconds(1, 'day'), 1);
 
-  const tick1x = tickEconomy(state, dt1x, now + 1000);
-  assert.equal(tick1x.state.gameMinutes, STARTING_GAME_MINUTES + 36);
-  const tick4x = tickEconomy(state, dt4x, now + 1000);
-  assert.ok(tick4x.state.gameMinutes >= STARTING_GAME_MINUTES + 170);
-  assert.ok(tick4x.state.businesses[0].pendingCash > tick1x.state.businesses[0].pendingCash * 4.2);
+  const tick1x = tickEconomy(state, 1, now + 1000);
+  assert.equal(tick1x.state.gameMinutes, STARTING_GAME_MINUTES + 48);
 
-  // 40 seconds at 1x = 1440 game minutes = 1 full 24-hour in-game day!
-  const tickFullDay = tickEconomy(state, 40, now + 40_000);
+  // EXACTLY 30 real seconds at 1x = 1440 game minutes = 1 full 24-hour in-game day!
+  const tickFullDay = tickEconomy(state, 30, now + 30_000);
   assert.equal(tickFullDay.daysPassed, 1);
   assert.equal(tickFullDay.hoursPassed, 24);
+  assert.equal(formatGameClock(tickFullDay.state.gameMinutes).dayHeaderLabel, 'Gün 2 • Salı');
   assert.equal(formatGameClock(tickFullDay.state.gameMinutes).label, 'Gün 2 • 1. Ay • 09:00');
 });
 
@@ -1635,10 +1645,10 @@ test('v1.4.0 Construction Period (3-18d), Zero Revenue During Renovation, Daily 
   assert.equal(doubleApply.ok, false);
 });
 
-test('v1.4.0 Day-by-Day Simulation Speed (Gün+) & Auto-Stop Guard (Construction Complete, Payment Due, Critical Cash)', () => {
+test('v1.4.0 Auto-Stop Guard (Construction Complete, Payment Due, Critical Cash) on 30s/Day Clock', () => {
   const now = 1_900_000;
-  // 250ms tick at 'day' speed = 40 sim-sec = exactly 1 full 24h game day
-  assert.equal(getEffectiveSimSeconds(0.25, 'day'), 40);
+  // v1.6.0 strictly locks active simulation speed to 1x (30s = 1 full game day)
+  assert.equal(getEffectiveSimSeconds(0.25, 1), 0.25);
 
   let state = createInitialEmpireState(now, 34);
   state.cash = 5_000_000;
@@ -1646,12 +1656,12 @@ test('v1.4.0 Day-by-Day Simulation Speed (Gün+) & Auto-Stop Guard (Construction
   const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Hızlı Kafe', owner, [], now);
   assert.equal(built.ok, true);
 
-  // Set 1 day remaining -> advancing 1 full day completes construction and triggers Auto-Stop Guard
+  // Set 1 day remaining -> advancing 1 full day (30 real sec) completes construction and triggers alert
   state = {
     ...built.state,
     businesses: built.state.businesses.map((b) => ({ ...b, constructionDaysRemaining: 1 })),
   };
-  const completedTick = tickEconomy(state, 40, now + 1000);
+  const completedTick = tickEconomy(state, 30, now + 30_000);
   assert.equal(completedTick.completedConstructions.length, 1);
   assert.equal(completedTick.daySimAutoStop?.reason, 'construction_completed');
   assert.equal(isBusinessUnderConstruction(completedTick.state.businesses[0]), false);
@@ -2773,14 +2783,76 @@ test('v1.5.8 İK & Personel Yönetimi: Strict Branch Limits (4 Çalışan, 1 Mü
   assert.ok(formatCandidateSalaryLabel(seniorManager).endsWith('/ay'));
 });
 
+test('v1.6.0 Quick Actions Modules (Holding Promos, Rental Leases, Daily Offers, Store) & Offline OTA Fallback', async () => {
+  const now = 6_000_000;
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 10_000_000;
 
+  // 1) Holding-wide promotion boosts brandRecognition & deducts cash
+  const prevBrand = state.brandRecognition ?? 5;
+  const promoRes = launchHoldingPromotion(state, 'social_media', now);
+  assert.equal(promoRes.ok, true);
+  assert.ok(promoRes.state.cash < state.cash);
+  assert.ok((promoRes.state.brandRecognition ?? 0) > prevBrand);
+  assert.equal(promoRes.state.activeHoldingPromo?.tierId, 'social_media');
+  state = promoRes.state;
 
+  // 2) Rental properties: purchase + sign tenant lease -> generates daily passive rent on 30s day tick
+  const catalog = getMergedRentalProperties(state);
+  assert.ok(catalog.length >= 6);
+  const firstProp = catalog[0];
+  const buyRes = buyRentalProperty(state, firstProp.catalogId, undefined, now + 10);
+  assert.equal(buyRes.ok, true);
+  assert.equal(buyRes.property?.owned, true);
+  state = buyRes.state;
 
+  const leaseRes = signLeaseContract(
+    state,
+    firstProp.catalogId,
+    firstProp.tenantOffers[0].id,
+    now + 20
+  );
+  assert.equal(leaseRes.ok, true);
+  state = leaseRes.state;
+  const dailyRent = calculateDailyRentalIncome(state);
+  assert.ok(dailyRent > 0, 'Leased property must produce daily passive rent');
 
+  const cashBeforeDay = state.cash;
+  const dayTick = tickEconomy(state, 30, now + 30_020);
+  assert.equal(dayTick.daysPassed, 1);
+  assert.ok(
+    dayTick.state.cash >= cashBeforeDay + dailyRent,
+    '30-second day turnover must credit passive daily rental income'
+  );
+  state = dayTick.state;
 
+  // 3) Daily timed offers: accept partnership offer & decline another
+  const offers = ensureDailyOffersForDay(state);
+  assert.ok(offers.length >= 2);
+  const partnerOffer = offers.find((o) => o.kind === 'partnership_bonus')!;
+  const cashBeforeOffer = state.cash;
+  const acceptRes = acceptDailyOffer(state, partnerOffer.id, now + 40_000);
+  assert.equal(acceptRes.ok, true);
+  assert.ok(acceptRes.state.cash > cashBeforeOffer);
+  state = acceptRes.state;
 
+  const supplyOffer = offers.find((o) => o.kind === 'supply_discount')!;
+  const declineRes = declineDailyOffer(state, supplyOffer.id, now + 40_100);
+  assert.equal(declineRes.ok, true);
+  assert.equal(
+    declineRes.state.dailyOffers?.find((o) => o.id === supplyOffer.id)?.status,
+    'declined'
+  );
+  state = declineRes.state;
 
+  // 4) Holding Store perk purchase
+  const prevScore = state.creditScore;
+  const storeRes = purchaseStorePerk(state, 'store-credit-audit', now + 40_200);
+  assert.equal(storeRes.ok, true);
+  assert.ok(storeRes.state.creditScore > prevScore);
 
-
-
-
+  // 5) OTA check never throws when unreachable and cleanly falls back to local bundle
+  const otaFallback = await checkForOtaUpdate('1.7.0', 'http://127.0.0.1:1/unreachable-version.json');
+  assert.equal(otaFallback.hasUpdate, false);
+  assert.equal(otaFallback.fallbackLocal, true);
+});

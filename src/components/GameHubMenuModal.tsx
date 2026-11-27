@@ -49,7 +49,7 @@ export function GameHubMenuModal({
       title: 'Liderlik Tablosu',
       subtitle: 'En zengin holdingler, il liderleri, franchise ve bankalar',
       icon: Award,
-      accent: 'bg-sky-500/20 text-sky-300',
+      accent: 'bg-[#7E96B0]/15 text-[#7E96B0]',
       onClick: () => {
         onClose();
         onOpenLeaderboard();
@@ -61,7 +61,7 @@ export function GameHubMenuModal({
       title: 'Holding & Franchise',
       subtitle: 'Bayilik ver, Zincir Market kur, fabrika ve otopark ağı',
       icon: Crown,
-      accent: 'bg-amber-400/20 text-amber-300',
+      accent: 'bg-[#C8AE7D]/15 text-[#C8AE7D]',
       onClick: () => {
         onClose();
         onOpenHolding();
@@ -73,7 +73,7 @@ export function GameHubMenuModal({
       title: 'Patron Sohbeti',
       subtitle: `${activeCityLabel} odası ve Türkiye geneli canlı yatırımcı sohbeti`,
       icon: MessageSquare,
-      accent: 'bg-emerald-500/20 text-emerald-300',
+      accent: 'bg-[#7A9E7E]/15 text-[#7A9E7E]',
       onClick: () => {
         onClose();
         onOpenPatronChat();
@@ -85,7 +85,7 @@ export function GameHubMenuModal({
       title: 'Oyun Rehberi',
       subtitle: 'Pin bırakma, şube otomasyonu, borsa ve kredi kuralları',
       icon: BookOpen,
-      accent: 'bg-indigo-500/20 text-indigo-300',
+      accent: 'bg-[#7E96B0]/15 text-[#7E96B0]',
       onClick: () => {
         onClose();
         onOpenGuide();
@@ -118,7 +118,7 @@ export function GameHubMenuModal({
               onClose();
               onGoMainMenu();
             }}
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 text-xs font-bold text-slate-100 hover:bg-slate-700 whitespace-nowrap"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#334155] bg-[#1D2532] px-3 text-xs font-bold text-slate-100 hover:bg-[#2A3444] whitespace-nowrap"
           >
             <Home className="h-3.5 w-3.5" />
             <span>Ana Menü</span>
@@ -136,7 +136,7 @@ export function GameHubMenuModal({
                 type="button"
                 data-testid={item.testId}
                 onClick={item.onClick}
-                className="group flex min-h-[64px] items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/85 p-3 text-left transition hover:border-amber-400/70 hover:bg-slate-800/90"
+                className="group flex min-h-[64px] items-center gap-3 rounded-xl border border-[#334155] bg-[#222B38] p-3 text-left transition hover:border-[#C8AE7D]/45 hover:bg-[#1D2532]"
               >
                 <div
                   className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.accent}`}
@@ -147,7 +147,7 @@ export function GameHubMenuModal({
                   <div className="truncate text-sm font-bold text-white">{item.title}</div>
                   <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{item.subtitle}</p>
                 </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-amber-300" />
+                <ChevronRight className="h-5 w-5 shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-[#C8AE7D]" />
               </button>
             );
           })}

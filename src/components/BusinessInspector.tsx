@@ -152,22 +152,22 @@ export function BusinessInspector({
     <aside
       aria-label={`${business.customName} Yönetimi`}
       data-testid="business-inspector"
-      className="pointer-events-auto flex h-full w-[clamp(295px,35vw,405px)] flex-col overflow-hidden rounded-2xl border border-slate-200/95 bg-white/98 text-slate-900 shadow-2xl dark:border-slate-700/90 dark:bg-slate-900/98 dark:text-slate-100"
+      className="pointer-events-auto flex h-full w-[clamp(295px,35vw,405px)] flex-col overflow-hidden rounded-[20px] border border-slate-200/95 bg-white/98 text-slate-900 border-[#334155] bg-[#222B38] dark:text-slate-100"
     >
       {/* Header */}
-      <div className="compact-short-pad flex shrink-0 items-start justify-between gap-2 border-b border-slate-200 px-3.5 py-2 dark:border-slate-800 sm:px-4 sm:py-2.5">
+      <div className="compact-short-pad flex shrink-0 items-start justify-between gap-2 border-b border-slate-200 px-3.5 py-2 border-[#334155] sm:px-4 sm:py-2.5">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-[#C8AE7D]">
             <MapPin className="h-3.5 w-3.5 shrink-0" />
             <span>
               {String(business.cityPlate).padStart(2, '0')} {business.cityName} ·{' '}
               {business.districtName}
             </span>
           </div>
-          <h2 className="truncate text-sm font-bold text-slate-900 dark:text-white">
+          <h2 className="truncate text-sm font-bold text-slate-100">
             {business.customName}
           </h2>
-          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 text-[11px] text-slate-400">
             {bp?.name} · Seviye {business.level}/{bp?.maxLevel ?? 10} · Kapasite {capacity}
           </p>
         </div>
@@ -176,7 +176,7 @@ export function BusinessInspector({
           type="button"
           onClick={onClose}
           aria-label="İşletme Panelini Kapat"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-[#1D2532] dark:hover:text-white"
         >
           <X className="h-4 w-4" />
         </button>
@@ -189,10 +189,10 @@ export function BusinessInspector({
           data-testid="automation-status-badge"
           className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-semibold ${
             automation.fullAutomation
-              ? 'border-emerald-300 bg-emerald-50/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300'
+              ? 'border-[#7A9E7E]/45 bg-emerald-50/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-[#7A9E7E]'
               : automation.autoStock
-              ? 'border-amber-300 bg-amber-50/80 text-amber-800 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-300'
-              : 'border-red-200 bg-red-50/75 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
+              ? 'border-[#C8AE7D]/45 bg-amber-50/80 text-amber-800 dark:border-amber-800 dark:bg-amber-950/35 dark:text-[#C8AE7D]'
+              : 'border-red-200 bg-red-50/75 text-red-700 dark:border-red-900/60 dark:bg-[#B86B5E]/15 dark:text-[#B86B5E]'
           }`}
         >
           <span className="flex items-center gap-1.5 min-w-0 truncate">
@@ -213,7 +213,7 @@ export function BusinessInspector({
             <button
               type="button"
               onClick={() => onRestock(business.id)}
-              className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white dark:bg-amber-600"
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-[#222B38] px-2 py-0.5 text-[10px] font-bold text-white dark:bg-[#C8AE7D]"
             >
               <Wrench className="h-3 w-3" /> Yenile
             </button>
@@ -224,7 +224,7 @@ export function BusinessInspector({
         {automation.autoCollectRevenue && (
           <div
             data-testid="auto-collect-badge"
-            className="flex items-center justify-between gap-2 rounded-xl border border-emerald-400/80 bg-emerald-500/15 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+            className="flex items-center justify-between gap-2 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-[#7A9E7E]"
           >
             <span className="flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
@@ -238,22 +238,22 @@ export function BusinessInspector({
         {(chainStatus.isChain || hasAvmBonus || hasParkingBonus || hasFactoryBonus || business.franchiseBrandName) && (
           <div className="flex flex-wrap gap-1 text-[10px] font-bold">
             {chainStatus.isChain && (
-              <span className="flex items-center gap-1 rounded-lg bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+              <span className="flex items-center gap-1 rounded-lg bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-950 dark:text-[#7E96B0]">
                 <Link2 className="h-3 w-3" /> Zincir Marka ({chainStatus.branchCount} Şube)
               </span>
             )}
             {business.franchiseBrandName && (
-              <span className="flex items-center gap-1 rounded-lg bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+              <span className="flex items-center gap-1 rounded-lg bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950 dark:text-[#7A9E7E]">
                 <Store className="h-3 w-3" /> {business.franchiseBrandName} (+%35)
               </span>
             )}
             {hasAvmBonus && (
-              <span className="flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              <span className="flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-[#C8AE7D]">
                 <Sparkles className="h-3 w-3" /> AVM +%25
               </span>
             )}
             {hasParkingBonus && (
-              <span className="flex items-center gap-1 rounded-lg bg-slate-200 px-2 py-0.5 text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+              <span className="flex items-center gap-1 rounded-lg bg-slate-200 px-2 py-0.5 text-slate-800 bg-[#1D2532] dark:text-slate-200">
                 <Car className="h-3 w-3" /> Otopark 250m +%15
               </span>
             )}
@@ -269,16 +269,16 @@ export function BusinessInspector({
         {underConstruction && (
           <div
             data-testid="construction-banner"
-            className="rounded-xl border border-amber-400/75 bg-amber-50/90 p-3 space-y-2 dark:border-amber-500/60 dark:bg-amber-950/40"
+            className="rounded-xl border border-[#C8AE7D]/45 bg-amber-50/90 p-3 space-y-2 dark:border-[#C8AE7D]/45 dark:bg-[#C8AE7D]/15"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-800 dark:text-amber-300">
+              <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-800 dark:text-[#C8AE7D]">
                 <Hammer className="h-4 w-4 shrink-0" />
                 <span>İnşaat & Tadilat Süreci</span>
               </div>
               <span
                 data-testid="construction-days-remaining"
-                className="rounded-lg bg-amber-500 px-2 py-0.5 font-mono-num text-[11px] font-black text-slate-950"
+                className="rounded-lg bg-[#C8AE7D] px-2 py-0.5 font-mono-num text-[11px] font-black text-[#181F29]"
               >
                 {remDays} Gün Kaldı
               </span>
@@ -286,14 +286,14 @@ export function BusinessInspector({
 
             <div className="h-2 w-full overflow-hidden rounded-full bg-amber-200/80 dark:bg-amber-950">
               <div
-                className="h-full rounded-full bg-amber-500 transition-all duration-300"
+                className="h-full rounded-full bg-[#C8AE7D] transition-all duration-300"
                 style={{ width: `${Math.max(8, constProgressPct)}%` }}
               />
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-amber-900/90 dark:text-amber-200/90">
+            <div className="flex items-center justify-between text-[11px] text-amber-900/90 dark:text-[#C8AE7D]/90">
               <span>Gelir: ₺0 (Açılış bekleniyor)</span>
-              <span className="font-mono-num font-bold text-rose-700 dark:text-rose-300">
+              <span className="font-mono-num font-bold text-rose-700 dark:text-[#B86B5E]">
                 Kira+Tadilat: -{formatTL(dailyRentEstimate)}/gün
               </span>
             </div>
@@ -304,13 +304,13 @@ export function BusinessInspector({
                 data-testid="double-shift-btn"
                 disabled={state.cash < doubleShiftCost}
                 onClick={() => onHireDoubleShift(business.id)}
-                className="flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-sm hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
+                className="flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#C8AE7D] px-3 py-1.5 text-xs font-black text-[#181F29] hover:bg-[#C8AE7D] disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
               >
                 <Zap className="h-3.5 w-3.5 shrink-0" />
                 <span>Çift Vardiya Ekip Tut (-%35 Süre · {formatTL(doubleShiftCost, true)})</span>
               </button>
             ) : business.doubleShiftApplied ? (
-              <div className="rounded-lg bg-emerald-500/15 border border-emerald-500/35 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+              <div className="rounded-lg bg-[#7A9E7E]/15 border border-[#7A9E7E]/45 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-[#7A9E7E] flex items-center gap-1.5">
                 <Zap className="h-3.5 w-3.5 shrink-0" />
                 <span>Çift Vardiya Ekibi Aktif — Tadilat %35 hızlandırıldı!</span>
               </div>
@@ -322,7 +322,7 @@ export function BusinessInspector({
         <button
           type="button"
           onClick={() => onEnterInterior(business.id)}
-          className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700"
+          className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-[#C8AE7D] px-3 py-2 text-xs font-bold text-[#181F29] transition-colors hover:bg-[#D2BB8E]"
         >
           <DoorOpen className="h-4 w-4" />
           <span>{underConstruction ? 'Şantiyeyi İncele (İç Mekan)' : 'İçeri Gir / Yönet (Canlı İç Mekan)'}</span>
@@ -333,27 +333,27 @@ export function BusinessInspector({
           data-testid="service-quality-card"
           className={`rounded-xl border p-2.5 space-y-2 ${
             serviceQuality.stars >= 3.5
-              ? 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30'
+              ? 'border-[#7A9E7E]/45 bg-emerald-50/70 dark:border-emerald-800 dark:bg-[#7A9E7E]/15'
               : serviceQuality.stars >= 2.5
-              ? 'border-amber-300 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/30'
-              : 'border-rose-300 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/35'
+              ? 'border-[#C8AE7D]/45 bg-amber-50/70 dark:border-amber-800 dark:bg-[#C8AE7D]/15'
+              : 'border-[#B86B5E]/45 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/35'
           }`}
         >
           <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
-              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500 shrink-0" />
+            <span className="flex items-center gap-1.5 font-bold text-slate-100">
+              <Star className="h-3.5 w-3.5 fill-amber-400 text-[#C8AE7D] shrink-0" />
               <span>Hizmet Kalitesi: {serviceQuality.stars.toFixed(1)} ★</span>
             </span>
-            <span className="font-mono-num text-[11px] font-black text-amber-700 dark:text-amber-300">
+            <span className="font-mono-num text-[11px] font-black text-amber-700 dark:text-[#C8AE7D]">
               Trafik %{serviceQuality.customerTrafficPct}
             </span>
           </div>
-          <div className="flex items-center justify-between text-[10.5px] text-slate-600 dark:text-slate-300">
+          <div className="flex items-center justify-between text-[10.5px] text-slate-300">
             <span>{bp?.unitProductName ?? 'Birim Ürün'}: <strong>{formatTL(unitSalePrice)}</strong></span>
             <span>Masraf ~<strong>{formatTL(unitEstCost)}</strong> · Moral %{serviceQuality.staffMorale}</span>
           </div>
           {serviceQuality.issues.length > 0 && (
-            <div className="text-[10.5px] font-semibold text-rose-700 dark:text-rose-300">
+            <div className="text-[10.5px] font-semibold text-rose-700 dark:text-[#B86B5E]">
               Uyarı: {serviceQuality.issues[0]}
             </div>
           )}
@@ -363,7 +363,7 @@ export function BusinessInspector({
               data-testid="invest-quality-btn"
               disabled={state.cash < qualityInvestCost}
               onClick={() => onInvestQuality(business.id)}
-              className="flex min-h-[34px] w-full items-center justify-between gap-2 rounded-lg border border-amber-400/70 bg-amber-500/15 px-2.5 text-[11px] font-bold text-amber-900 hover:bg-amber-500/25 disabled:opacity-45 dark:text-amber-200"
+              className="flex min-h-[34px] w-full items-center justify-between gap-2 rounded-lg border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-2.5 text-[11px] font-bold text-amber-900 hover:bg-[#C8AE7D]/15 disabled:opacity-45 dark:text-[#C8AE7D]"
             >
               <span>Kalite & Eğitim Yatırımı (Sv.{qualityLv}/5)</span>
               <span className="font-mono-num">{formatTL(qualityInvestCost, true)}</span>
@@ -373,21 +373,21 @@ export function BusinessInspector({
 
         {/* Live Metrics */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950/60">
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">Saatlik / Günlük Kira</div>
-            <div className="mt-0.5 font-mono-num text-xs font-bold text-emerald-700 dark:text-emerald-400">
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2 border-[#334155] bg-black/70">
+            <div className="text-[10px] text-slate-400">Saatlik / Günlük Kira</div>
+            <div className="mt-0.5 font-mono-num text-xs font-bold text-emerald-700 dark:text-[#7A9E7E]">
               {underConstruction ? 'İnşaatta (₺0/sa)' : `${formatTL(hourlyIncome)}/sa`}
             </div>
-            <div className="font-mono-num text-[10px] text-rose-600 dark:text-rose-400">
+            <div className="font-mono-num text-[10px] text-rose-600 dark:text-[#B86B5E]">
               Kira: -{formatTL(dailyRentEstimate, true)}/gün
             </div>
           </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950/60">
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">Piyasa Değeri</div>
-            <div className="mt-0.5 font-mono-num text-xs font-bold text-slate-900 dark:text-white">
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2 border-[#334155] bg-black/70">
+            <div className="text-[10px] text-slate-400">Piyasa Değeri</div>
+            <div className="mt-0.5 font-mono-num text-xs font-bold text-slate-100">
               {formatTL(valuation)}
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">
+            <div className="text-[10px] text-slate-400">
               {business.pledgedLoanId ? 'Kredi Teminatında' : `+${formatTL(incomePerSec)}/sn`}
             </div>
           </div>
@@ -395,23 +395,23 @@ export function BusinessInspector({
 
         {/* Daily Register & 00:00 Settlement Info */}
         {!underConstruction && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 dark:border-emerald-900/60 dark:bg-[#7A9E7E]/15">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-emerald-900 dark:text-emerald-200 flex items-center gap-1">
+              <span className="font-semibold text-emerald-900 dark:text-[#7A9E7E] flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" />
                 Gün İçi Satış Kasası
               </span>
-              <span className="font-mono-num font-bold text-emerald-800 dark:text-emerald-300">
+              <span className="font-mono-num font-bold text-emerald-800 dark:text-[#7A9E7E]">
                 {formatTL(Math.max(dailyAccruedWhole, pendingWhole))}
               </span>
             </div>
             <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-emerald-200/80 dark:bg-emerald-950">
               <div
-                className="h-full rounded-full bg-emerald-600 transition-all duration-300 dark:bg-emerald-400"
+                className="h-full rounded-full bg-[#7A9E7E] transition-all duration-300 dark:bg-[#7A9E7E]"
                 style={{ width: `${vaultPct}%` }}
               />
             </div>
-            <div className="mt-1.5 text-[10.5px] text-emerald-800/90 dark:text-emerald-300/90">
+            <div className="mt-1.5 text-[10.5px] text-emerald-800/90 dark:text-[#7A9E7E]/90">
               {automation.autoCollectRevenue
                 ? 'Şube yöneticisi gece 00:00 kapanışında net kârı otomatik kasaya aktarır.'
                 : 'Gün içi satışlar gece 00:00 Gün Sonu Raporu ile kasaya aktarılır.'}
@@ -420,7 +420,7 @@ export function BusinessInspector({
               <button
                 type="button"
                 onClick={onOpenDayEndReport}
-                className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 whitespace-nowrap"
+                className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl bg-[#7A9E7E] px-3 py-1.5 text-xs font-bold text-[#181F29] hover:bg-[#89AE8D] whitespace-nowrap"
               >
                 <Coins className="h-4 w-4" />
                 <span>00:00 Gün Sonu Raporunu Aç ({state.pendingDayEndReports?.length})</span>
@@ -430,7 +430,7 @@ export function BusinessInspector({
                 type="button"
                 disabled={pendingWhole <= 0}
                 onClick={() => onCollect(business.id)}
-                className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600/90 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 whitespace-nowrap"
+                className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl bg-[#7A9E7E]/90 px-3 py-1.5 text-xs font-bold text-white hover:bg-[#89AE8D] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-[#1D2532] dark:disabled:text-slate-500 whitespace-nowrap"
               >
                 <Coins className="h-4 w-4" />
                 <span>
@@ -450,24 +450,24 @@ export function BusinessInspector({
             type="button"
             data-testid="open-hr-btn"
             onClick={() => onOpenHrModal(business.id)}
-            className="flex min-h-[46px] w-full items-center justify-between gap-2 rounded-lg border border-sky-400/75 bg-sky-50/85 px-3 py-2 text-left transition-all duration-200 ease-out hover:bg-sky-100 active:scale-[0.98] dark:border-sky-500/70 dark:bg-sky-950/45 dark:hover:bg-sky-900/50"
+            className="flex min-h-[46px] w-full items-center justify-between gap-2 rounded-lg border border-[#334155] bg-sky-50/85 px-3 py-2 text-left transition-all duration-200 ease-out hover:bg-sky-100 active:scale-[0.98] dark:border-[#334155] dark:bg-sky-950/45 dark:hover:bg-sky-900/50"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#7E96B0] text-[#181F29]">
                 <Users className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-900 dark:text-white">
+                <div className="text-xs font-bold text-slate-100">
                   Personel ({slots.workers + slots.assistantManagers + slots.branchManagers}/6)
                 </div>
-                <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                <div className="text-[11px] text-slate-300">
                   {slots.workers}/{slots.maxWorkers} Çalışan · {slots.assistantManagers}/
                   {slots.maxAssistantManagers} Yrd. · {slots.branchManagers}/
                   {slots.maxBranchManagers} Şube Müd.
                 </div>
               </div>
             </div>
-            <span className="shrink-0 rounded-lg border border-sky-300/60 bg-sky-600 px-2.5 py-1 text-xs font-bold text-white">
+            <span className="shrink-0 rounded-lg border border-[#334155] bg-[#7E96B0] px-2.5 py-1 text-xs font-bold text-[#181F29]">
               İK Aç
             </span>
           </button>
@@ -476,23 +476,23 @@ export function BusinessInspector({
             type="button"
             disabled={isMaxLevel || state.cash < upgradeCost}
             onClick={() => onUpgrade(business.id)}
-            className="flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-amber-50/70 disabled:cursor-not-allowed disabled:opacity-55 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
+            className="flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-amber-50/70 disabled:cursor-not-allowed disabled:opacity-55 border-[#334155] bg-[#222B38] dark:hover:bg-[#1D2532]"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-[#C8AE7D]">
                 <ArrowUpCircle className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-900 dark:text-white">
+                <div className="text-xs font-bold text-slate-100">
                   {isMaxLevel ? 'Maksimum Seviye' : `Seviye ${business.level + 1} Yükselt`}
                 </div>
-                <div className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+                <div className="truncate text-[10px] text-slate-400">
                   {bp?.upgradeFocus}
                 </div>
               </div>
             </div>
             {!isMaxLevel && (
-              <span className="shrink-0 font-mono-num text-xs font-bold text-amber-700 dark:text-amber-400">
+              <span className="shrink-0 font-mono-num text-xs font-bold text-amber-700 dark:text-[#C8AE7D]">
                 {formatTL(upgradeCost)}
               </span>
             )}
@@ -502,7 +502,7 @@ export function BusinessInspector({
             <button
               type="button"
               onClick={() => onCloneBusiness(business.id)}
-              className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-800 transition-colors hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200 dark:hover:bg-sky-900/50"
+              className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-[#334155] bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-800 transition-colors hover:bg-sky-100 dark:border-sky-800 dark:bg-[#7E96B0]/15 dark:text-[#7E96B0] dark:hover:bg-sky-900/50"
             >
               <CopyPlus className="h-4 w-4" />
               <span>Şubeyi Çoğalt / Yeni Şube Aç (Zincirleş)</span>
@@ -522,7 +522,7 @@ export function BusinessInspector({
                   {formatRemainingGameHours(business.activeAdCampaign.endsAtGameMin, currentGameMin)}
                 </span>
               ) : automation.autoAdsActive ? (
-                <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                <span className="rounded-md bg-[#7A9E7E] px-1.5 py-0.5 text-[10px] font-bold text-[#181F29]">
                   GM Oto-Reklam
                 </span>
               ) : null}
@@ -538,15 +538,15 @@ export function BusinessInspector({
                       type="button"
                       disabled={state.cash < adCost}
                       onClick={() => onLaunchAdCampaign(business.id, tier.id)}
-                      className="flex flex-col items-start rounded-lg border border-fuchsia-200 bg-white p-1.5 text-left transition hover:border-fuchsia-400 disabled:opacity-45 dark:border-slate-700 dark:bg-slate-900"
+                      className="flex flex-col items-start rounded-lg border border-fuchsia-200 bg-white p-1.5 text-left transition hover:border-fuchsia-400 disabled:opacity-45 border-[#334155] bg-[#222B38]"
                     >
-                      <span className="truncate text-[10px] font-bold text-slate-900 dark:text-white">
+                      <span className="truncate text-[10px] font-bold text-slate-100">
                         {tier.shortLabel}
                       </span>
-                      <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-400">
+                      <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-[#7A9E7E]">
                         +%{Math.round(tier.revenueBoost * 100)} · {tier.durationGameHours}sa
                       </span>
-                      <span className="mt-0.5 font-mono-num text-[10px] font-extrabold text-amber-700 dark:text-amber-300">
+                      <span className="mt-0.5 font-mono-num text-[10px] font-extrabold text-amber-700 dark:text-[#C8AE7D]">
                         {formatTL(adCost, true)}
                       </span>
                     </button>
@@ -558,9 +558,9 @@ export function BusinessInspector({
         </div>
 
         {/* Lifetime Stat & Sell */}
-        <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-[11px] text-slate-500 border-[#334155] dark:text-slate-400">
           <span className="flex items-center gap-1">
-            <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-[#7A9E7E]" />
             Toplam Kazanç:
           </span>
           <span className="font-mono-num font-bold text-slate-800 dark:text-slate-200">
@@ -573,7 +573,7 @@ export function BusinessInspector({
             type="button"
             disabled={Boolean(business.pledgedLoanId)}
             onClick={() => setConfirmSell(true)}
-            className="flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-45 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400"
+            className="flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-45 dark:border-red-900/60 dark:bg-[#B86B5E]/15 dark:text-[#B86B5E]"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span>
@@ -583,8 +583,8 @@ export function BusinessInspector({
             </span>
           </button>
         ) : (
-          <div className="rounded-xl border border-red-300 bg-red-50 p-2.5 dark:border-red-800 dark:bg-red-950/50">
-            <p className="text-xs font-semibold text-red-800 dark:text-red-200">
+          <div className="rounded-xl border border-[#B86B5E]/45 bg-red-50 p-2.5 dark:border-red-800 dark:bg-red-950/50">
+            <p className="text-xs font-semibold text-red-800 dark:text-[#B86B5E]">
               Bu mülkü {formatTL(valuation + pendingWhole)} karşılığında satmak istediğinize emin
               misiniz?
             </p>
@@ -592,14 +592,14 @@ export function BusinessInspector({
               <button
                 type="button"
                 onClick={() => onSell(business.id)}
-                className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700"
+                className="flex-1 rounded-lg bg-[#B86B5E] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#C6796C]"
               >
                 Evet, Sat
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmSell(false)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 border-[#334155] bg-[#1D2532] dark:text-slate-200"
               >
                 Vazgeç
               </button>

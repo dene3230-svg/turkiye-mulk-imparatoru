@@ -129,14 +129,14 @@ export function BorsaModal({
     return (
       <div
         key={q.ticker}
-        className="flex flex-col gap-2.5 rounded-xl border border-slate-600/60 bg-slate-900/85 p-3 transition-all duration-200 hover:border-slate-500/80"
+        className="flex flex-col gap-2.5 rounded-xl border border-slate-600/60 bg-[#222B38] p-3 transition-all duration-200 hover:border-slate-500/80"
       >
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
             <BrandLogo brandKey={q.ticker || q.name} size={40} />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="rounded-md border border-amber-400/40 bg-slate-800 px-1.5 py-0.5 font-mono-num text-xs font-black text-amber-300">
+                <span className="rounded-md border border-[#C8AE7D]/45 bg-[#1D2532] px-1.5 py-0.5 font-mono-num text-xs font-black text-[#C8AE7D]">
                   {q.ticker}
                 </span>
                 <span className="truncate text-sm font-bold text-white">{q.name}</span>
@@ -157,7 +157,7 @@ export function BorsaModal({
               </div>
               <div
                 className={`flex items-center justify-end gap-0.5 font-mono-num text-xs font-bold ${
-                  positive ? 'text-emerald-400' : 'text-rose-400'
+                  positive ? 'text-[#7A9E7E]' : 'text-[#B86B5E]'
                 }`}
               >
                 {positive ? (
@@ -180,7 +180,7 @@ export function BorsaModal({
             data-testid={`open-buy-${q.ticker}`}
             disabled={maxAffordable < 1}
             onClick={() => setTradeDialog({ side: 'buy', ticker: q.ticker })}
-            className="min-h-[40px] flex-1 rounded-lg border border-emerald-300/75 bg-emerald-500 px-3 font-mono-num text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+            className="min-h-[40px] flex-1 rounded-lg border border-[#7A9E7E]/45 bg-[#7A9E7E] px-3 font-mono-num text-xs font-black text-[#181F29] transition-all duration-200 ease-out hover:bg-[#7A9E7E] active:scale-[0.98] disabled:cursor-not-allowed disabled:border-[#334155] disabled:bg-[#1D2532] disabled:text-slate-500 whitespace-nowrap"
           >
             Al (Maks {maxAffordable.toLocaleString('tr-TR')} Lot)
           </button>
@@ -190,7 +190,7 @@ export function BorsaModal({
               type="button"
               data-testid={`open-sell-${q.ticker}`}
               onClick={() => setTradeDialog({ side: 'sell', ticker: q.ticker })}
-              className="min-h-[40px] flex-1 rounded-lg border border-rose-300/75 bg-rose-500 px-3.5 font-mono-num text-xs font-black text-white transition-all duration-200 ease-out hover:bg-rose-400 active:scale-[0.98] whitespace-nowrap"
+              className="min-h-[40px] flex-1 rounded-lg border border-[#B86B5E]/45 bg-[#B86B5E] px-3.5 font-mono-num text-xs font-black text-white transition-all duration-200 ease-out hover:bg-[#C6796C] active:scale-[0.98] whitespace-nowrap"
             >
               Sat ({holding.shares.toLocaleString('tr-TR')} Lot)
             </button>
@@ -198,12 +198,12 @@ export function BorsaModal({
         </div>
 
         {holding && holding.shares > 0 && (
-          <div className="flex items-center justify-between border-t border-slate-700/80 pt-2 font-mono-num text-xs text-slate-300">
+          <div className="flex items-center justify-between border-t border-[#334155] pt-2 font-mono-num text-xs text-slate-300">
             <span>
               Portföy: <strong className="text-white">{holding.shares} lot</strong> · Ort. ₺
               {holding.avgCost.toFixed(2)}
             </span>
-            <span className={pnl >= 0 ? 'font-bold text-emerald-400' : 'font-bold text-rose-400'}>
+            <span className={pnl >= 0 ? 'font-bold text-[#7A9E7E]' : 'font-bold text-[#B86B5E]'}>
               {pnl >= 0 ? '+' : ''}
               {formatTL(pnl)}
             </span>
@@ -224,9 +224,9 @@ export function BorsaModal({
         }
         icon={mode === 'portfolio' ? <Wallet className="h-4 w-4" /> : <BarChart3 className="h-4 w-4" />}
         headerRight={
-          <div className="hidden items-center gap-2 rounded-lg border border-slate-500/60 bg-slate-950/90 px-2.5 py-1 text-xs sm:flex">
+          <div className="hidden items-center gap-2 rounded-lg border border-slate-500/60 bg-[#181F29] px-2.5 py-1 text-xs sm:flex">
             <span className="text-slate-400">Hisse:</span>
-            <strong className="font-mono-num text-emerald-400">
+            <strong className="font-mono-num text-[#7A9E7E]">
               {formatTL(portfolioValue, true)}
             </strong>
           </div>
@@ -249,8 +249,8 @@ export function BorsaModal({
                   onClick={() => setSubTab('bist')}
                   className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
                     subTab === 'bist'
-                      ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
-                      : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
+                      ? 'border-[#C8AE7D]/45 bg-[#C8AE7D] text-[#181F29] font-black'
+                      : 'border-slate-500/60 bg-[#1D2532] text-slate-100 hover:border-slate-400 hover:bg-[#2A3444]'
                   }`}
                 >
                   <Briefcase className="h-4 w-4" />
@@ -262,8 +262,8 @@ export function BorsaModal({
                   onClick={() => setSubTab('ipo')}
                   className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-bold transition-all duration-200 ease-out active:scale-[0.98] ${
                     subTab === 'ipo'
-                      ? 'border-amber-300/80 bg-amber-400 text-slate-950 font-black'
-                      : 'border-slate-500/60 bg-slate-800/85 text-slate-100 hover:border-slate-400 hover:bg-slate-700'
+                      ? 'border-[#C8AE7D]/45 bg-[#C8AE7D] text-[#181F29] font-black'
+                      : 'border-slate-500/60 bg-[#1D2532] text-slate-100 hover:border-slate-400 hover:bg-[#2A3444]'
                   }`}
                 >
                   <Rocket className="h-4 w-4" />
@@ -287,8 +287,8 @@ export function BorsaModal({
               <span
                 className={`rounded-lg border px-2.5 py-1 font-mono-num font-black ${
                   portfolioPnl >= 0
-                    ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300'
-                    : 'border-rose-400/50 bg-rose-500/20 text-rose-300'
+                    ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E]'
+                    : 'border-[#B86B5E]/45 bg-[#B86B5E]/15 text-[#B86B5E]'
                 }`}
               >
                 {portfolioPnl >= 0 ? '+' : ''}
@@ -303,8 +303,8 @@ export function BorsaModal({
       >
         {mode === 'portfolio' ? (
           holdings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-slate-900/65 px-4 py-10 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/40 bg-amber-400/15 text-amber-300">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-600 bg-[#222B38] px-4 py-10 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-[20px] border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D]">
                 <Wallet className="h-6 w-6" />
               </div>
               <h3 className="mt-3 text-base font-bold text-white">Henüz Hisse Yatırımınız Yok</h3>
@@ -316,7 +316,7 @@ export function BorsaModal({
               <button
                 type="button"
                 onClick={() => onSwitchMode?.('market')}
-                className="mt-4 min-h-[42px] rounded-lg border border-amber-300/80 bg-amber-400 px-5 text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98]"
+                className="mt-4 min-h-[42px] rounded-lg border border-[#C8AE7D]/45 bg-[#C8AE7D] px-5 text-xs font-black text-[#181F29] transition-all duration-200 ease-out hover:bg-[#D2BB8E] active:scale-[0.98]"
               >
                 Borsa & Yatırım Ekranına Git
               </button>
@@ -336,14 +336,14 @@ export function BorsaModal({
                   <div
                     key={holding.ticker}
                     data-testid={`holding-card-${holding.ticker}`}
-                    className="flex flex-col justify-between gap-3 rounded-xl border border-slate-600/60 bg-slate-900/85 p-3.5"
+                    className="flex flex-col justify-between gap-3 rounded-xl border border-slate-600/60 bg-[#222B38] p-3.5"
                   >
                     <div className="flex items-center justify-between gap-2.5">
                       <div className="flex min-w-0 items-center gap-2.5">
                         <BrandLogo brandKey={holding.ticker} size={42} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="rounded-md border border-amber-400/40 bg-slate-800 px-1.5 py-0.5 font-mono-num text-xs font-black text-amber-300">
+                            <span className="rounded-md border border-[#C8AE7D]/45 bg-[#1D2532] px-1.5 py-0.5 font-mono-num text-xs font-black text-[#C8AE7D]">
                               {holding.ticker}
                             </span>
                             <span className="truncate text-sm font-bold text-white">
@@ -365,7 +365,7 @@ export function BorsaModal({
                         </div>
                         <div
                           className={`font-mono-num text-xs font-bold ${
-                            positive ? 'text-emerald-400' : 'text-rose-400'
+                            positive ? 'text-[#7A9E7E]' : 'text-[#B86B5E]'
                           }`}
                         >
                           {positive ? '+' : ''}
@@ -375,7 +375,7 @@ export function BorsaModal({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-700/80 bg-slate-950/75 p-2.5 font-mono-num text-xs">
+                    <div className="grid grid-cols-3 gap-2 rounded-lg border border-[#334155] bg-black/70 p-2.5 font-mono-num text-xs">
                       <div>
                         <div className="text-[11px] text-slate-400">Alış Ort.</div>
                         <div className="font-bold text-slate-200">
@@ -398,7 +398,7 @@ export function BorsaModal({
                         data-testid={`portfolio-buy-${holding.ticker}`}
                         disabled={!quote || state.cash < currentPrice}
                         onClick={() => setTradeDialog({ side: 'buy', ticker: holding.ticker })}
-                        className="min-h-[40px] flex-1 rounded-lg border border-emerald-400/70 bg-emerald-500/20 px-3 font-mono-num text-xs font-black text-emerald-300 transition-all duration-200 ease-out hover:bg-emerald-500/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap"
+                        className="min-h-[40px] flex-1 rounded-lg border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-3 font-mono-num text-xs font-black text-[#7A9E7E] transition-all duration-200 ease-out hover:bg-[#7A9E7E]/15 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap"
                       >
                         Ek Al
                       </button>
@@ -406,7 +406,7 @@ export function BorsaModal({
                         type="button"
                         data-testid={`portfolio-sell-${holding.ticker}`}
                         onClick={() => setTradeDialog({ side: 'sell', ticker: holding.ticker })}
-                        className="min-h-[40px] flex-[1.4] rounded-lg border border-rose-300/75 bg-rose-500 px-3 font-mono-num text-xs font-black text-white transition-all duration-200 ease-out hover:bg-rose-400 active:scale-[0.98] whitespace-nowrap"
+                        className="min-h-[40px] flex-[1.4] rounded-lg border border-[#B86B5E]/45 bg-[#B86B5E] px-3 font-mono-num text-xs font-black text-white transition-all duration-200 ease-out hover:bg-[#C6796C] active:scale-[0.98] whitespace-nowrap"
                       >
                         Sat ({holding.shares.toLocaleString('tr-TR')} Lot)
                       </button>
@@ -423,13 +423,13 @@ export function BorsaModal({
         ) : (
           <div className="space-y-3">
             {/* Player IPO Card */}
-            <section className="rounded-xl border border-amber-400/50 bg-amber-500/10 p-3.5">
+            <section className="rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 p-3.5">
               {state.playerIpo ? (
                 <div className="flex items-center gap-3">
                   <BrandLogo brandKey={state.playerIpo.ticker} size={42} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 text-sm font-black text-white">
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-[#7A9E7E]" />
                       <span className="truncate">
                         [{state.playerIpo.ticker}] {state.playerIpo.holdingName}
                       </span>
@@ -443,7 +443,7 @@ export function BorsaModal({
               ) : (
                 <div className="space-y-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-black text-amber-300">
+                    <h3 className="text-sm font-black text-[#C8AE7D]">
                       Kendi Holdingini Halka Arz Et (IPO)
                     </h3>
                     <span className="font-mono-num text-xs font-bold text-slate-200">
@@ -451,7 +451,7 @@ export function BorsaModal({
                     </span>
                   </div>
                   {!ipoElig.eligible ? (
-                    <p className="text-xs font-semibold text-amber-200">{ipoElig.reason}</p>
+                    <p className="text-xs font-semibold text-[#C8AE7D]">{ipoElig.reason}</p>
                   ) : (
                     <form
                       onSubmit={(e) => {
@@ -466,7 +466,7 @@ export function BorsaModal({
                         value={ipoTicker}
                         onChange={(e) => setIpoTicker(e.target.value.toUpperCase())}
                         placeholder="FUGM"
-                        className="min-h-[42px] w-full rounded-lg border border-slate-500/70 bg-slate-950 px-3 font-mono-num text-sm font-black uppercase text-amber-300 sm:w-28"
+                        className="min-h-[42px] w-full rounded-lg border border-slate-500/70 bg-[#181F29] px-3 font-mono-num text-sm font-black uppercase text-[#C8AE7D] sm:w-28"
                       />
                       <input
                         type="text"
@@ -474,11 +474,11 @@ export function BorsaModal({
                         value={ipoName}
                         onChange={(e) => setIpoName(e.target.value)}
                         placeholder="Holding Adı"
-                        className="min-h-[42px] flex-1 rounded-lg border border-slate-500/70 bg-slate-950 px-3 text-sm text-white"
+                        className="min-h-[42px] flex-1 rounded-lg border border-slate-500/70 bg-[#181F29] px-3 text-sm text-white"
                       />
                       <button
                         type="submit"
-                        className="min-h-[42px] rounded-lg border border-amber-300/80 bg-amber-400 px-4 text-xs font-black text-slate-950 transition-all duration-200 ease-out hover:bg-amber-300 active:scale-[0.98] whitespace-nowrap"
+                        className="min-h-[42px] rounded-lg border border-[#C8AE7D]/45 bg-[#C8AE7D] px-4 text-xs font-black text-[#181F29] transition-all duration-200 ease-out hover:bg-[#D2BB8E] active:scale-[0.98] whitespace-nowrap"
                       >
                         Halka Arzı Başlat
                       </button>

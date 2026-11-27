@@ -1,13 +1,11 @@
 {
-  "version": "1.5.8",
-  "buildDate": "2026-11-26",
+  "version": "1.7.0",
+  "buildDate": "2026-11-27",
   "mandatory": false,
   "notes": [
-    "İK & Personel Yönetimi ekranı şube bazlı limitli personel atama ve işe alma (4 Çalışan, 1 Müdür Yrd., 1 Şube Müdürü sınırlarıyla) akışıyla yenilendi",
-    "Toplam Durum ve Raporlar karar merkezi: gider kırılımı, akıllı şube uyarıları ve toplu holding aksiyonları eklendi",
-    "İşletmeler sekmesi 3 adımlı yeni yönetim akışıyla (4 Kartlı Panel, Kart/Liste Şube Seçici ve Detaylı Şube Özelleştirme) güncellendi",
-    "Finans, Bankalar & Borsa sekmesi 3 sütunlu gelişmiş komuta merkezi tasarımına güncellendi",
-    "Ofisim & Prestij Yönetimi sekmesi yeni 3 sütunlu modern arayüzle eklendi",
-    "Modern 3 sütunlu yatay yönetici kontrol paneli ve yeni minimalist arayüz tasarımı eklendi"
+    "Tüm arayüzler mat koyu tasarıma geçirildi, 30 sn/gün zaman kontrolü ve yeni yönetim modülleri eklendi",
+    "Giriş ekranı, yükleme ekranı, harita, finans, işletmeler, ofisim, ayarlar ve tüm modallar #181F29 / #222B38 mat arduvaz sisteminde birleştirildi",
+    "Zaman akışı yalnızca Duraklat (⏸) ve Normal Hız (▶ — 30 sn = 1 gün) ile ince gün ilerleme çubuğu olarak sabitlendi",
+    "Reklam & Tanıtım, Kiralık İlanları, Franchise, Teklifler, Yatırımlar & Borsa, Banka, 6 slotlu Personel ve Günlük Raporlar modülleri tam entegre edildi"
   ]
 }

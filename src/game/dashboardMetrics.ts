@@ -22,6 +22,10 @@ import {
 } from './bankingEngine';
 import { getBlueprintById, IPO_MIN_NET_WORTH } from './catalog';
 import { checkIpoEligibility } from './stockMarket';
+import {
+  calculateDailyRentalIncome,
+  calculateRentalPropertiesValuation,
+} from './quickActionsEngine';
 
 export type AccountCardId = 'cash' | 'credit' | 'investments' | 'expenses';
 export type OperationCardId = 'businesses' | 'office' | 'growth';
@@ -249,6 +253,9 @@ export function computeExecutiveDashboardMetrics(
     }
   }
 
+  const dailyRentalIncome = calculateDailyRentalIncome(state);
+  dailyEstimatedRevenue += dailyRentalIncome;
+
   const dailyPayrollWithSgk = computeDailyPayrollWithSgk(state);
   const dailyOperatingExpenses = Math.max(
     0,
@@ -285,9 +292,10 @@ export function computeExecutiveDashboardMetrics(
     stockPortfolioValue += Math.round(shares * Math.max(0, price));
   }
   const personalAssetsTotal = Math.max(0, safeNum(calculatePersonalAssetsValuation(state), 0));
+  const rentalAssetsTotal = Math.max(0, safeNum(calculateRentalPropertiesValuation(state), 0));
   const investmentsTotal = Math.max(
     0,
-    stockPortfolioValue + businessValuationsTotal + personalAssetsTotal
+    stockPortfolioValue + businessValuationsTotal + personalAssetsTotal + rentalAssetsTotal
   );
 
   // Company level & tier progression (based on real net worth)

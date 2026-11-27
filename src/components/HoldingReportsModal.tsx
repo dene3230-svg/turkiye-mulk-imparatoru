@@ -188,19 +188,19 @@ export function HoldingReportsModal({
   return (
     <div
       data-testid="holding-reports-modal"
-      className="fixed inset-0 z-[1055] flex items-center justify-center bg-[#040915]/82 p-1.5 backdrop-blur-sm lg:p-5"
+      className="fixed inset-0 z-[1055] flex items-center justify-center bg-[#040915]/82 p-1.5 lg:p-5"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-cyan-400/35 bg-gradient-to-b from-[#13213D]/97 via-[#0E182E]/98 to-[#0A1122]/99 shadow-[0_24px_75px_rgba(0,0,0,0.8)]"
+        className="flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#222B38]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ==================== HEADER + PERIOD FILTER ==================== */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-700/75 bg-[#0C1528]/95 px-3 py-1.5 lg:px-5 lg:py-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#334155] bg-[#0C1528]/95 px-3 py-1.5 lg:px-5 lg:py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-wide lg:text-base">
               <span className="text-slate-400">İŞLETMELERİM</span>
-              <span className="text-cyan-400">&gt;</span>
+              <span className="text-[#7E96B0]">&gt;</span>
               <span className="text-white">TOPLAM DURUM VE RAPORLAR</span>
             </div>
             <p className="text-[9px] text-slate-400 lg:text-xs">
@@ -212,7 +212,7 @@ export function HoldingReportsModal({
             {/* Period Filter: 24 SAAT | 7 GÜN | 30 GÜN */}
             <div
               data-testid="reports-period-toggle"
-              className="flex items-center gap-0.5 rounded-xl border border-slate-700/80 bg-[#0A1224] p-0.5"
+              className="flex items-center gap-0.5 rounded-xl border border-[#334155] bg-[#0A1224] p-0.5"
             >
               {PERIOD_OPTIONS.map((opt) => {
                 const active = period === opt.id;
@@ -224,7 +224,7 @@ export function HoldingReportsModal({
                     onClick={() => setPeriod(opt.id)}
                     className={`rounded-lg px-2 py-0.5 text-[9.5px] font-extrabold tracking-wide transition-all whitespace-nowrap lg:px-3 lg:py-1 lg:text-xs ${
                       active
-                        ? 'bg-cyan-500/25 text-cyan-100 shadow-[0_0_12px_rgba(34,211,238,0.28)] ring-1 ring-cyan-400/70'
+                        ? 'bg-[#7E96B0]/15 text-cyan-100  ring-1 ring-cyan-400/70'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -239,7 +239,7 @@ export function HoldingReportsModal({
               data-testid="reports-close-btn"
               onClick={onClose}
               aria-label="Raporları kapat"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/80 text-slate-300 transition-colors hover:border-rose-400/50 hover:text-white lg:h-8 lg:w-8"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#1D2532] text-slate-300 transition-colors hover:border-[#B86B5E]/45 hover:text-white lg:h-8 lg:w-8"
             >
               <X className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
             </button>
@@ -253,11 +253,11 @@ export function HoldingReportsModal({
              ============================================================== */}
           <div
             data-testid="reports-col-financial"
-            className="flex flex-col justify-between rounded-2xl border border-amber-400/35 bg-gradient-to-b from-[#1E233A]/92 via-[#121C34]/94 to-[#0D1528]/96 p-2.5 lg:p-4"
+            className="flex flex-col justify-between rounded-[20px] border border-[#C8AE7D]/45 bg-[#222B38] p-2.5 lg:p-4"
           >
             <div>
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-400/50 bg-amber-500/15 text-amber-300 lg:h-9 lg:w-9">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D] lg:h-9 lg:w-9">
                   <Coins className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <h3 className="text-[11px] font-extrabold leading-tight tracking-wide text-white lg:text-xs">
@@ -266,19 +266,19 @@ export function HoldingReportsModal({
               </div>
 
               {/* Revenue, Net Profit, Margin Summary */}
-              <div className="mt-2.5 grid grid-cols-2 gap-2 rounded-xl border border-slate-700/70 bg-[#0A1326]/85 p-2 lg:p-2.5">
+              <div className="mt-2.5 grid grid-cols-2 gap-2 rounded-xl border border-[#334155] bg-[#0A1326]/85 p-2 lg:p-2.5">
                 <div className="min-w-0">
                   <div className="truncate text-[9px] font-semibold text-slate-400 lg:text-[10.5px]">
                     {report.periodTitle}:
                   </div>
                   <div
                     data-testid="reports-total-revenue"
-                    className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-emerald-300 lg:text-sm"
+                    className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-[#7A9E7E] lg:text-sm"
                   >
                     {formatTL(report.totalRevenue, true)}
                   </div>
                 </div>
-                <div className="min-w-0 border-l border-slate-800 pl-2">
+                <div className="min-w-0 border-l border-[#334155] pl-2">
                   <div className="truncate text-[9px] font-semibold text-slate-400 lg:text-[10.5px]">
                     Net Kâr:
                   </div>
@@ -286,7 +286,7 @@ export function HoldingReportsModal({
                     <span
                       data-testid="reports-net-profit"
                       className={`truncate font-mono-num text-xs font-extrabold lg:text-sm ${
-                        report.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-400'
+                        report.netProfit >= 0 ? 'text-[#7A9E7E]' : 'text-[#B86B5E]'
                       }`}
                     >
                       {formatTL(report.netProfit, true)}
@@ -294,7 +294,7 @@ export function HoldingReportsModal({
                     <span
                       data-testid="reports-profit-margin"
                       className={`shrink-0 font-mono-num text-[9.5px] font-bold ${
-                        report.profitMarginPct >= 0 ? 'text-cyan-300' : 'text-rose-300'
+                        report.profitMarginPct >= 0 ? 'text-[#7E96B0]' : 'text-[#B86B5E]'
                       }`}
                     >
                       (%{report.profitMarginPct})
@@ -304,7 +304,7 @@ export function HoldingReportsModal({
               </div>
 
               {/* Smooth Revenue & Net Profit Area/Line Chart */}
-              <div className="mt-2 rounded-xl border border-slate-700/60 bg-[#0A1326]/80 px-2 pb-1 pt-1.5 lg:mt-2.5 lg:pb-1.5 lg:pt-2">
+              <div className="mt-2 rounded-xl border border-[#334155] bg-[#0A1326]/80 px-2 pb-1 pt-1.5 lg:mt-2.5 lg:pb-1.5 lg:pt-2">
                 <svg
                   viewBox="0 0 240 82"
                   preserveAspectRatio="none"
@@ -359,7 +359,7 @@ export function HoldingReportsModal({
                   <div className="truncate text-slate-300">Personel</div>
                   <div
                     data-testid="reports-exp-personnel-pct"
-                    className="font-mono-num font-extrabold text-sky-300"
+                    className="font-mono-num font-extrabold text-[#7E96B0]"
                   >
                     %{report.expenseBreakdown.personnelPct}
                   </div>
@@ -368,7 +368,7 @@ export function HoldingReportsModal({
                   <div className="truncate text-slate-300">Kira/Sabit</div>
                   <div
                     data-testid="reports-exp-rent-pct"
-                    className="font-mono-num font-extrabold text-amber-300"
+                    className="font-mono-num font-extrabold text-[#C8AE7D]"
                   >
                     %{report.expenseBreakdown.rentTaxPct}
                   </div>
@@ -377,24 +377,24 @@ export function HoldingReportsModal({
                   <div className="truncate text-slate-300">Tedarik</div>
                   <div
                     data-testid="reports-exp-supply-pct"
-                    className="font-mono-num font-extrabold text-rose-400"
+                    className="font-mono-num font-extrabold text-[#B86B5E]"
                   >
                     %{report.expenseBreakdown.supplyOpsPct}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-1.5 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-800/95">
+              <div className="mt-1.5 flex h-2.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
                 <div
-                  className="h-full bg-sky-400 transition-all"
+                  className="h-full bg-[#7E96B0] transition-all"
                   style={{ width: `${report.expenseBreakdown.personnelPct}%` }}
                 />
                 <div
-                  className="h-full bg-amber-400 transition-all"
+                  className="h-full bg-[#C8AE7D] transition-all"
                   style={{ width: `${report.expenseBreakdown.rentTaxPct}%` }}
                 />
                 <div
-                  className="h-full bg-rose-500 transition-all"
+                  className="h-full bg-[#B86B5E] transition-all"
                   style={{ width: `${report.expenseBreakdown.supplyOpsPct}%` }}
                 />
               </div>
@@ -406,11 +406,11 @@ export function HoldingReportsModal({
              ============================================================== */}
           <div
             data-testid="reports-col-alerts"
-            className="flex flex-col justify-between rounded-2xl border border-cyan-400/35 bg-gradient-to-b from-[#132642]/92 via-[#101C34]/94 to-[#0C1427]/96 p-2.5 lg:p-4"
+            className="flex flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2.5 lg:p-4"
           >
             <div>
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-500/15 text-cyan-300 lg:h-9 lg:w-9">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-9 lg:w-9">
                   <Target className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <h3 className="text-[11px] font-extrabold leading-tight tracking-wide text-white lg:text-xs">
@@ -423,9 +423,9 @@ export function HoldingReportsModal({
                 {report.alerts.length === 0 ? (
                   <div
                     data-testid="reports-optimum-card"
-                    className="flex items-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/15 p-2.5 text-emerald-100 lg:gap-2.5 lg:p-3"
+                    className="flex items-center gap-2 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 p-2.5 text-emerald-100 lg:gap-2.5 lg:p-3"
                   >
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300 lg:h-5 lg:w-5" />
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-[#7A9E7E] lg:h-5 lg:w-5" />
                     <div className="text-[10.5px] font-bold leading-snug lg:text-xs">
                       Tüm şubeler optimum verimde çalışıyor
                     </div>
@@ -439,15 +439,15 @@ export function HoldingReportsModal({
                         data-testid={`reports-alert-${alert.type}`}
                         className={`rounded-xl border p-2 lg:p-2.5 ${
                           isWarn
-                            ? 'border-amber-400/60 bg-gradient-to-r from-amber-500/18 to-orange-500/10'
-                            : 'border-emerald-400/60 bg-gradient-to-r from-emerald-500/18 to-cyan-500/10'
+                            ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]'
+                            : 'border-[#7A9E7E]/45 bg-[#7A9E7E]'
                         }`}
                       >
                         <div className="flex items-start gap-1.5 lg:gap-2">
                           {isWarn ? (
-                            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300 lg:h-4 lg:w-4" />
+                            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C8AE7D] lg:h-4 lg:w-4" />
                           ) : (
-                            <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300 lg:h-4 lg:w-4" />
+                            <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#7A9E7E] lg:h-4 lg:w-4" />
                           )}
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[10px] font-extrabold text-white lg:text-xs">
@@ -466,8 +466,8 @@ export function HoldingReportsModal({
                             onClick={() => onNavigateToBranch(alert.businessId)}
                             className={`rounded-lg border px-2 py-0.5 text-[9px] font-extrabold tracking-wide transition-all hover:brightness-125 lg:px-2.5 lg:py-1 lg:text-[10.5px] ${
                               isWarn
-                                ? 'border-amber-400/70 bg-amber-500/25 text-amber-100'
-                                : 'border-emerald-400/70 bg-emerald-500/25 text-emerald-100'
+                                ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-amber-100'
+                                : 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-emerald-100'
                             }`}
                           >
                             {alert.actionLabel}
@@ -481,20 +481,20 @@ export function HoldingReportsModal({
             </div>
 
             {/* Bottom Customer Satisfaction & Brand Recognition Bars */}
-            <div className="mt-2 space-y-1.5 rounded-xl border border-slate-700/65 bg-[#0A1326]/85 p-2 lg:mt-3 lg:space-y-2 lg:p-2.5">
+            <div className="mt-2 space-y-1.5 rounded-xl border border-[#334155] bg-[#0A1326]/85 p-2 lg:mt-3 lg:space-y-2 lg:p-2.5">
               <div>
                 <div className="flex items-center justify-between text-[10px] lg:text-xs">
                   <span className="flex items-center gap-1.5 font-bold text-slate-200">
-                    <ThumbsUp className="h-3.5 w-3.5 text-emerald-300" />
+                    <ThumbsUp className="h-3.5 w-3.5 text-[#7A9E7E]" />
                     Memnuniyet:
                   </span>
-                  <span className="font-mono-num font-extrabold text-emerald-300">
+                  <span className="font-mono-num font-extrabold text-[#7A9E7E]">
                     %{report.customerSatisfactionPct}
                   </span>
                 </div>
-                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-[#1D2532]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all"
+                    className="h-full rounded-full bg-[#7A9E7E] transition-all"
                     style={{ width: `${Math.max(5, report.customerSatisfactionPct)}%` }}
                   />
                 </div>
@@ -503,16 +503,16 @@ export function HoldingReportsModal({
               <div>
                 <div className="flex items-center justify-between text-[10px] lg:text-xs">
                   <span className="flex items-center gap-1.5 font-bold text-slate-200">
-                    <Megaphone className="h-3.5 w-3.5 text-amber-300" />
+                    <Megaphone className="h-3.5 w-3.5 text-[#C8AE7D]" />
                     Bilinirlik:
                   </span>
-                  <span className="font-mono-num font-extrabold text-amber-300">
+                  <span className="font-mono-num font-extrabold text-[#C8AE7D]">
                     %{report.brandRecognitionPct}
                   </span>
                 </div>
-                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-[#1D2532]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-300 transition-all"
+                    className="h-full rounded-full bg-[#C8AE7D] transition-all"
                     style={{ width: `${Math.max(5, report.brandRecognitionPct)}%` }}
                   />
                 </div>
@@ -525,11 +525,11 @@ export function HoldingReportsModal({
              ============================================================== */}
           <div
             data-testid="reports-col-sectors"
-            className="flex flex-col justify-between rounded-2xl border border-amber-400/35 bg-gradient-to-b from-[#23223A]/92 via-[#141C34]/94 to-[#0D1528]/96 p-2.5 lg:p-4"
+            className="flex flex-col justify-between rounded-[20px] border border-[#C8AE7D]/45 bg-[#222B38] p-2.5 lg:p-4"
           >
             <div>
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-amber-400/50 bg-amber-500/15 text-amber-300 lg:h-9 lg:w-9">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D] lg:h-9 lg:w-9">
                   <PieChart className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <h3 className="text-[10.5px] font-extrabold leading-tight tracking-wide text-white lg:text-xs">
@@ -538,7 +538,7 @@ export function HoldingReportsModal({
               </div>
 
               {/* Donut Chart + Sector Legend */}
-              <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-700/70 bg-[#0A1326]/85 p-2 lg:mt-2.5 lg:gap-2.5 lg:p-2.5">
+              <div className="mt-2 flex items-center gap-2 rounded-xl border border-[#334155] bg-[#0A1326]/85 p-2 lg:mt-2.5 lg:gap-2.5 lg:p-2.5">
                 <SectorDonutChart slices={report.sectorSlices} />
                 <div className="min-w-0 flex-1 space-y-1.5">
                   {report.sectorSlices.length === 0 ? (
@@ -582,7 +582,7 @@ export function HoldingReportsModal({
               {actionToast && (
                 <div
                   data-testid="reports-bulk-action-toast"
-                  className="rounded-lg border border-emerald-400/50 bg-emerald-500/15 px-2 py-0.5 text-[9.5px] font-bold text-emerald-200 lg:px-2.5 lg:py-1 lg:text-[10px]"
+                  className="rounded-lg border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-2 py-0.5 text-[9.5px] font-bold text-[#7A9E7E] lg:px-2.5 lg:py-1 lg:text-[10px]"
                 >
                   {actionToast}
                 </div>
@@ -595,14 +595,14 @@ export function HoldingReportsModal({
                 onClick={triggerBulkAds}
                 className={`flex min-h-[34px] w-full flex-col items-center justify-center rounded-xl border px-2.5 py-1 transition-all lg:min-h-[44px] lg:px-3 lg:py-1.5 ${
                   canAffordAds
-                    ? 'border-cyan-300/75 bg-gradient-to-r from-cyan-500/28 to-sky-500/22 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.22)] hover:brightness-115 active:scale-[0.98]'
-                    : 'cursor-not-allowed border-slate-700 bg-slate-800/60 text-slate-500'
+                    ? 'border-[#334155] bg-[#7E96B0] text-cyan-50  hover:brightness-115 active:scale-[0.98]'
+                    : 'cursor-not-allowed border-[#334155] bg-[#1D2532] text-slate-500'
                 }`}
               >
                 <span className="text-[9.5px] font-extrabold tracking-wide lg:text-xs">
                   TÜM ŞUBELERE REKLAM VER
                 </span>
-                <span className="font-mono-num text-[9px] font-bold text-cyan-200 lg:text-[11px]">
+                <span className="font-mono-num text-[9px] font-bold text-[#7E96B0] lg:text-[11px]">
                   ({formatTL(report.bulkAdCost)})
                 </span>
               </button>
@@ -614,14 +614,14 @@ export function HoldingReportsModal({
                 onClick={triggerBulkBonus}
                 className={`flex min-h-[34px] w-full flex-col items-center justify-center rounded-xl border px-2.5 py-1 transition-all lg:min-h-[44px] lg:px-3 lg:py-1.5 ${
                   canAffordBonus
-                    ? 'border-amber-400/75 bg-gradient-to-r from-amber-500/28 to-yellow-500/20 text-amber-50 shadow-[0_0_16px_rgba(245,158,11,0.2)] hover:brightness-115 active:scale-[0.98]'
-                    : 'cursor-not-allowed border-slate-700 bg-slate-800/60 text-slate-500'
+                    ? 'border-[#C8AE7D]/45 bg-[#C8AE7D] text-amber-50  hover:brightness-115 active:scale-[0.98]'
+                    : 'cursor-not-allowed border-[#334155] bg-[#1D2532] text-slate-500'
                 }`}
               >
                 <span className="text-[9.5px] font-extrabold tracking-wide lg:text-xs">
                   TÜM PERSONELE PRİM DAĞIT
                 </span>
-                <span className="font-mono-num text-[9px] font-bold text-amber-200 lg:text-[11px]">
+                <span className="font-mono-num text-[9px] font-bold text-[#C8AE7D] lg:text-[11px]">
                   ({formatTL(report.bulkBonusCost)})
                 </span>
               </button>

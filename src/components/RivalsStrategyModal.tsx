@@ -136,7 +136,7 @@ export function RivalsStrategyModal({
         subtitle={`Rakip İşletmeler Strateji Merkezi · ${directory.length} Aktif Şube`}
         icon={<Swords className="h-4 w-4" />}
         headerRight={
-          <span className="rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono-num text-xs font-bold text-emerald-400 whitespace-nowrap">
+          <span className="rounded-xl border border-[#334155] bg-[#222B38] px-2.5 py-1.5 font-mono-num text-xs font-bold text-[#7A9E7E] whitespace-nowrap">
             Nakit: {formatTL(state.cash, true)}
           </span>
         }
@@ -152,8 +152,8 @@ export function RivalsStrategyModal({
                 onClick={() => setFilter(f.id)}
                 className={`min-h-[36px] shrink-0 rounded-xl px-3 text-xs font-bold transition ${
                   filter === f.id
-                    ? 'bg-amber-400 text-slate-950'
-                    : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                    ? 'bg-[#C8AE7D] text-[#181F29]'
+                    : 'border border-[#334155] bg-[#1D2532] text-slate-200 hover:bg-[#2A3444]'
                 }`}
               >
                 {f.label}
@@ -166,8 +166,8 @@ export function RivalsStrategyModal({
       >
         {/* Active Competitive Blitz Banner */}
         {activeBlitzes.length > 0 && (
-          <section className="rounded-xl border border-rose-500/45 bg-rose-950/30 p-3 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-300">
+          <section className="rounded-xl border border-[#B86B5E]/45 bg-[#B86B5E]/15 p-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#B86B5E]">
               <Flame className="h-4 w-4 shrink-0" />
               <span>Aktif Rekabetçi Kampanya Hamleleri ({activeBlitzes.length})</span>
             </div>
@@ -175,7 +175,7 @@ export function RivalsStrategyModal({
               {activeBlitzes.map((bl) => (
                 <span
                   key={bl.id}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-400/35 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-200"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#B86B5E]/45 bg-[#B86B5E]/15 px-2.5 py-1 text-xs font-semibold text-[#B86B5E]"
                 >
                   <span>
                     {bl.cityName} · {bl.targetOwnerName} karşıtı (+%
@@ -189,7 +189,7 @@ export function RivalsStrategyModal({
         )}
 
         {filtered.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/60 p-8 text-center text-xs text-slate-400">
+          <div className="rounded-xl border border-dashed border-[#334155] bg-[#222B38] p-8 text-center text-xs text-slate-400">
             Bu filtrede aktif rakip işletme bulunamadı.
           </div>
         ) : (
@@ -211,7 +211,7 @@ export function RivalsStrategyModal({
                 <div
                   key={record.id}
                   data-testid={`rival-card-${record.id}`}
-                  className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/85 p-3"
+                  className="flex flex-col justify-between gap-3 rounded-xl border border-[#334155] bg-[#222B38] p-3"
                 >
                   <div className="space-y-2.5">
                     {/* Header: Vector Logo + Holding & Branch Info */}
@@ -226,14 +226,14 @@ export function RivalsStrategyModal({
                             <span
                               className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${
                                 item.isAiHolding
-                                  ? 'border-violet-400/40 bg-violet-500/20 text-violet-200'
-                                  : 'border-cyan-400/60 bg-cyan-500/20 text-cyan-200'
+                                  ? 'border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0]'
+                                  : 'border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0]'
                               }`}
                             >
                               {item.isAiHolding ? 'AI Holding' : 'Canlı Oyuncu'}
                             </span>
                           </div>
-                          <div className="truncate text-xs font-semibold text-amber-300">
+                          <div className="truncate text-xs font-semibold text-[#C8AE7D]">
                             {(() => {
                               const parsed = parseOwnerAndHolding(record.owner_name);
                               return item.isAiHolding
@@ -252,8 +252,8 @@ export function RivalsStrategyModal({
                       <span
                         className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${
                           item.isDistressed
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-slate-800 text-slate-300'
+                            ? 'bg-[#7A9E7E]/15 text-[#7A9E7E]'
+                            : 'bg-[#1D2532] text-slate-300'
                         }`}
                       >
                         {item.isDistressed ? (
@@ -266,7 +266,7 @@ export function RivalsStrategyModal({
                     </div>
 
                     {/* Metrics Strip */}
-                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-800 bg-slate-950/75 p-2 text-xs">
+                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-[#334155] bg-black/70 p-2 text-xs">
                       <div>
                         <div className="text-[10px] text-slate-400">Şube Değeri</div>
                         <div className="font-mono-num font-bold text-white">
@@ -275,13 +275,13 @@ export function RivalsStrategyModal({
                       </div>
                       <div>
                         <div className="text-[10px] text-slate-400">Holding Değeri</div>
-                        <div className="font-mono-num font-bold text-amber-300">
+                        <div className="font-mono-num font-bold text-[#C8AE7D]">
                           {formatTL(item.holdingTotalValuation, true)}
                         </div>
                       </div>
                       <div>
                         <div className="text-[10px] text-slate-400">Pazar Payı</div>
-                        <div className="flex items-center gap-1 font-mono-num font-bold text-sky-300">
+                        <div className="flex items-center gap-1 font-mono-num font-bold text-[#7E96B0]">
                           <TrendingUp className="h-3 w-3" />%{item.sectorMarketSharePct}
                         </div>
                       </div>
@@ -290,25 +290,25 @@ export function RivalsStrategyModal({
                     <div className="text-[11px] font-semibold text-slate-300">
                       Durum:{' '}
                       <span
-                        className={item.isDistressed ? 'text-emerald-400' : 'text-slate-200'}
+                        className={item.isDistressed ? 'text-[#7A9E7E]' : 'text-slate-200'}
                       >
                         {item.distressLabel}
                       </span>{' '}
                       · Tahmini Ciro:{' '}
-                      <span className="font-mono-num text-emerald-300">
+                      <span className="font-mono-num text-[#7A9E7E]">
                         {formatTL(record.hourly_income, true)}/sa
                       </span>
                     </div>
                   </div>
 
                   {/* 4 Strategy Actions */}
-                  <div className="space-y-2 border-t border-slate-800 pt-2.5">
+                  <div className="space-y-2 border-t border-[#334155] pt-2.5">
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         data-testid={`rival-focus-btn-${record.id}`}
                         onClick={() => onFocusRivalOnMap(record)}
-                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-amber-300 hover:bg-slate-700 whitespace-nowrap"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[#334155] bg-[#1D2532] px-2.5 text-xs font-bold text-[#C8AE7D] hover:bg-[#2A3444] whitespace-nowrap"
                       >
                         <MapPin className="h-3.5 w-3.5 shrink-0" />
                         <span>Haritada Gör</span>
@@ -319,7 +319,7 @@ export function RivalsStrategyModal({
                         data-testid={`rival-takeover-btn-${record.id}`}
                         disabled={!canAffordTakeover}
                         onClick={() => onTakeoverRival(record, item.takeoverMultiplier)}
-                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-amber-400 px-2.5 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#C8AE7D] px-2.5 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E] disabled:cursor-not-allowed disabled:bg-[#1D2532] disabled:text-slate-500 whitespace-nowrap"
                       >
                         <Handshake className="h-3.5 w-3.5 shrink-0" />
                         <span>Devral ({formatTL(item.takeoverPrice, true)})</span>
@@ -332,7 +332,7 @@ export function RivalsStrategyModal({
                         data-testid={`rival-blitz-btn-${record.id}`}
                         disabled={!canBlitz}
                         onClick={() => onLaunchBlitz(record)}
-                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-rose-500/45 bg-rose-500/15 px-2.5 text-xs font-bold text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-900 disabled:text-slate-500 whitespace-nowrap"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[#B86B5E]/45 bg-[#B86B5E]/15 px-2.5 text-xs font-bold text-[#B86B5E] hover:bg-[#B86B5E]/15 disabled:cursor-not-allowed disabled:border-[#334155] disabled:bg-[#222B38] disabled:text-slate-500 whitespace-nowrap"
                       >
                         <Flame className="h-3.5 w-3.5 shrink-0" />
                         <span>
@@ -349,7 +349,7 @@ export function RivalsStrategyModal({
                           type="button"
                           data-testid={`rival-franchise-btn-${record.id}`}
                           onClick={() => onTakeRivalFranchise(item.linkedFranchise!)}
-                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-emerald-500/45 bg-emerald-500/15 px-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 whitespace-nowrap"
+                          className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-2.5 text-xs font-bold text-[#7A9E7E] hover:bg-[#7A9E7E]/15 whitespace-nowrap"
                         >
                           <Store className="h-3.5 w-3.5 shrink-0" />
                           <span>Franchise Al (+%35)</span>

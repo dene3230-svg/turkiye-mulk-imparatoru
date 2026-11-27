@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import {
-  Sun,
-  Moon,
   Bell,
   Volume2,
   VolumeX,
@@ -59,48 +57,18 @@ export function SettingsModal({
       <MobileGameModal
         title="Ayarlar & Canlı Güncelleme"
         subtitle={`Sürüm v${APP_VERSION} (${APP_BUILD_DATE})`}
-        icon={<Settings className="h-4 w-4" />}
+        icon={<Settings className="h-4 w-4" strokeWidth={1.5} />}
         onClose={onClose}
         zIndexClass="z-[1255]"
       >
         <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
-          {/* Appearance & Controls */}
+          {/* Controls & Map Style */}
           <div className="space-y-3">
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
-              <div className="text-xs font-bold text-white">Görünüm Teması</div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onUpdateSettings({ theme: 'light' })}
-                  className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl text-xs font-bold transition ${
-                    settings.theme === 'light'
-                      ? 'bg-amber-400 text-slate-950 font-bold'
-                      : 'border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
-                  }`}
-                >
-                  <Sun className="h-4 w-4" />
-                  <span>Açık Tema</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdateSettings({ theme: 'dark' })}
-                  className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl text-xs font-bold transition ${
-                    settings.theme === 'dark'
-                      ? 'bg-amber-400 text-slate-950 font-bold'
-                      : 'border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
-                  }`}
-                >
-                  <Moon className="h-4 w-4" />
-                  <span>Karanlık</span>
-                </button>
-              </div>
-            </section>
-
-            <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+            <section className="flex items-center justify-between gap-3 rounded-[20px] border border-[#334155] bg-[#222B38] p-3.5">
               <div className="flex items-center gap-2.5">
-                <Bell className="h-5 w-5 text-amber-400" />
+                <Bell className="h-5 w-5 text-[#C8AE7D]" strokeWidth={1.5} />
                 <div>
-                  <div className="text-xs font-bold text-white">Bildirimler</div>
+                  <div className="text-xs font-bold text-slate-100">Bildirimler</div>
                   <div className="text-xs text-slate-400">
                     Ciro, gün sonu, etkinlik ve güncelleme uyarıları
                   </div>
@@ -115,26 +83,26 @@ export function SettingsModal({
                   onUpdateSettings({ notificationsEnabled: !settings.notificationsEnabled })
                 }
                 className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-                  settings.notificationsEnabled ? 'bg-amber-400' : 'bg-slate-700'
+                  settings.notificationsEnabled ? 'bg-[#C8AE7D]' : 'bg-[#334155]'
                 }`}
               >
                 <span
-                  className={`block h-6 w-6 rounded-full bg-slate-950 shadow transition-transform ${
+                  className={`block h-6 w-6 rounded-full bg-[#181F29] transition-transform ${
                     settings.notificationsEnabled ? 'translate-x-7' : 'translate-x-1'
                   }`}
                 />
               </button>
             </section>
 
-            <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+            <section className="flex items-center justify-between gap-3 rounded-[20px] border border-[#334155] bg-[#222B38] p-3.5">
               <div className="flex items-center gap-2.5">
                 {settings.soundEnabled ? (
-                  <Volume2 className="h-5 w-5 text-emerald-400" />
+                  <Volume2 className="h-5 w-5 text-[#7A9E7E]" strokeWidth={1.5} />
                 ) : (
-                  <VolumeX className="h-5 w-5 text-slate-500" />
+                  <VolumeX className="h-5 w-5 text-slate-500" strokeWidth={1.5} />
                 )}
                 <div>
-                  <div className="text-xs font-bold text-white">Ses Efektleri</div>
+                  <div className="text-xs font-bold text-slate-100">Ses Efektleri</div>
                   <div className="text-xs text-slate-400">
                     Pin, tahsilat ve yükseltme sesleri
                   </div>
@@ -147,30 +115,30 @@ export function SettingsModal({
                 aria-label="Ses efektlerini aç veya kapat"
                 onClick={() => onUpdateSettings({ soundEnabled: !settings.soundEnabled })}
                 className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-                  settings.soundEnabled ? 'bg-emerald-400' : 'bg-slate-700'
+                  settings.soundEnabled ? 'bg-[#7A9E7E]' : 'bg-[#334155]'
                 }`}
               >
                 <span
-                  className={`block h-6 w-6 rounded-full bg-slate-950 shadow transition-transform ${
+                  className={`block h-6 w-6 rounded-full bg-[#181F29] transition-transform ${
                     settings.soundEnabled ? 'translate-x-7' : 'translate-x-1'
                   }`}
                 />
               </button>
             </section>
 
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                <MapIcon className="h-4 w-4 text-sky-400" />
+            <section className="rounded-[20px] border border-[#334155] bg-[#222B38] p-3.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-100">
+                <MapIcon className="h-4 w-4 text-[#7E96B0]" strokeWidth={1.5} />
                 <span>Harita Katmanı</span>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => onUpdateSettings({ mapStyle: 'osm' })}
-                  className={`min-h-[42px] rounded-xl text-xs font-bold ${
+                  className={`min-h-[42px] rounded-[14px] text-xs font-semibold ${
                     settings.mapStyle === 'osm'
-                      ? 'bg-sky-400 text-slate-950 font-bold'
-                      : 'border border-slate-700 bg-slate-950 text-slate-300'
+                      ? 'bg-[#7E96B0] text-[#181F29] font-bold'
+                      : 'border border-[#334155] bg-[#181F29] text-slate-300 hover:bg-[#2A3444]'
                   }`}
                 >
                   OpenStreetMap
@@ -178,10 +146,10 @@ export function SettingsModal({
                 <button
                   type="button"
                   onClick={() => onUpdateSettings({ mapStyle: 'carto' })}
-                  className={`min-h-[42px] rounded-xl text-xs font-bold ${
+                  className={`min-h-[42px] rounded-[14px] text-xs font-semibold ${
                     settings.mapStyle === 'carto'
-                      ? 'bg-sky-400 text-slate-950 font-bold'
-                      : 'border border-slate-700 bg-slate-950 text-slate-300'
+                      ? 'bg-[#7E96B0] text-[#181F29] font-bold'
+                      : 'border border-[#334155] bg-[#181F29] text-slate-300 hover:bg-[#2A3444]'
                   }`}
                 >
                   CARTO Harita
@@ -192,14 +160,14 @@ export function SettingsModal({
 
           {/* OTA & Account */}
           <div className="space-y-3">
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-3">
+            <section className="rounded-[20px] border border-[#334155] bg-[#222B38] p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-white">Canlı Güncelleme (OTA)</span>
-                <span className="font-mono-num text-xs font-black text-amber-300">
+                <span className="text-sm font-bold text-slate-100">Canlı Güncelleme (OTA)</span>
+                <span className="font-mono-num text-xs font-bold text-[#C8AE7D]">
                   v{APP_VERSION}
                 </span>
               </div>
-              <p className="text-xs text-slate-300">
+              <p className="text-xs text-slate-400">
                 Yeni APK indirmeye gerek kalmadan güncel harita ve özellikleri anında alın.
               </p>
 
@@ -207,42 +175,45 @@ export function SettingsModal({
                 type="button"
                 disabled={checkingOta}
                 onClick={onCheckUpdates}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
+                className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[14px] bg-[#C8AE7D] px-3 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E] disabled:opacity-60"
               >
-                <RefreshCw className={`h-4 w-4 ${checkingOta ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`h-4 w-4 ${checkingOta ? 'animate-spin' : ''}`}
+                  strokeWidth={1.5}
+                />
                 <span>{checkingOta ? 'Denetleniyor...' : 'Güncellemeleri Denetle'}</span>
               </button>
 
               {otaResult && (
-                <div className="rounded-xl border border-slate-700 bg-slate-950/90 p-3 text-xs">
+                <div className="rounded-[14px] border border-[#334155] bg-[#181F29] p-3 text-xs">
                   {otaResult.error ? (
-                    <div className="flex items-start gap-2 text-amber-300">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="flex items-start gap-2 text-[#C8AE7D]">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.5} />
                       <span>{otaResult.error}</span>
                     </div>
                   ) : otaResult.hasUpdate ? (
                     <div className="space-y-2">
-                      <div className="font-bold text-emerald-400">
+                      <div className="font-bold text-[#7A9E7E]">
                         Yeni sürüm mevcut: v{otaResult.remoteManifest?.version}
                       </div>
                       <button
                         type="button"
                         onClick={onOpenUpdateModal}
-                        className="min-h-[40px] w-full rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400"
+                        className="min-h-[40px] w-full rounded-[12px] bg-[#7A9E7E] px-3 text-xs font-bold text-[#181F29] hover:bg-[#89AE8D]"
                       >
                         Güncelleme Notlarını Gör
                       </button>
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 font-bold text-emerald-400">
-                        <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <div className="flex items-center gap-1.5 font-bold text-[#7A9E7E]">
+                        <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                         <span>
                           Uygulama güncel (v{otaResult.remoteManifest?.version ?? APP_VERSION})
                         </span>
                       </div>
                       {otaResult.remoteManifest?.notes?.[0] && (
-                        <p className="text-slate-300">{otaResult.remoteManifest.notes[0]}</p>
+                        <p className="text-slate-400">{otaResult.remoteManifest.notes[0]}</p>
                       )}
                     </div>
                   )}
@@ -250,10 +221,10 @@ export function SettingsModal({
               )}
             </section>
 
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 space-y-2.5">
+            <section className="rounded-[20px] border border-[#334155] bg-[#222B38] p-4 space-y-2.5">
               <div>
-                <div className="text-sm font-bold text-white">Hesap & Navigasyon</div>
-                <p data-testid="settings-account-label" className="mt-0.5 text-xs text-slate-300">
+                <div className="text-sm font-bold text-slate-100">Hesap &amp; Navigasyon</div>
+                <p data-testid="settings-account-label" className="mt-0.5 text-xs text-slate-400">
                   {user ? `${user.name} (@${user.username})` : 'Oturum açılmadı'}
                 </p>
               </div>
@@ -266,9 +237,9 @@ export function SettingsModal({
                     onClose();
                     onReturnToMainMenu();
                   }}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 text-xs font-extrabold text-slate-950 shadow-xs transition hover:bg-amber-300"
+                  className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[14px] bg-[#C8AE7D] px-3 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E]"
                 >
-                  <Home className="h-4 w-4" />
+                  <Home className="h-4 w-4" strokeWidth={1.5} />
                   <span>Ana Menüye Dön</span>
                 </button>
               )}
@@ -281,9 +252,9 @@ export function SettingsModal({
                     onClose();
                     onSignOut();
                   }}
-                  className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-bold text-amber-200 transition hover:bg-amber-500/20"
+                  className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-[14px] border border-[#C8AE7D]/40 bg-[#181F29] px-3 text-xs font-semibold text-[#C8AE7D] hover:bg-[#2A3444]"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-4 w-4" strokeWidth={1.5} />
                   <span>Hesaptan Çıkış Yap</span>
                 </button>
               )}
@@ -296,9 +267,9 @@ export function SettingsModal({
                     onClose();
                     onReplayTutorial();
                   }}
-                  className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-sky-500/40 bg-sky-500/15 px-3 text-xs font-bold text-sky-200 hover:bg-sky-500/25"
+                  className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-[14px] border border-[#7E96B0]/40 bg-[#181F29] px-3 text-xs font-semibold text-[#7E96B0] hover:bg-[#2A3444]"
                 >
-                  <BookOpen className="h-4 w-4" />
+                  <BookOpen className="h-4 w-4" strokeWidth={1.5} />
                   <span>Oyun Rehberini Tekrar Göster</span>
                 </button>
               )}
@@ -307,9 +278,9 @@ export function SettingsModal({
                 <button
                   type="button"
                   onClick={() => setConfirmReset(true)}
-                  className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/15 px-3 text-xs font-bold text-rose-300 hover:bg-rose-500/25"
+                  className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-[14px] border border-[#B86B5E]/45 bg-[#B86B5E]/15 px-3 text-xs font-semibold text-[#E8B4AA] hover:bg-[#B86B5E]/25"
                 >
-                  <RotateCcw className="h-4 w-4" />
+                  <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
                   <span>İmparatorluğu Sıfırla</span>
                 </button>
               ) : (
@@ -320,14 +291,14 @@ export function SettingsModal({
                       onResetGame();
                       setConfirmReset(false);
                     }}
-                    className="min-h-[42px] flex-1 rounded-xl bg-rose-600 text-xs font-bold text-white hover:bg-rose-500"
+                    className="min-h-[40px] flex-1 rounded-[14px] bg-[#B86B5E] text-xs font-bold text-white hover:bg-[#C6796C]"
                   >
                     Evet, Sıfırla
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmReset(false)}
-                    className="min-h-[42px] flex-1 rounded-xl border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200"
+                    className="min-h-[40px] flex-1 rounded-[14px] border border-[#334155] bg-[#181F29] text-xs font-semibold text-slate-200 hover:bg-[#2A3444]"
                   >
                     Vazgeç
                   </button>

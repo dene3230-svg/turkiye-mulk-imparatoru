@@ -100,7 +100,7 @@ function StarRating({ stars, size = 'sm' }: { stars: number; size?: 'xs' | 'sm' 
         <Star
           key={n}
           className={`${cls} ${
-            n <= stars ? 'fill-amber-400 text-amber-400' : 'fill-transparent text-slate-600'
+            n <= stars ? 'fill-amber-400 text-[#C8AE7D]' : 'fill-transparent text-slate-600'
           }`}
         />
       ))}
@@ -317,19 +317,19 @@ export function HrManagementModal({
   return (
     <div
       data-testid="hr-management-modal"
-      className="fixed inset-0 z-[1060] flex items-center justify-center bg-[#040915]/84 p-1.5 backdrop-blur-sm lg:p-4"
+      className="fixed inset-0 z-[1060] flex items-center justify-center bg-[#040915]/84 p-1.5 lg:p-4"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-cyan-400/35 bg-gradient-to-b from-[#132240]/98 via-[#0E1830]/99 to-[#091020]/99 shadow-[0_24px_80px_rgba(0,0,0,0.85)]"
+        className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-[20px] border border-[#334155] bg-[#222B38]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ==================== TOP HEADER & SUMMARY STRIP ==================== */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-700/75 bg-[#0C1529]/95 px-3 py-1.5 lg:px-5 lg:py-2.5">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#334155] bg-[#0C1529]/95 px-3 py-1.5 lg:px-5 lg:py-2.5">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-wide lg:text-base">
               <span className="text-slate-400">İŞLETMELERİM</span>
-              <span className="text-cyan-400">&gt;</span>
+              <span className="text-[#7E96B0]">&gt;</span>
               <span className="text-white">İK & PERSONEL YÖNETİMİ</span>
             </div>
             <p className="text-[9px] text-slate-400 lg:text-xs">
@@ -339,12 +339,12 @@ export function HrManagementModal({
 
           {/* Compact KPI + Refresh Pool + Close */}
           <div className="flex items-center gap-2 lg:gap-3">
-            <div className="flex items-center gap-2.5 rounded-xl border border-slate-700/70 bg-[#0A1224]/90 px-2.5 py-1 text-[9.5px] lg:gap-4 lg:px-3 lg:py-1.5 lg:text-xs">
+            <div className="flex items-center gap-2.5 rounded-xl border border-[#334155] bg-[#0A1224]/90 px-2.5 py-1 text-[9.5px] lg:gap-4 lg:px-3 lg:py-1.5 lg:text-xs">
               <div className="flex items-center gap-1 whitespace-nowrap">
                 <span className="text-slate-400">Günlük Bordro:</span>
                 <span
                   data-testid="hr-daily-payroll"
-                  className="font-mono-num font-extrabold text-amber-300"
+                  className="font-mono-num font-extrabold text-[#C8AE7D]"
                 >
                   {formatTL(payrollBreakdown.dailyTotalCost)}/gün
                 </span>
@@ -354,7 +354,7 @@ export function HrManagementModal({
                 <span className="text-slate-400">Nakit:</span>
                 <span
                   data-testid="hr-cash-display"
-                  className="font-mono-num font-extrabold text-emerald-300"
+                  className="font-mono-num font-extrabold text-[#7A9E7E]"
                 >
                   {formatTL(state.cash, true)}
                 </span>
@@ -365,7 +365,7 @@ export function HrManagementModal({
               type="button"
               data-testid="hr-refresh-pool-btn"
               onClick={handleRefresh}
-              className="flex items-center gap-1 rounded-full border border-amber-400/75 bg-gradient-to-r from-amber-500/28 to-yellow-500/20 px-2.5 py-1 text-[9.5px] font-extrabold tracking-wide text-amber-100 shadow-[0_0_14px_rgba(245,158,11,0.28)] transition-all hover:brightness-120 active:scale-[0.98] whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
+              className="flex items-center gap-1 rounded-full border border-[#C8AE7D]/45 bg-[#C8AE7D] px-2.5 py-1 text-[9.5px] font-extrabold tracking-wide text-amber-100 transition-all hover:brightness-120 active:scale-[0.98] whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
             >
               <RefreshCw className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
               HAVUZU YENİLE (₺2.500)
@@ -376,7 +376,7 @@ export function HrManagementModal({
               data-testid="hr-close-btn"
               onClick={onClose}
               aria-label="İK panelini kapat"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/80 text-slate-300 transition-colors hover:border-rose-400/60 hover:text-white lg:h-8 lg:w-8"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#1D2532] text-slate-300 transition-colors hover:border-[#B86B5E]/45 hover:text-white lg:h-8 lg:w-8"
             >
               <X className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
             </button>
@@ -384,7 +384,7 @@ export function HrManagementModal({
         </div>
 
         {/* ==================== 3-TAB BAR ==================== */}
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700/65 bg-[#0A1326]/95 px-3 py-1.5 lg:px-5 lg:py-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#334155] bg-[#0A1326]/95 px-3 py-1.5 lg:px-5 lg:py-2">
           <div className="flex items-center gap-1.5 overflow-x-auto lg:gap-2">
             {HR_TABS.map((tab) => {
               const active = activeTab === tab.id;
@@ -399,8 +399,8 @@ export function HrManagementModal({
                   }}
                   className={`rounded-xl px-2.5 py-1 text-[9.5px] font-extrabold tracking-wide transition-all whitespace-nowrap lg:px-4 lg:py-1.5 lg:text-xs ${
                     active
-                      ? 'border border-cyan-400/80 bg-cyan-500/22 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.28)]'
-                      : 'border border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                      ? 'border border-[#334155] bg-[#7E96B0]/22 text-cyan-50 '
+                      : 'border border-transparent text-slate-400 hover:bg-[#1D2532] hover:text-slate-200'
                   }`}
                 >
                   {tab.label}
@@ -411,11 +411,11 @@ export function HrManagementModal({
 
           {selectedBranch && (
             <div className="hidden items-center gap-1.5 text-[10px] font-bold text-slate-300 sm:flex lg:text-xs">
-              <Building2 className="h-3.5 w-3.5 text-cyan-300" />
+              <Building2 className="h-3.5 w-3.5 text-[#7E96B0]" />
               <span className="truncate max-w-[180px] text-white">
                 {selectedBranch.customName}
               </span>
-              <span className="font-mono-num text-cyan-300">
+              <span className="font-mono-num text-[#7E96B0]">
                 ({getBranchTotalStaffCount(selectedBranch)}/{MAX_BRANCH_TOTAL_SLOTS})
               </span>
             </div>
@@ -427,16 +427,16 @@ export function HrManagementModal({
           <div
             data-testid="hr-limit-alert"
             role="alert"
-            className="mx-3 mt-1.5 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-rose-500/80 bg-gradient-to-r from-rose-600/30 via-red-600/25 to-rose-700/25 px-3 py-1.5 text-[10.5px] font-extrabold text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.3)] lg:mx-5 lg:mt-2 lg:px-4 lg:py-2 lg:text-xs"
+            className="mx-3 mt-1.5 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-[#B86B5E]/45 bg-[#B86B5E] px-3 py-1.5 text-[10.5px] font-extrabold text-rose-100 lg:mx-5 lg:mt-2 lg:px-4 lg:py-2 lg:text-xs"
           >
             <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0 text-rose-300" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-[#B86B5E]" />
               <span>{limitAlert}</span>
             </div>
             <button
               type="button"
               onClick={() => setLimitAlert(null)}
-              className="rounded-lg px-1.5 py-0.5 text-rose-200 hover:bg-rose-500/25"
+              className="rounded-lg px-1.5 py-0.5 text-[#B86B5E] hover:bg-[#B86B5E]/15"
               aria-label="Uyarıyı kapat"
             >
               <X className="h-3.5 w-3.5" />
@@ -447,16 +447,16 @@ export function HrManagementModal({
         {!limitAlert && statusToast && (
           <div
             data-testid="hr-status-toast"
-            className="mx-3 mt-1.5 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-emerald-400/60 bg-emerald-500/18 px-3 py-1 text-[10px] font-bold text-emerald-100 lg:mx-5 lg:mt-2 lg:px-4 lg:py-1.5 lg:text-xs"
+            className="mx-3 mt-1.5 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/18 px-3 py-1 text-[10px] font-bold text-emerald-100 lg:mx-5 lg:mt-2 lg:px-4 lg:py-1.5 lg:text-xs"
           >
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-300" />
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#7A9E7E]" />
               <span>{statusToast}</span>
             </div>
             <button
               type="button"
               onClick={() => setStatusToast(null)}
-              className="text-emerald-200 hover:text-white"
+              className="text-[#7A9E7E] hover:text-white"
               aria-label="Bildirimi kapat"
             >
               <X className="h-3.5 w-3.5" />
@@ -472,10 +472,10 @@ export function HrManagementModal({
                ============================================================== */}
             <div
               data-testid="hr-col-branches"
-              className="flex min-h-0 flex-col rounded-2xl border border-cyan-400/30 bg-gradient-to-b from-[#132240]/90 to-[#0C1528]/95 p-2 lg:p-3"
+              className="flex min-h-0 flex-col rounded-[20px] border border-[#334155] bg-[#222B38] p-2 lg:p-3"
             >
               <div className="mb-1.5 flex shrink-0 items-center justify-between gap-1.5 lg:mb-2">
-                <h3 className="text-[10px] font-extrabold tracking-wider text-cyan-200 lg:text-xs">
+                <h3 className="text-[10px] font-extrabold tracking-wider text-[#7E96B0] lg:text-xs">
                   AKTİF ŞUBELER (ŞUBE SEÇİN)
                 </h3>
                 <span className="font-mono-num text-[9.5px] font-bold text-slate-400 lg:text-[11px]">
@@ -485,7 +485,7 @@ export function HrManagementModal({
 
               <div className="panel-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5 lg:space-y-2">
                 {state.businesses.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 p-4 text-center text-[10.5px] text-slate-400">
+                  <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#334155] p-4 text-center text-[10.5px] text-slate-400">
                     <Building2 className="mb-1.5 h-6 w-6 text-slate-500" />
                     Henüz kurulmuş aktif şubeniz bulunmuyor.
                   </div>
@@ -512,8 +512,8 @@ export function HrManagementModal({
                         onClick={() => handleBranchPick(biz.id)}
                         className={`w-full rounded-xl border p-2 text-left transition-all lg:p-2.5 ${
                           isSelected
-                            ? 'border-cyan-400/90 bg-gradient-to-r from-cyan-500/20 via-sky-500/12 to-[#101E38]/95 shadow-[0_0_16px_rgba(34,211,238,0.28)]'
-                            : 'border-slate-700/75 bg-[#0D172B]/90 hover:border-slate-500/80 hover:bg-[#12203A]/90'
+                            ? 'border-[#334155] bg-gradient-to-r from-cyan-500/20 via-sky-500/12 to-[#101E38]/95 '
+                            : 'border-[#334155] bg-[#0D172B]/90 hover:border-slate-500/80 hover:bg-[#12203A]/90'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-1.5">
@@ -521,7 +521,7 @@ export function HrManagementModal({
                             {biz.customName}{' '}
                             <span className="font-bold text-slate-300">(Sv. {biz.level})</span>
                           </span>
-                          <span className="shrink-0 font-mono-num text-[9.5px] font-extrabold text-emerald-300 lg:text-[11px]">
+                          <span className="shrink-0 font-mono-num text-[9.5px] font-extrabold text-[#7A9E7E] lg:text-[11px]">
                             {totalInBranch} / {MAX_BRANCH_TOTAL_SLOTS}
                           </span>
                         </div>
@@ -531,17 +531,17 @@ export function HrManagementModal({
                           <span className="shrink-0 text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
                             Ort. Kalite
                           </span>
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#1D2532]">
                             <div
                               className={`h-full rounded-full transition-all ${
                                 isSelected
                                   ? 'bg-gradient-to-r from-cyan-400 to-emerald-400'
-                                  : 'bg-sky-400/80'
+                                  : 'bg-[#7E96B0]/80'
                               }`}
                               style={{ width: `${qualityPct}%` }}
                             />
                           </div>
-                          <span className="shrink-0 font-mono-num text-[8.5px] font-bold text-amber-300 lg:text-[10px]">
+                          <span className="shrink-0 font-mono-num text-[8.5px] font-bold text-[#C8AE7D] lg:text-[10px]">
                             ★{quality.stars.toFixed(1)}
                           </span>
                         </div>
@@ -550,7 +550,7 @@ export function HrManagementModal({
                         <div className="mt-1.5 flex items-center justify-between gap-1 text-[8.5px] lg:text-[10px]">
                           <span className="font-semibold text-slate-300">
                             Toplam Kadro:{' '}
-                            <strong className="font-mono-num text-emerald-300">
+                            <strong className="font-mono-num text-[#7A9E7E]">
                               {totalInBranch} / {MAX_BRANCH_TOTAL_SLOTS}
                             </strong>
                           </span>
@@ -559,8 +559,8 @@ export function HrManagementModal({
                               title="Çalışan (Maks 4)"
                               className={`rounded-md border px-1 py-0.5 ${
                                 slots.workers >= slots.maxWorkers
-                                  ? 'border-amber-400/60 bg-amber-500/15 text-amber-200'
-                                  : 'border-slate-700 bg-slate-800/80 text-slate-300'
+                                  ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D]'
+                                  : 'border-[#334155] bg-[#1D2532] text-slate-300'
                               }`}
                             >
                               Ç:{slots.workers}/4
@@ -569,8 +569,8 @@ export function HrManagementModal({
                               title="Müdür Yardımcısı (Maks 1)"
                               className={`rounded-md border px-1 py-0.5 ${
                                 slots.assistantManagers >= slots.maxAssistantManagers
-                                  ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-200'
-                                  : 'border-slate-700 bg-slate-800/80 text-slate-400'
+                                  ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E]'
+                                  : 'border-[#334155] bg-[#1D2532] text-slate-400'
                               }`}
                             >
                               MY:{slots.assistantManagers}/1
@@ -579,8 +579,8 @@ export function HrManagementModal({
                               title="Şube Müdürü (Maks 1)"
                               className={`rounded-md border px-1 py-0.5 ${
                                 slots.branchManagers >= slots.maxBranchManagers
-                                  ? 'border-cyan-400/60 bg-cyan-500/15 text-cyan-200'
-                                  : 'border-slate-700 bg-slate-800/80 text-slate-400'
+                                  ? 'border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0]'
+                                  : 'border-[#334155] bg-[#1D2532] text-slate-400'
                               }`}
                             >
                               ŞM:{slots.branchManagers}/1
@@ -599,14 +599,14 @@ export function HrManagementModal({
                ============================================================== */}
             <div
               data-testid="hr-col-roster"
-              className="flex min-h-0 flex-col rounded-2xl border border-amber-400/30 bg-gradient-to-b from-[#17213B]/92 to-[#0C1528]/95 p-2 lg:p-3"
+              className="flex min-h-0 flex-col rounded-[20px] border border-[#C8AE7D]/45 bg-[#222B38] p-2 lg:p-3"
             >
               <div className="mb-1.5 flex shrink-0 items-center justify-between gap-1.5 lg:mb-2">
-                <h3 className="truncate text-[10px] font-extrabold tracking-wider text-amber-300 lg:text-xs">
+                <h3 className="truncate text-[10px] font-extrabold tracking-wider text-[#C8AE7D] lg:text-xs">
                   ŞUBE KADROSU (SEÇİLİ)
                 </h3>
                 {selectedBranch && (
-                  <span className="truncate rounded-md border border-slate-700 bg-slate-800/80 px-1.5 py-0.5 text-[8.5px] font-bold text-slate-200 lg:text-[10px]">
+                  <span className="truncate rounded-md border border-[#334155] bg-[#1D2532] px-1.5 py-0.5 text-[8.5px] font-bold text-slate-200 lg:text-[10px]">
                     {selectedBranch.customName}
                   </span>
                 )}
@@ -614,7 +614,7 @@ export function HrManagementModal({
 
               <div className="panel-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5 lg:space-y-2">
                 {!selectedBranch || !selectedSlots ? (
-                  <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-700 p-4 text-center text-[10.5px] text-slate-400">
+                  <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[#334155] p-4 text-center text-[10.5px] text-slate-400">
                     Kadro detaylarını görmek için soldan bir şube seçin.
                   </div>
                 ) : (
@@ -626,12 +626,12 @@ export function HrManagementModal({
                         <div
                           key={emp.id}
                           data-testid={`hr-assigned-staff-${emp.id}`}
-                          className="flex items-center justify-between gap-2 rounded-xl border border-slate-700/80 bg-[#0F1B33]/92 px-2.5 py-1.5 lg:px-3 lg:py-2"
+                          className="flex items-center justify-between gap-2 rounded-xl border border-[#334155] bg-[#0F1B33]/92 px-2.5 py-1.5 lg:px-3 lg:py-2"
                         >
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[10.5px] font-extrabold text-white lg:text-xs">
                               {emp.name}{' '}
-                              <span className="font-semibold text-cyan-200">
+                              <span className="font-semibold text-[#7E96B0]">
                                 ({getRoleShortDisplay(emp)})
                               </span>
                             </div>
@@ -647,7 +647,7 @@ export function HrManagementModal({
                             type="button"
                             data-testid={`hr-dismiss-btn-${emp.id}`}
                             onClick={() => handleDismiss(emp.id, emp.name)}
-                            className="flex shrink-0 items-center gap-1 rounded-full border border-rose-400/75 bg-gradient-to-r from-rose-600 to-red-600 px-2.5 py-1 text-[9px] font-extrabold tracking-wide text-white shadow-[0_0_12px_rgba(244,63,94,0.35)] transition-all hover:brightness-115 active:scale-[0.96] lg:px-3 lg:text-[10.5px]"
+                            className="flex shrink-0 items-center gap-1 rounded-full border border-[#B86B5E]/45 bg-[#B86B5E] px-2.5 py-1 text-[9px] font-extrabold tracking-wide text-white transition-all hover:brightness-115 active:scale-[0.96] lg:px-3 lg:text-[10.5px]"
                           >
                             <UserMinus className="h-3 w-3" />
                             ÇIKAR
@@ -661,8 +661,8 @@ export function HrManagementModal({
                       data-testid="hr-slot-calisan"
                       className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 lg:px-3 lg:py-2.5 ${
                         selectedSlots.workers >= selectedSlots.maxWorkers
-                          ? 'border-slate-700/75 bg-slate-900/70'
-                          : 'border-dashed border-cyan-500/45 bg-[#0C1930]/80'
+                          ? 'border-[#334155] bg-[#222B38]'
+                          : 'border-dashed border-[#334155] bg-[#0C1930]/80'
                       }`}
                     >
                       <div className="min-w-0">
@@ -689,8 +689,8 @@ export function HrManagementModal({
                         onClick={() => handleEmptySlotAssign('calisan')}
                         className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[9.5px] font-extrabold tracking-wide transition-all lg:px-3.5 lg:text-[10.5px] ${
                           selectedSlots.workers >= selectedSlots.maxWorkers
-                            ? 'cursor-not-allowed border border-slate-700 bg-slate-800/80 text-slate-500'
-                            : 'border border-cyan-300/80 bg-gradient-to-r from-cyan-400 to-teal-400 text-[#051525] shadow-[0_0_14px_rgba(34,211,238,0.4)] hover:brightness-110 active:scale-[0.96]'
+                            ? 'cursor-not-allowed border border-[#334155] bg-[#1D2532] text-slate-500'
+                            : 'border border-[#334155] bg-gradient-to-r from-cyan-400 to-teal-400 text-[#051525]  hover:brightness-110 active:scale-[0.96]'
                         }`}
                       >
                         {selectedSlots.workers >= selectedSlots.maxWorkers ? (
@@ -712,8 +712,8 @@ export function HrManagementModal({
                       data-testid="hr-slot-mudur_yardimcisi"
                       className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 lg:px-3 lg:py-2.5 ${
                         selectedSlots.assistantManagers >= selectedSlots.maxAssistantManagers
-                          ? 'border-slate-700/75 bg-slate-900/70'
-                          : 'border-dashed border-cyan-500/45 bg-[#0C1930]/80'
+                          ? 'border-[#334155] bg-[#222B38]'
+                          : 'border-dashed border-[#334155] bg-[#0C1930]/80'
                       }`}
                     >
                       <div className="min-w-0">
@@ -742,8 +742,8 @@ export function HrManagementModal({
                         onClick={() => handleEmptySlotAssign('mudur_yardimcisi')}
                         className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[9.5px] font-extrabold tracking-wide transition-all lg:px-3.5 lg:text-[10.5px] ${
                           selectedSlots.assistantManagers >= selectedSlots.maxAssistantManagers
-                            ? 'cursor-not-allowed border border-slate-700 bg-slate-800/80 text-slate-500'
-                            : 'border border-cyan-300/80 bg-gradient-to-r from-cyan-400 to-teal-400 text-[#051525] shadow-[0_0_14px_rgba(34,211,238,0.4)] hover:brightness-110 active:scale-[0.96]'
+                            ? 'cursor-not-allowed border border-[#334155] bg-[#1D2532] text-slate-500'
+                            : 'border border-[#334155] bg-gradient-to-r from-cyan-400 to-teal-400 text-[#051525]  hover:brightness-110 active:scale-[0.96]'
                         }`}
                       >
                         {selectedSlots.assistantManagers >= selectedSlots.maxAssistantManagers ? (
@@ -765,8 +765,8 @@ export function HrManagementModal({
                       data-testid="hr-slot-sube_muduru"
                       className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 lg:px-3 lg:py-2.5 ${
                         selectedSlots.branchManagers >= selectedSlots.maxBranchManagers
-                          ? 'border-slate-700/75 bg-slate-900/70'
-                          : 'border-dashed border-cyan-500/45 bg-[#0C1930]/80'
+                          ? 'border-[#334155] bg-[#222B38]'
+                          : 'border-dashed border-[#334155] bg-[#0C1930]/80'
                       }`}
                     >
                       <div className="min-w-0">
@@ -793,8 +793,8 @@ export function HrManagementModal({
                         onClick={() => handleEmptySlotAssign('sube_muduru')}
                         className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[9.5px] font-extrabold tracking-wide transition-all lg:px-3.5 lg:text-[10.5px] ${
                           selectedSlots.branchManagers >= selectedSlots.maxBranchManagers
-                            ? 'cursor-not-allowed border border-slate-700 bg-slate-800/80 text-slate-500'
-                            : 'border border-cyan-300/80 bg-gradient-to-r from-cyan-400 to-teal-400 text-[#051525] shadow-[0_0_14px_rgba(34,211,238,0.4)] hover:brightness-110 active:scale-[0.96]'
+                            ? 'cursor-not-allowed border border-[#334155] bg-[#1D2532] text-slate-500'
+                            : 'border border-[#334155] bg-gradient-to-r from-cyan-400 to-teal-400 text-[#051525]  hover:brightness-110 active:scale-[0.96]'
                         }`}
                       >
                         {selectedSlots.branchManagers >= selectedSlots.maxBranchManagers ? (
@@ -820,11 +820,11 @@ export function HrManagementModal({
                ============================================================== */}
             <div
               data-testid="hr-col-candidates"
-              className="flex min-h-0 flex-col justify-between rounded-2xl border border-amber-400/35 bg-gradient-to-b from-[#1D223B]/92 to-[#0C1427]/96 p-2 lg:p-3"
+              className="flex min-h-0 flex-col justify-between rounded-[20px] border border-[#C8AE7D]/45 bg-[#222B38] p-2 lg:p-3"
             >
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="mb-1.5 flex shrink-0 items-center justify-between gap-1.5 lg:mb-2">
-                  <h3 className="text-[10px] font-extrabold tracking-wider text-amber-300 lg:text-xs">
+                  <h3 className="text-[10px] font-extrabold tracking-wider text-[#C8AE7D] lg:text-xs">
                     BOŞTAKİLER & ADAYLAR
                   </h3>
                   <span className="font-mono-num text-[9.5px] font-bold text-slate-400 lg:text-[11px]">
@@ -834,7 +834,7 @@ export function HrManagementModal({
 
                 <div className="panel-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5 lg:space-y-2">
                   {branchCandidates.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-700 p-4 text-center text-[10px] text-slate-400">
+                    <div className="rounded-xl border border-dashed border-[#334155] p-4 text-center text-[10px] text-slate-400">
                       Havuzda aday kalmadı. Sağ üstten <strong>HAVUZU YENİLE</strong> ile yeni
                       adaylar getirin.
                     </div>
@@ -852,8 +852,8 @@ export function HrManagementModal({
                           data-testid={`hr-candidate-card-${cand.id}`}
                           className={`rounded-xl border px-2.5 py-1.5 transition-all lg:px-3 lg:py-2 ${
                             isLimitFull
-                              ? 'border-rose-500/35 bg-[#16182B]/85'
-                              : 'border-slate-700/80 bg-[#0F1B33]/92 hover:border-cyan-400/50'
+                              ? 'border-[#B86B5E]/45 bg-[#16182B]/85'
+                              : 'border-[#334155] bg-[#0F1B33]/92 hover:border-[#334155]'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -874,8 +874,8 @@ export function HrManagementModal({
                               onClick={() => handleCandidateAssign(cand)}
                               className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-extrabold tracking-wide transition-all active:scale-[0.96] whitespace-nowrap lg:px-3 lg:text-[10.5px] ${
                                 isLimitFull
-                                  ? 'border border-rose-400/50 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30'
-                                  : 'border border-cyan-300/80 bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-[#041824] shadow-[0_0_14px_rgba(34,211,238,0.35)] hover:brightness-110'
+                                  ? 'border border-[#B86B5E]/45 bg-[#B86B5E]/15 text-[#B86B5E] hover:bg-[#B86B5E]/15'
+                                  : 'border border-[#334155] bg-[#7A9E7E] text-[#041824]  hover:brightness-110'
                               }`}
                             >
                               İŞE AL & ATA
@@ -887,7 +887,7 @@ export function HrManagementModal({
                               Maaş:{' '}
                               <strong className="font-mono-num text-slate-200">{salaryText}</strong>
                             </span>
-                            <span className="font-mono-num text-amber-300">
+                            <span className="font-mono-num text-[#C8AE7D]">
                               İşe Alım: {formatTL(cand.hireCost)}
                             </span>
                           </div>
@@ -899,21 +899,21 @@ export function HrManagementModal({
               </div>
 
               {/* Bottom Stacked Buttons: TOPLU PRİM DAĞIT + KAPAT / GERİ DÖN */}
-              <div className="mt-2 shrink-0 space-y-1.5 border-t border-slate-800/80 pt-2">
+              <div className="mt-2 shrink-0 space-y-1.5 border-t border-[#334155] pt-2">
                 <button
                   type="button"
                   data-testid="hr-bulk-bonus-btn"
                   onClick={handleBulkBonus}
-                  className="flex min-h-[30px] w-full items-center justify-center gap-1.5 rounded-xl border border-sky-400/70 bg-gradient-to-r from-sky-600/45 to-blue-600/45 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-50 shadow-[0_0_14px_rgba(56,189,248,0.22)] transition-all hover:brightness-115 active:scale-[0.98] lg:min-h-[36px] lg:text-xs"
+                  className="flex min-h-[30px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#334155] bg-[#7E96B0] px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-50 transition-all hover:brightness-115 active:scale-[0.98] lg:min-h-[36px] lg:text-xs"
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-sky-200" />
+                  <Sparkles className="h-3.5 w-3.5 text-[#7E96B0]" />
                   TOPLU PRİM DAĞIT ({formatTL(bulkBonusCost)})
                 </button>
                 <button
                   type="button"
                   data-testid="hr-back-close-btn"
                   onClick={onClose}
-                  className="flex min-h-[30px] w-full items-center justify-center rounded-xl border border-blue-400/40 bg-[#10213E]/90 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-slate-200 transition-all hover:border-cyan-400/60 hover:text-white active:scale-[0.98] lg:min-h-[36px] lg:text-xs"
+                  className="flex min-h-[30px] w-full items-center justify-center rounded-xl border border-[#334155] bg-[#10213E]/90 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-slate-200 transition-all hover:border-[#334155] hover:text-white active:scale-[0.98] lg:min-h-[36px] lg:text-xs"
                 >
                   KAPAT / GERİ DÖN
                 </button>
@@ -929,7 +929,7 @@ export function HrManagementModal({
             className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5 lg:p-4"
           >
             {/* Filter Bar + Target Branch Selector */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700/75 bg-[#0C162B]/90 px-3 py-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-[#334155] bg-[#0C162B]/90 px-3 py-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 {BRANCH_ROLE_FILTERS.map((f) => (
                   <button
@@ -938,8 +938,8 @@ export function HrManagementModal({
                     onClick={() => setPoolRoleFilter(f.id)}
                     className={`rounded-lg px-2.5 py-1 text-[9.5px] font-extrabold transition-all lg:text-xs ${
                       poolRoleFilter === f.id
-                        ? 'border border-cyan-400/75 bg-cyan-500/20 text-cyan-100'
-                        : 'border border-slate-700/70 bg-slate-800/60 text-slate-300 hover:text-white'
+                        ? 'border border-[#334155] bg-[#7E96B0]/15 text-cyan-100'
+                        : 'border border-[#334155] bg-[#1D2532] text-slate-300 hover:text-white'
                     }`}
                   >
                     {f.label}
@@ -953,7 +953,7 @@ export function HrManagementModal({
                   <select
                     value={selectedBranch?.id ?? ''}
                     onChange={(e) => handleBranchPick(e.target.value)}
-                    className="rounded-lg border border-cyan-400/50 bg-[#0A1326] px-2 py-1 font-bold text-white outline-none"
+                    className="rounded-lg border border-[#334155] bg-[#0A1326] px-2 py-1 font-bold text-white outline-none"
                   >
                     {state.businesses.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -975,7 +975,7 @@ export function HrManagementModal({
                 return (
                   <div
                     key={cand.id}
-                    className="flex flex-col justify-between rounded-2xl border border-slate-700/80 bg-[#0F1B33]/92 p-3"
+                    className="flex flex-col justify-between rounded-[20px] border border-[#334155] bg-[#0F1B33]/92 p-3"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
@@ -983,7 +983,7 @@ export function HrManagementModal({
                           <div className="truncate text-xs font-extrabold text-white lg:text-sm">
                             {cand.name}
                           </div>
-                          <div className="text-[10px] font-bold text-cyan-300">
+                          <div className="text-[10px] font-bold text-[#7E96B0]">
                             {ROLE_META[cand.role].label}
                           </div>
                         </div>
@@ -993,31 +993,31 @@ export function HrManagementModal({
                       <div className="mt-2 grid grid-cols-3 gap-1.5 rounded-xl bg-[#0A1326]/90 p-2 text-center text-[9.5px]">
                         <div>
                           <div className="text-slate-400">Hız</div>
-                          <div className="font-mono-num font-extrabold text-sky-300">
+                          <div className="font-mono-num font-extrabold text-[#7E96B0]">
                             {cand.speed}
                           </div>
                         </div>
                         <div>
                           <div className="text-slate-400">Verim</div>
-                          <div className="font-mono-num font-extrabold text-emerald-300">
+                          <div className="font-mono-num font-extrabold text-[#7A9E7E]">
                             {cand.efficiency}
                           </div>
                         </div>
                         <div>
                           <div className="text-slate-400">Liderlik</div>
-                          <div className="font-mono-num font-extrabold text-amber-300">
+                          <div className="font-mono-num font-extrabold text-[#C8AE7D]">
                             {cand.leadership}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
+                    <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#334155] pt-2">
                       <div className="text-[9.5px] lg:text-[10.5px]">
                         <div className="font-bold text-slate-200">
                           Maaş: {formatCandidateSalaryLabel(cand)}
                         </div>
-                        <div className="font-mono-num text-amber-300">
+                        <div className="font-mono-num text-[#C8AE7D]">
                           İşe Alım: {formatTL(cand.hireCost)}
                         </div>
                       </div>
@@ -1027,8 +1027,8 @@ export function HrManagementModal({
                         onClick={() => handleCandidateAssign(cand)}
                         className={`rounded-full px-3 py-1.5 text-[9.5px] font-extrabold transition-all whitespace-nowrap ${
                           isFull
-                            ? 'border border-rose-400/50 bg-rose-500/20 text-rose-200'
-                            : 'border border-cyan-300/80 bg-gradient-to-r from-emerald-400 to-cyan-400 text-[#041824] hover:brightness-110'
+                            ? 'border border-[#B86B5E]/45 bg-[#B86B5E]/15 text-[#B86B5E]'
+                            : 'border border-[#334155] bg-[#7A9E7E] text-[#041824] hover:brightness-110'
                         }`}
                       >
                         İŞE AL & ATA
@@ -1049,39 +1049,39 @@ export function HrManagementModal({
           >
             {/* Payroll Summary Strip */}
             <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
-              <div className="rounded-xl border border-slate-700/80 bg-[#0D172B]/90 p-2 lg:p-3">
+              <div className="rounded-xl border border-[#334155] bg-[#0D172B]/90 p-2 lg:p-3">
                 <div className="flex items-center gap-1 text-[9.5px] font-semibold text-slate-400 lg:text-xs">
-                  <Wallet className="h-3.5 w-3.5 text-sky-300" />
+                  <Wallet className="h-3.5 w-3.5 text-[#7E96B0]" />
                   Günlük Brüt Ücret
                 </div>
                 <div className="mt-0.5 font-mono-num text-xs font-extrabold text-white lg:text-sm">
                   {formatTL(payrollBreakdown.dailyGrossWages)}
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-700/80 bg-[#0D172B]/90 p-2 lg:p-3">
+              <div className="rounded-xl border border-[#334155] bg-[#0D172B]/90 p-2 lg:p-3">
                 <div className="flex items-center gap-1 text-[9.5px] font-semibold text-slate-400 lg:text-xs">
-                  <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#C8AE7D]" />
                   İşveren SGK (%22,5)
                 </div>
-                <div className="mt-0.5 font-mono-num text-xs font-extrabold text-amber-300 lg:text-sm">
+                <div className="mt-0.5 font-mono-num text-xs font-extrabold text-[#C8AE7D] lg:text-sm">
                   {formatTL(payrollBreakdown.dailyEmployerSgk)}
                 </div>
               </div>
-              <div className="rounded-xl border border-cyan-400/35 bg-[#0E1E36]/90 p-2 lg:p-3">
-                <div className="flex items-center gap-1 text-[9.5px] font-semibold text-cyan-200 lg:text-xs">
-                  <Briefcase className="h-3.5 w-3.5 text-cyan-300" />
+              <div className="rounded-xl border border-[#334155] bg-[#0E1E36]/90 p-2 lg:p-3">
+                <div className="flex items-center gap-1 text-[9.5px] font-semibold text-[#7E96B0] lg:text-xs">
+                  <Briefcase className="h-3.5 w-3.5 text-[#7E96B0]" />
                   Toplam Günlük Bordro
                 </div>
-                <div className="mt-0.5 font-mono-num text-xs font-extrabold text-cyan-200 lg:text-sm">
+                <div className="mt-0.5 font-mono-num text-xs font-extrabold text-[#7E96B0] lg:text-sm">
                   {formatTL(payrollBreakdown.dailyTotalCost)}/gün
                 </div>
               </div>
-              <div className="rounded-xl border border-emerald-400/35 bg-[#0D2130]/90 p-2 lg:p-3">
-                <div className="flex items-center gap-1 text-[9.5px] font-semibold text-emerald-200 lg:text-xs">
-                  <Users className="h-3.5 w-3.5 text-emerald-300" />
+              <div className="rounded-xl border border-[#7A9E7E]/45 bg-[#0D2130]/90 p-2 lg:p-3">
+                <div className="flex items-center gap-1 text-[9.5px] font-semibold text-[#7A9E7E] lg:text-xs">
+                  <Users className="h-3.5 w-3.5 text-[#7A9E7E]" />
                   Aylık Bordro Tahmini
                 </div>
-                <div className="mt-0.5 font-mono-num text-xs font-extrabold text-emerald-300 lg:text-sm">
+                <div className="mt-0.5 font-mono-num text-xs font-extrabold text-[#7A9E7E] lg:text-sm">
                   {formatTL(payrollBreakdown.dailyTotalCost * 30, true)}/ay
                 </div>
               </div>
@@ -1090,7 +1090,7 @@ export function HrManagementModal({
             {/* Staff Payroll & Promotion Rows */}
             <div className="panel-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5 lg:space-y-2">
               {state.businesses.every((b) => (b.employees ?? []).length === 0) ? (
-                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-700 p-6 text-xs text-slate-400">
+                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[#334155] p-6 text-xs text-slate-400">
                   Bordro ve terfi listesinde henüz şube personeli bulunmuyor.
                 </div>
               ) : (
@@ -1105,21 +1105,21 @@ export function HrManagementModal({
                     return (
                       <div
                         key={`${biz.id}-${emp.id}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700/80 bg-[#0F1B33]/92 px-3 py-2"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#334155] bg-[#0F1B33]/92 px-3 py-2"
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="truncate text-xs font-extrabold text-white">
                               {emp.name}
                             </span>
-                            <span className="rounded-md bg-cyan-500/15 px-1.5 py-0.5 text-[9.5px] font-bold text-cyan-200">
+                            <span className="rounded-md bg-[#7E96B0]/15 px-1.5 py-0.5 text-[9.5px] font-bold text-[#7E96B0]">
                               {getRoleShortDisplay(emp)}
                             </span>
                             <StarRating stars={emp.stars} size="xs" />
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[9.5px] text-slate-400">
                             <span>Şube: {biz.customName}</span>
-                            <span className="font-mono-num text-amber-300">
+                            <span className="font-mono-num text-[#C8AE7D]">
                               Günlük: {formatTL(wage.dailyTotalCost)}
                             </span>
                             <span className="font-mono-num text-slate-300">
@@ -1136,15 +1136,15 @@ export function HrManagementModal({
                               onClick={() => handlePromote(biz, emp)}
                               className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[9.5px] font-extrabold transition-all whitespace-nowrap ${
                                 nextSlotOk
-                                  ? 'border border-emerald-400/75 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30'
-                                  : 'border border-rose-400/50 bg-rose-500/15 text-rose-200'
+                                  ? 'border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-emerald-100 hover:bg-[#7A9E7E]/15'
+                                  : 'border border-[#B86B5E]/45 bg-[#B86B5E]/15 text-[#B86B5E]'
                               }`}
                             >
                               <ArrowUpCircle className="h-3.5 w-3.5" />
                               {promo.label} ({formatTL(promo.cost)})
                             </button>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/12 px-2.5 py-1 text-[9.5px] font-bold text-amber-200">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#C8AE7D]/45 bg-[#C8AE7D]/12 px-2.5 py-1 text-[9.5px] font-bold text-[#C8AE7D]">
                               <UserCheck className="h-3 w-3" />
                               Şube Lideri
                             </span>

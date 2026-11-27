@@ -791,26 +791,26 @@ export function TurkeyMap({
           type="button"
           onClick={handleZoomIn}
           aria-label="Haritayı Yakınlaştır"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/90 bg-white/95 text-slate-800 shadow-md transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
+          className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#334155] bg-[#222B38] text-slate-100 transition-colors hover:bg-[#2A3444]"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" strokeWidth={1.5} />
         </button>
         <button
           type="button"
           onClick={handleZoomOut}
           aria-label="Haritayı Uzaklaştır"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/90 bg-white/95 text-slate-800 shadow-md transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
+          className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#334155] bg-[#222B38] text-slate-100 transition-colors hover:bg-[#2A3444]"
         >
-          <Minus className="h-4 w-4" />
+          <Minus className="h-4 w-4" strokeWidth={1.5} />
         </button>
         <button
           type="button"
           onClick={handleResetTurkey}
           aria-label="Tüm Türkiye Haritasını Göster"
           title="Türkiye Geneli"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/90 bg-white/95 text-amber-700 shadow-md transition-colors hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900/95 dark:text-amber-400 dark:hover:bg-slate-800"
+          className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#334155] bg-[#222B38] text-[#C8AE7D] transition-colors hover:bg-[#2A3444]"
         >
-          <Compass className="h-4 w-4" />
+          <Compass className="h-4 w-4" strokeWidth={1.5} />
         </button>
       </div>
     </div>

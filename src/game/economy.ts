@@ -88,21 +88,33 @@ import {
   calculatePersonalAssetsValuation,
   computeNextBrandRecognition,
 } from './officeEngine';
+import {
+  advanceRentalLeasesByDays,
+  calculateDailyRentalIncome,
+  calculateRentalPropertiesValuation,
+  generateDailyOffersForDay,
+} from './quickActionsEngine';
+
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
-// v1.4.0 Time Flow:
-// 1x: 36 game min / real sec -> ~1.67s = 1 game hour, 40s = 1 full game day
-// 2x: ~75 game min / real sec -> ~0.80s = 1 game hour
-// 4x: ~171.4 game min / real sec -> ~0.35s = 1 game hour
-// 'day' (Gün Gün Simülasyon): 160x sim-sec -> at 250ms tick = 1.0 full game day per tick (4 days/sec)
-export const GAME_MINUTES_PER_REAL_SEC = 36;
+// v1.6.0 Strict 2-State Time Flow:
+// ONLY Pause (0) and Normal Play (1): 1 full game day (1440 game min) = EXACTLY 30 real seconds -> 48 game min / real sec.
+export const REAL_SECONDS_PER_GAME_DAY = 30;
+export const GAME_MINUTES_PER_REAL_SEC = 1440 / REAL_SECONDS_PER_GAME_DAY; // 48
+
+const TURKISH_WEEKDAYS = [
+  'Pazartesi',
+  'Salı',
+  'Çarşamba',
+  'Perşembe',
+  'Cuma',
+  'Cumartesi',
+  'Pazar',
+] as const;
 
 export function getEffectiveSimSeconds(realDtSec: number, speed: GameSpeed): number {
   if (speed === 0 || realDtSec <= 0) return 0;
-  if (speed === 1) return realDtSec;
-  if (speed === 2) return realDtSec * 2.0833;
-  if (speed === 4) return realDtSec * 4.7619;
-  if (speed === 'day') return realDtSec * 160;
+  // Strictly 2-state clock (Paused vs Normal 30s/day): never accelerate past 1x
   return realDtSec;
 }
 
@@ -112,28 +124,38 @@ export function formatGameClock(gameMinutes: number): {
   month: number;
   hour: number;
   minute: number;
+  weekdayName: string;
+  dayHeaderLabel: string;
+  dayProgressPct: number;
   label: string;
   compactLabel: string;
   totalDaysLabel: string;
 } {
-  const safeMin = Math.max(0, Math.floor(gameMinutes));
-  const totalDays = Math.floor(safeMin / 1440) + 1;
+  const safeMin = Math.max(0, Number.isFinite(gameMinutes) ? gameMinutes : 0);
+  const floored = Math.floor(safeMin);
+  const totalDays = Math.floor(floored / 1440) + 1;
   const month = Math.floor((totalDays - 1) / 30) + 1;
   const day = ((totalDays - 1) % 30) + 1;
-  const rem = safeMin % 1440;
+  const weekdayName = TURKISH_WEEKDAYS[(totalDays - 1) % 7] ?? 'Pazartesi';
+  const remFloat = safeMin % 1440;
+  const rem = floored % 1440;
   const hour = Math.floor(rem / 60);
   const minute = Math.floor((rem % 60) / 10) * 10;
   const hh = String(hour).padStart(2, '0');
   const mm = String(minute).padStart(2, '0');
+  const dayProgressPct = Math.max(0, Math.min(100, (remFloat / 1440) * 100));
   return {
     totalDays,
     day,
     month,
     hour,
     minute,
+    weekdayName,
+    dayHeaderLabel: `Gün ${totalDays} • ${weekdayName}`,
+    dayProgressPct,
     label: `Gün ${day} • ${month}. Ay • ${hh}:${mm}`,
     compactLabel: `G${day}·${month}.Ay ${hh}:${mm}`,
-    totalDaysLabel: `Toplam ${totalDays}. Gün`,
+    totalDaysLabel: `Gün ${totalDays} • ${weekdayName} (${hh}:${mm})`,
   };
 }
 
@@ -405,7 +427,10 @@ export function calculateBusinessIncomePerSec(
   stateContext?: Pick<
     EmpireState,
     'cityManagers' | 'supermarketChain' | 'gameMinutes' | 'competitiveBlitzes'
-  > & { brandRecognition?: number }
+  > & {
+    brandRecognition?: number;
+    activeHoldingPromo?: EmpireState['activeHoldingPromo'];
+  }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
@@ -441,11 +466,17 @@ export function calculateBusinessIncomePerSec(
   );
   const boostMultiplier = business.boostEndsAt > now ? 2.0 : 1.0;
 
-  // Advertising campaign boost (Brochure +20%, Social +38%, Billboard +65%)
+  // Advertising campaign boost (Branch ad + Holding-wide promotion)
   const currentGameMin = stateContext?.gameMinutes ?? STARTING_GAME_MINUTES;
-  const adMultiplier = isAdCampaignActive(business.activeAdCampaign, currentGameMin)
-    ? 1 + (business.activeAdCampaign?.revenueBoost ?? 0)
-    : 1.0;
+  const branchAdBoost = isAdCampaignActive(business.activeAdCampaign, currentGameMin)
+    ? business.activeAdCampaign?.revenueBoost ?? 0
+    : 0;
+  const holdingPromoBoost =
+    stateContext?.activeHoldingPromo &&
+    stateContext.activeHoldingPromo.endsAtGameMin > currentGameMin
+      ? stateContext.activeHoldingPromo.revenueBoost
+      : 0;
+  const adMultiplier = 1 + branchAdBoost + holdingPromoBoost;
 
   // Competitive Blitz boost (+25% in targeted rival city)
   const blitzBoost = getActiveCompetitiveBlitzBoost(
@@ -533,7 +564,10 @@ export function calculateBusinessHourlyIncome(
   stateContext?: Pick<
     EmpireState,
     'cityManagers' | 'supermarketChain' | 'gameMinutes' | 'competitiveBlitzes'
-  > & { brandRecognition?: number }
+  > & {
+    brandRecognition?: number;
+    activeHoldingPromo?: EmpireState['activeHoldingPromo'];
+  }
 ): number {
   const bp = getBlueprintById(business.blueprintId);
   if (!bp) return 0;
@@ -652,13 +686,20 @@ export function calculateNetWorth(
     : (state.stockPortfolio ?? []).reduce((s, h) => s + Math.round(h.shares * h.avgCost), 0);
   const bankValue = state.ownBank ? Math.round(state.ownBank.poolCapital + BANK_LICENSE_COST) : 0;
   const personalAssetsValue = calculatePersonalAssetsValuation(state);
+  const rentalAssetsValue = calculateRentalPropertiesValuation(state);
   const activeDebt = (state.activeLoans ?? [])
     .filter((l) => l.status === 'active' || l.status === 'garnishing')
     .reduce((s, l) => s + l.remainingAmount, 0);
 
   return Math.max(
     0,
-    Math.floor(state.cash) + assetsValue + stocksValue + bankValue + personalAssetsValue - activeDebt
+    Math.floor(state.cash) +
+      assetsValue +
+      stocksValue +
+      bankValue +
+      personalAssetsValue +
+      rentalAssetsValue -
+      activeDebt
   );
 }
 
@@ -1266,6 +1307,12 @@ export function tickEconomy(
       if (b.blueprintId === 'supermarket' && state.supermarketChain) {
         discountPct += SUPERMARKET_CHAIN_DISCOUNT;
       }
+      if (
+        (state.supplyDiscountUntilDay ?? 0) >= nextTotalDay &&
+        (state.supplyDiscountPct ?? 0) > 0
+      ) {
+        discountPct += state.supplyDiscountPct ?? 0;
+      }
       discountPct = Math.min(0.68, discountPct);
       branchSupply = Math.max(0, Math.round(rawSupply * (1 - discountPct)));
     }
@@ -1497,24 +1544,54 @@ export function tickEconomy(
     nextMinutes
   );
 
+  // Passive daily rental income from leased properties (settled automatically each new day)
+  const dailyRentalIncomeSettled =
+    daysPassed > 0 ? calculateDailyRentalIncome(state) * daysPassed : 0;
+  const nextRentalProperties =
+    daysPassed > 0
+      ? advanceRentalLeasesByDays(state.rentalProperties, daysPassed)
+      : state.rentalProperties;
+  const nextHoldingPromo =
+    state.activeHoldingPromo && state.activeHoldingPromo.endsAtGameMin > nextMinutes
+      ? state.activeHoldingPromo
+      : null;
+  const nextDailyOffers =
+    daysPassed > 0
+      ? generateDailyOffersForDay(
+          { ...state, rentalProperties: nextRentalProperties },
+          nextTotalDay
+        )
+      : state.dailyOffers;
+  const nextDailyOffersDay = daysPassed > 0 ? nextTotalDay : state.dailyOffersDay;
+
   // v1.4.1: Operating losses can push company treasury into negative balance (eksi kasa)!
   let preLoanState: EmpireState = {
     ...state,
     gameMinutes: nextMinutes,
     creditScore: nextCreditScore,
     brandRecognition: brandUpdate.nextBrand,
-    cash: state.cash + autoCollectedAtMidnight + dividendPaid + passiveRoyaltyGain,
+    cash:
+      state.cash +
+      autoCollectedAtMidnight +
+      dividendPaid +
+      passiveRoyaltyGain +
+      dailyRentalIncomeSettled,
     totalEarnedLifetime:
       state.totalEarnedLifetime +
       Math.max(0, autoCollectedAtMidnight) +
       dividendPaid +
-      passiveRoyaltyGain,
+      passiveRoyaltyGain +
+      dailyRentalIncomeSettled,
     franchiseRoyaltiesEarned: (state.franchiseRoyaltiesEarned ?? 0) + passiveRoyaltyGain,
     businesses: cleanedBusinesses,
     competitiveBlitzes: activeBlitzes,
     pendingTaxes: nextPendingTaxes,
     pendingDayEndReports: nextPendingDayEndReports,
     dayEndHistory: nextDayEndHistory,
+    rentalProperties: nextRentalProperties,
+    activeHoldingPromo: nextHoldingPromo,
+    dailyOffers: nextDailyOffers,
+    dailyOffersDay: nextDailyOffersDay,
     activeEvent,
     lastSavedAt: now,
   };

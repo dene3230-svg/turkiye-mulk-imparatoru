@@ -114,7 +114,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
               : `${stats.branchCount} şube`,
           badgeTone: stats.underConstructionCount > 0 ? 'amber' : 'emerald',
           icon: <Building2 className="w-4 h-4" />,
-          accent: 'from-amber-500/20 to-amber-600/5 border-amber-500/35 text-amber-300',
+          accent: 'from-amber-500/20 to-amber-600/5 border-[#C8AE7D]/45 text-[#C8AE7D]',
         },
         {
           id: 'mgmt_hr',
@@ -123,7 +123,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: `${stats.staffCount} personel`,
           badgeTone: 'sky',
           icon: <Users className="w-4 h-4" />,
-          accent: 'from-sky-500/20 to-sky-600/5 border-sky-500/35 text-sky-300',
+          accent: 'from-sky-500/20 to-sky-600/5 border-[#334155] text-[#7E96B0]',
         },
         {
           id: 'mgmt_hq',
@@ -132,7 +132,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: stats.hasCeoOrAccountant ? 'Yönetim Aktif' : 'Kadro Boş',
           badgeTone: stats.hasCeoOrAccountant ? 'emerald' : 'amber',
           icon: <Crown className="w-4 h-4" />,
-          accent: 'from-violet-500/20 to-violet-600/5 border-violet-500/35 text-violet-300',
+          accent: 'from-violet-500/20 to-violet-600/5 border-[#334155] text-[#7E96B0]',
         },
         {
           id: 'mgmt_rivals',
@@ -141,7 +141,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: `${stats.rivalCount} rakip`,
           badgeTone: 'rose',
           icon: <Swords className="w-4 h-4" />,
-          accent: 'from-rose-500/20 to-rose-600/5 border-rose-500/35 text-rose-300',
+          accent: 'from-rose-500/20 to-rose-600/5 border-[#B86B5E]/45 text-[#B86B5E]',
         },
         {
           id: 'mgmt_franchise',
@@ -150,7 +150,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: `${stats.franchiseCount} marka`,
           badgeTone: 'amber',
           icon: <Store className="w-4 h-4" />,
-          accent: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/35 text-emerald-300',
+          accent: 'from-emerald-500/20 to-emerald-600/5 border-[#7A9E7E]/45 text-[#7A9E7E]',
         },
       ],
     },
@@ -166,7 +166,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: stats.unpaidTaxesCount > 0 ? `${stats.unpaidTaxesCount} Vergi` : 'Güncel',
           badgeTone: stats.unpaidTaxesCount > 0 ? 'rose' : 'emerald',
           icon: <Calculator className="w-4 h-4" />,
-          accent: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/35 text-emerald-300',
+          accent: 'from-emerald-500/20 to-emerald-600/5 border-[#7A9E7E]/45 text-[#7A9E7E]',
         },
         {
           id: 'fin_banking',
@@ -175,7 +175,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: stats.activeLoansCount > 0 ? `${stats.activeLoansCount} Kredi` : 'Borçsuz',
           badgeTone: stats.activeLoansCount > 0 ? 'amber' : 'emerald',
           icon: <Landmark className="w-4 h-4" />,
-          accent: 'from-amber-500/20 to-amber-600/5 border-amber-500/35 text-amber-300',
+          accent: 'from-amber-500/20 to-amber-600/5 border-[#C8AE7D]/45 text-[#C8AE7D]',
         },
         {
           id: 'fin_stocks',
@@ -184,7 +184,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: 'Canlı',
           badgeTone: 'sky',
           icon: <LineChart className="w-4 h-4" />,
-          accent: 'from-sky-500/20 to-sky-600/5 border-sky-500/35 text-sky-300',
+          accent: 'from-sky-500/20 to-sky-600/5 border-[#334155] text-[#7E96B0]',
         },
         {
           id: 'fin_portfolio',
@@ -193,7 +193,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: `${stats.portfolioHoldingsCount} Hisse`,
           badgeTone: 'emerald',
           icon: <PieChart className="w-4 h-4" />,
-          accent: 'from-teal-500/20 to-teal-600/5 border-teal-500/35 text-teal-300',
+          accent: 'from-teal-500/20 to-teal-600/5 border-[#7A9E7E]/45 text-[#7A9E7E]',
         },
       ],
     },
@@ -209,7 +209,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: `Prestij ${stats.officePrestige ?? 10}/100`,
           badgeTone: (stats.officePrestige ?? 10) >= 20 ? 'emerald' : 'amber',
           icon: <Building2 className="w-4 h-4" />,
-          accent: 'from-amber-500/25 to-amber-600/5 border-amber-400/45 text-amber-300',
+          accent: 'from-amber-500/25 to-amber-600/5 border-[#C8AE7D]/45 text-[#C8AE7D]',
         },
         {
           id: 'office_phone',
@@ -218,7 +218,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: `Tanınırlık %${(stats.brandRecognition ?? 5).toFixed(0)}`,
           badgeTone: 'sky',
           icon: <Smartphone className="w-4 h-4" />,
-          accent: 'from-sky-500/25 to-sky-600/5 border-sky-400/45 text-sky-300',
+          accent: 'from-sky-500/25 to-sky-600/5 border-[#334155] text-[#7E96B0]',
         },
         {
           id: 'office_assets',
@@ -227,7 +227,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: `${stats.personalAssetsCount ?? 0} Varlık`,
           badgeTone: 'amber',
           icon: <Gem className="w-4 h-4" />,
-          accent: 'from-violet-500/25 to-violet-600/5 border-violet-400/45 text-violet-300',
+          accent: 'from-violet-500/25 to-violet-600/5 border-[#334155] text-[#7E96B0]',
         },
         {
           id: 'office_dayend',
@@ -239,7 +239,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
               : 'Tahsil Edildi',
           badgeTone: stats.pendingDayEndCount > 0 ? 'emerald' : 'sky',
           icon: <CalendarCheck2 className="w-4 h-4" />,
-          accent: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/35 text-emerald-300',
+          accent: 'from-emerald-500/20 to-emerald-600/5 border-[#7A9E7E]/45 text-[#7A9E7E]',
         },
         {
           id: 'office_missions',
@@ -248,28 +248,28 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
           badge: stats.claimableMissionsCount > 0 ? `${stats.claimableMissionsCount} Ödül!` : 'Aktif',
           badgeTone: stats.claimableMissionsCount > 0 ? 'amber' : 'sky',
           icon: <Award className="w-4 h-4" />,
-          accent: 'from-amber-500/20 to-amber-600/5 border-amber-500/35 text-amber-300',
+          accent: 'from-amber-500/20 to-amber-600/5 border-[#C8AE7D]/45 text-[#C8AE7D]',
         },
         {
           id: 'office_leaderboard',
           title: 'Liderlik Tablosu',
           subtitle: 'Türkiye geneli en büyük holding sıralaması',
           icon: <Trophy className="w-4 h-4" />,
-          accent: 'from-yellow-500/20 to-yellow-600/5 border-yellow-500/35 text-yellow-300',
+          accent: 'from-yellow-500/20 to-yellow-600/5 border-[#C8AE7D]/45 text-[#C8AE7D]',
         },
         {
           id: 'office_news',
           title: 'Piyasa Haberleri',
           subtitle: 'Sektörel dalgalanmalar ve ekonomi bülteni',
           icon: <Newspaper className="w-4 h-4" />,
-          accent: 'from-sky-500/20 to-sky-600/5 border-sky-500/35 text-sky-300',
+          accent: 'from-sky-500/20 to-sky-600/5 border-[#334155] text-[#7E96B0]',
         },
         {
           id: 'office_guide',
           title: 'Oyun Rehberi',
           subtitle: 'İnşaat, hizmet kalitesi, kredi ve strateji ipuçları',
           icon: <BookOpen className="w-4 h-4" />,
-          accent: 'from-indigo-500/20 to-indigo-600/5 border-indigo-500/35 text-indigo-300',
+          accent: 'from-indigo-500/20 to-indigo-600/5 border-[#334155] text-[#7E96B0]',
         },
         {
           id: 'office_settings',
@@ -287,19 +287,19 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
   const badgeClass = (tone?: SheetCardItem['badgeTone']) => {
     switch (tone) {
       case 'emerald':
-        return 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40';
+        return 'bg-[#7A9E7E]/15 text-[#7A9E7E] border-[#7A9E7E]/45';
       case 'rose':
-        return 'bg-rose-500/20 text-rose-200 border-rose-400/40';
+        return 'bg-[#B86B5E]/15 text-[#B86B5E] border-[#B86B5E]/45';
       case 'sky':
-        return 'bg-sky-500/20 text-sky-200 border-sky-400/40';
+        return 'bg-[#7E96B0]/15 text-[#7E96B0] border-[#334155]';
       default:
-        return 'bg-amber-500/20 text-amber-200 border-amber-400/40';
+        return 'bg-[#C8AE7D]/15 text-[#C8AE7D] border-[#C8AE7D]/45';
     }
   };
 
   return (
     <div
-      className="fixed inset-0 z-[1350] flex items-end justify-center bg-slate-950/50 backdrop-blur-[2px] px-2 sm:px-4"
+      className="fixed inset-0 z-[1350] flex items-end justify-center bg-[#181F29] -[2px] px-2 sm:px-4"
       style={{ paddingBottom: 'calc(var(--hud-bottom-gap) + 56px)' }}
       onClick={onClose}
       role="dialog"
@@ -308,14 +308,14 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
       data-testid={`bottom-sheet-${group}`}
     >
       <div
-        className="animate-bottom-sheet w-full max-w-2xl rounded-2xl bg-slate-950/96 border border-slate-700/80 shadow-[0_-12px_40px_rgba(2,6,23,0.75)] overflow-hidden max-h-[72dvh] flex flex-col"
+        className="animate-bottom-sheet w-full max-w-2xl rounded-[20px] bg-[#181F29] border border-[#334155] overflow-hidden max-h-[72dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Accent & Drag Handle */}
         <div className={`h-1 w-full bg-gradient-to-r ${active.accentBar}`} />
-        <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-slate-800/90 shrink-0">
+        <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-[#334155] shrink-0">
           <div className="min-w-0 flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-amber-400 shrink-0" />
+            <Briefcase className="w-4 h-4 text-[#C8AE7D] shrink-0" />
             <div className="min-w-0">
               <h3 className="text-sm font-extrabold text-white tracking-tight truncate">
                 {active.title}
@@ -329,7 +329,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Alt menüyü kapat"
-            className="w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center shrink-0"
+            className="w-8 h-8 rounded-xl bg-[#1D2532] hover:bg-[#2A3444] border border-[#334155] text-slate-200 flex items-center justify-center shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -353,7 +353,7 @@ export const BottomSheetLauncher: React.FC<BottomSheetLauncherProps> = ({
               className={`group text-left rounded-xl p-2.5 sm:p-3 bg-gradient-to-br ${item.accent} border hover:brightness-110 active:scale-[0.98] transition-all flex flex-col justify-between gap-1.5 overflow-hidden`}
             >
               <div className="flex items-start justify-between gap-1.5">
-                <div className="w-8 h-8 rounded-lg bg-slate-950/60 border border-white/10 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-black/70 border border-white/10 flex items-center justify-center shrink-0">
                   {item.icon}
                 </div>
                 {item.badge && (

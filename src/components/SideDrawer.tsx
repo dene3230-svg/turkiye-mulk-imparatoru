@@ -198,7 +198,7 @@ export function SideDrawer({
               type="button"
               data-testid="management-collect-all-btn"
               onClick={onCollectAll}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#7A9E7E] px-3 text-xs font-bold text-[#181F29] hover:bg-[#7A9E7E] whitespace-nowrap"
             >
               <Coins className="h-3.5 w-3.5" />
               <span>Tümünü Topla ({formatTL(totalPendingCash, true)})</span>
@@ -221,9 +221,9 @@ export function SideDrawer({
         {tab === 'portfolio' && (
           <div className="space-y-3">
             {onOpenDayEndReport && (state.pendingDayEndReports ?? []).length > 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-400/55 bg-emerald-950/45 px-3.5 py-2.5">
-                <div className="text-xs text-emerald-200 flex items-center gap-2">
-                  <CalendarCheck2 className="h-4 w-4 text-emerald-300 shrink-0" />
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#7A9E7E]/45 bg-emerald-950/45 px-3.5 py-2.5">
+                <div className="text-xs text-[#7A9E7E] flex items-center gap-2">
+                  <CalendarCheck2 className="h-4 w-4 text-[#7A9E7E] shrink-0" />
                   <span>
                     <strong>{(state.pendingDayEndReports ?? []).length} adet 00:00 Gün Sonu Raporu</strong>{' '}
                     hasılat tahsilatı bekliyor!
@@ -232,7 +232,7 @@ export function SideDrawer({
                 <button
                   type="button"
                   onClick={onOpenDayEndReport}
-                  className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 text-xs font-extrabold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
+                  className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-[#7A9E7E] px-3.5 text-xs font-extrabold text-[#181F29] hover:bg-[#7A9E7E] whitespace-nowrap"
                 >
                   <Coins className="h-4 w-4" />
                   <span>Gün Sonu Raporunu Aç</span>
@@ -241,10 +241,10 @@ export function SideDrawer({
             )}
 
             {totalPendingCash > 0 && (state.pendingDayEndReports ?? []).length === 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/35 px-3.5 py-2.5">
-                <div className="text-xs text-emerald-200">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#7A9E7E]/45 bg-emerald-950/35 px-3.5 py-2.5">
+                <div className="text-xs text-[#7A9E7E]">
                   Şube kasalarında gün içi{' '}
-                  <strong className="font-mono-num text-sm font-black text-emerald-300">
+                  <strong className="font-mono-num text-sm font-black text-[#7A9E7E]">
                     {formatTL(totalPendingCash)}
                   </strong>{' '}
                   satış birikti (00:00 kapanışında tahsil edilir).
@@ -252,7 +252,7 @@ export function SideDrawer({
                 <button
                   type="button"
                   onClick={onCollectAll}
-                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-bold text-slate-950 hover:bg-emerald-400 whitespace-nowrap"
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-[#7A9E7E] px-4 text-xs font-bold text-[#181F29] hover:bg-[#7A9E7E] whitespace-nowrap"
                 >
                   <Coins className="h-4 w-4" />
                   <span>Tümünü Topla</span>
@@ -261,8 +261,8 @@ export function SideDrawer({
             )}
 
             {state.businesses.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/60 px-4 py-10 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/20 text-amber-300">
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#334155] bg-[#222B38] px-4 py-10 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-[20px] bg-[#C8AE7D]/15 text-[#C8AE7D]">
                   <MapPin className="h-6 w-6" />
                 </div>
                 <h3 className="mt-3 text-base font-bold text-white">Henüz İşletmeniz Yok</h3>
@@ -273,7 +273,7 @@ export function SideDrawer({
                 <button
                   type="button"
                   onClick={onEnablePinMode}
-                  className="mt-4 min-h-[44px] rounded-xl bg-amber-400 px-5 text-sm font-bold text-slate-950 hover:bg-amber-300"
+                  className="mt-4 min-h-[44px] rounded-xl bg-[#C8AE7D] px-5 text-sm font-bold text-[#181F29] hover:bg-[#D2BB8E]"
                 >
                   Haritaya Dön & Pin Bırak
                 </button>
@@ -318,8 +318,8 @@ export function SideDrawer({
                       data-testid={`branch-card-${biz.id}`}
                       className={`flex flex-col justify-between gap-2.5 rounded-xl border p-3 ${
                         underConstruction
-                          ? 'border-amber-500/50 bg-amber-950/20'
-                          : 'border-slate-800 bg-slate-900/80'
+                          ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15'
+                          : 'border-[#334155] bg-[#222B38]'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -333,23 +333,23 @@ export function SideDrawer({
                           )}
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="truncate text-sm font-bold text-white hover:text-amber-300">
+                              <span className="truncate text-sm font-bold text-white hover:text-[#C8AE7D]">
                                 {biz.customName}
                               </span>
                               {underConstruction && (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/25 border border-amber-400/50 px-1.5 py-0.5 text-[11px] font-extrabold text-amber-200">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-[#C8AE7D]/15 border border-[#C8AE7D]/45 px-1.5 py-0.5 text-[11px] font-extrabold text-[#C8AE7D]">
                                   <Hammer className="h-3 w-3" /> İnşaat · {remConstDays}g Kaldı
                                 </span>
                               )}
                               {isHq && (
-                                <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
+                                <span className="rounded-md bg-[#C8AE7D]/15 px-1.5 py-0.5 text-[11px] font-bold text-[#C8AE7D]">
                                   Merkez Üs
                                 </span>
                               )}
                               {chainStatus.isChain && (
                                 <span
                                   data-testid={`chain-badge-${biz.id}`}
-                                  className="inline-flex items-center gap-0.5 rounded-md bg-sky-500/20 px-1.5 py-0.5 text-[11px] font-bold text-sky-300"
+                                  className="inline-flex items-center gap-0.5 rounded-md bg-[#7E96B0]/15 px-1.5 py-0.5 text-[11px] font-bold text-[#7E96B0]"
                                 >
                                   <Link2 className="h-3 w-3" /> Zincir Marka ({chainStatus.branchCount} Şube)
                                 </span>
@@ -357,7 +357,7 @@ export function SideDrawer({
                               {automation.autoCollectRevenue && !underConstruction && (
                                 <span
                                   data-testid="portfolio-auto-collect-badge"
-                                  className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300"
+                                  className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-[#7A9E7E]/15 px-2 py-0.5 text-[11px] font-bold text-[#7A9E7E]"
                                 >
                                   <Zap className="h-3 w-3" /> Oto Tahsilat
                                 </span>
@@ -380,13 +380,13 @@ export function SideDrawer({
                               {bp?.shortName} · Kira -{formatTL(dailyRent, true)}/gün
                             </div>
                             <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-slate-300">
-                              <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
+                              <span className="rounded bg-[#1D2532] px-1.5 py-0.5 font-semibold">
                                 {slots.workers}/{slots.maxWorkers} Çalışan
                               </span>
-                              <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
+                              <span className="rounded bg-[#1D2532] px-1.5 py-0.5 font-semibold">
                                 {slots.assistantManagers}/{slots.maxAssistantManagers} Yrd.
                               </span>
-                              <span className="rounded bg-slate-800 px-1.5 py-0.5 font-semibold">
+                              <span className="rounded bg-[#1D2532] px-1.5 py-0.5 font-semibold">
                                 {slots.branchManagers}/{slots.maxBranchManagers} Şube Müd.
                               </span>
                             </div>
@@ -395,7 +395,7 @@ export function SideDrawer({
 
                         <span
                           className={`shrink-0 font-mono-num text-sm font-black ${
-                            underConstruction ? 'text-amber-300' : 'text-emerald-400'
+                            underConstruction ? 'text-[#C8AE7D]' : 'text-[#7A9E7E]'
                           }`}
                         >
                           {underConstruction ? 'İnşaatta' : `${formatTL(hourly)}/sa`}
@@ -403,7 +403,7 @@ export function SideDrawer({
                       </div>
 
                       {/* Stock & Maintenance Health */}
-                      <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-800/90 bg-slate-950/60 p-2 text-[11px]">
+                      <div className="grid grid-cols-2 gap-2 rounded-lg border border-[#334155] bg-black/70 p-2 text-[11px]">
                         <div>
                           <div className="flex justify-between text-slate-400">
                             <span>Stok</span>
@@ -411,9 +411,9 @@ export function SideDrawer({
                               %{stockPct}
                             </span>
                           </div>
-                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
                             <div
-                              className="h-full rounded-full bg-emerald-500"
+                              className="h-full rounded-full bg-[#7A9E7E]"
                               style={{ width: `${stockPct}%` }}
                             />
                           </div>
@@ -425,9 +425,9 @@ export function SideDrawer({
                               %{maintPct}
                             </span>
                           </div>
-                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
                             <div
-                              className="h-full rounded-full bg-sky-400"
+                              className="h-full rounded-full bg-[#7E96B0]"
                               style={{ width: `${maintPct}%` }}
                             />
                           </div>
@@ -443,13 +443,13 @@ export function SideDrawer({
                               data-testid={`drawer-double-shift-${biz.id}`}
                               disabled={state.cash < doubleShiftCost}
                               onClick={() => onHireDoubleShift(biz.id)}
-                              className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-400 px-3 text-xs font-black text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                              className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#C8AE7D] px-3 text-xs font-black text-[#181F29] hover:bg-[#D2BB8E] disabled:cursor-not-allowed disabled:bg-[#1D2532] disabled:text-slate-500 whitespace-nowrap"
                             >
                               <Zap className="h-3.5 w-3.5" />
                               <span>Çift Vardiya (-%35 · {formatTL(doubleShiftCost, true)})</span>
                             </button>
                           ) : (
-                            <div className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-bold text-amber-200 whitespace-nowrap">
+                            <div className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-3 text-xs font-bold text-[#C8AE7D] whitespace-nowrap">
                               <Hammer className="h-3.5 w-3.5" />
                               <span>
                                 {biz.doubleShiftApplied
@@ -463,7 +463,7 @@ export function SideDrawer({
                             type="button"
                             disabled={pending <= 0}
                             onClick={() => onCollectBusiness(biz.id)}
-                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#7A9E7E] px-3 text-xs font-bold text-[#181F29] hover:bg-[#7A9E7E] disabled:cursor-not-allowed disabled:bg-[#1D2532] disabled:text-slate-500 whitespace-nowrap"
                           >
                             <Coins className="h-3.5 w-3.5" />
                             <span>
@@ -479,7 +479,7 @@ export function SideDrawer({
                             type="button"
                             disabled={!canUpgrade}
                             onClick={() => onUpgradeBusiness(biz.id)}
-                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 whitespace-nowrap"
+                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#C8AE7D] px-3 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E] disabled:cursor-not-allowed disabled:bg-[#1D2532] disabled:text-slate-500 whitespace-nowrap"
                           >
                             <ArrowUpCircle className="h-3.5 w-3.5" />
                             <span>Yükselt ({formatTL(upgradeCost, true)})</span>
@@ -495,7 +495,7 @@ export function SideDrawer({
                             data-testid={`clone-branch-btn-${biz.id}`}
                             disabled={quotaFull}
                             onClick={() => onCloneBusiness(biz.id)}
-                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-sky-400/50 bg-sky-500/20 px-3 text-xs font-bold text-sky-200 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap"
+                            className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-3 text-xs font-bold text-[#7E96B0] hover:bg-[#7E96B0]/15 disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap"
                           >
                             <CopyPlus className="h-3.5 w-3.5 shrink-0" />
                             <span>
@@ -514,7 +514,7 @@ export function SideDrawer({
                             className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold whitespace-nowrap ${
                               isAdExpanded || hasActiveAd
                                 ? 'border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200'
-                                : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                                : 'border-[#334155] bg-[#1D2532] text-slate-200 hover:bg-[#2A3444]'
                             }`}
                           >
                             <Megaphone className="h-3.5 w-3.5 shrink-0" />
@@ -534,7 +534,7 @@ export function SideDrawer({
                               Reklam & Pazarlama Kampanyaları
                             </span>
                             {automation.autoAdsActive && (
-                              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                              <span className="rounded bg-[#7A9E7E]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#7A9E7E]">
                                 GM Oto-Reklam Aktif
                               </span>
                             )}
@@ -555,17 +555,17 @@ export function SideDrawer({
                                   className={`flex flex-col items-start justify-between rounded-xl border p-2 text-left transition ${
                                     isCurrentTier
                                       ? 'border-fuchsia-400 bg-fuchsia-500/25'
-                                      : 'border-slate-700 bg-slate-900/90 hover:border-fuchsia-400/60 disabled:opacity-45'
+                                      : 'border-[#334155] bg-[#222B38] hover:border-fuchsia-400/60 disabled:opacity-45'
                                   }`}
                                 >
                                   <div className="text-[11px] font-bold text-white">
                                     {tier.shortLabel}
                                   </div>
-                                  <div className="mt-0.5 text-[10px] text-emerald-300 font-semibold">
+                                  <div className="mt-0.5 text-[10px] text-[#7A9E7E] font-semibold">
                                     +%{Math.round(tier.revenueBoost * 100)} Ciro ·{' '}
                                     {tier.durationGameHours}sa
                                   </div>
-                                  <div className="mt-1 font-mono-num text-[11px] font-black text-amber-300">
+                                  <div className="mt-1 font-mono-num text-[11px] font-black text-[#C8AE7D]">
                                     {formatTL(adCost, true)}
                                   </div>
                                 </button>
@@ -576,18 +576,18 @@ export function SideDrawer({
                       )}
 
                       {/* Secondary Branch Controls */}
-                      <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
+                      <div className="flex flex-wrap items-center gap-2 border-t border-[#334155] pt-2">
                         <button
                           type="button"
                           onClick={() => onSelectBusiness(biz.id)}
-                          className="min-h-[38px] flex-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-amber-300 hover:bg-slate-700 whitespace-nowrap"
+                          className="min-h-[38px] flex-1 rounded-xl border border-[#334155] bg-[#1D2532] px-2.5 text-xs font-bold text-[#C8AE7D] hover:bg-[#2A3444] whitespace-nowrap"
                         >
                           Haritada Gör
                         </button>
                         <button
                           type="button"
                           onClick={() => onEnterInterior(biz.id)}
-                          className="inline-flex min-h-[38px] flex-1 items-center justify-center gap-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-sky-300 hover:bg-slate-700 whitespace-nowrap"
+                          className="inline-flex min-h-[38px] flex-1 items-center justify-center gap-1 rounded-xl border border-[#334155] bg-[#1D2532] px-2.5 text-xs font-bold text-[#7E96B0] hover:bg-[#2A3444] whitespace-nowrap"
                         >
                           <DoorOpen className="h-3.5 w-3.5" />
                           <span>İçeri Gir</span>
@@ -596,7 +596,7 @@ export function SideDrawer({
                           <button
                             type="button"
                             onClick={() => onRestockBusiness(biz.id)}
-                            className="inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl border border-amber-500/40 bg-amber-500/15 px-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/25 whitespace-nowrap"
+                            className="inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-2.5 text-xs font-bold text-[#C8AE7D] hover:bg-[#C8AE7D]/15 whitespace-nowrap"
                           >
                             <Wrench className="h-3.5 w-3.5" />
                             <span>Bakım</span>
@@ -609,7 +609,7 @@ export function SideDrawer({
                               onClose();
                               onOpenHrModal(biz.id);
                             }}
-                            className="inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl border border-indigo-500/40 bg-indigo-500/20 px-3 text-xs font-bold text-indigo-200 hover:bg-indigo-500/30 whitespace-nowrap"
+                            className="inline-flex min-h-[38px] items-center justify-center gap-1 rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-3 text-xs font-bold text-[#7E96B0] hover:bg-[#7E96B0]/15 whitespace-nowrap"
                           >
                             <Users className="h-3.5 w-3.5" />
                             <span>İK</span>
@@ -626,8 +626,8 @@ export function SideDrawer({
 
         {tab === 'missions' && (
           <div className="space-y-3">
-            <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/35 bg-amber-500/10 px-3.5 py-2.5 text-xs">
-              <span className="flex items-center gap-1.5 font-bold text-amber-300">
+            <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-3.5 py-2.5 text-xs">
+              <span className="flex items-center gap-1.5 font-bold text-[#C8AE7D]">
                 <Sparkles className="h-4 w-4 shrink-0" />
                 <span>Dinamik Görev Havuzu (Tamamlandıkça Otomatik Yenilenir)</span>
               </span>
@@ -652,8 +652,8 @@ export function SideDrawer({
                     data-testid="dynamic-mission-card"
                     className={`flex flex-col justify-between gap-2.5 rounded-xl border p-3.5 ${
                       completed
-                        ? 'border-amber-400 bg-amber-400/12'
-                        : 'border-slate-800 bg-slate-900/80'
+                        ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/12'
+                        : 'border-[#334155] bg-[#222B38]'
                     }`}
                   >
                     <div>
@@ -661,28 +661,28 @@ export function SideDrawer({
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 text-sm font-bold text-white">
                             {completed ? (
-                              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-[#7A9E7E]" />
                             ) : (
-                              <Trophy className="h-4 w-4 shrink-0 text-amber-400" />
+                              <Trophy className="h-4 w-4 shrink-0 text-[#C8AE7D]" />
                             )}
                             <span>{mission.title}</span>
                           </div>
                           <p className="mt-1 text-xs text-slate-300">{mission.description}</p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <div className="font-mono-num text-sm font-black text-amber-300">
+                          <div className="font-mono-num text-sm font-black text-[#C8AE7D]">
                             +{formatTL(mission.rewardCash, true)}
                           </div>
-                          <div className="font-mono-num text-xs font-bold text-sky-300">
+                          <div className="font-mono-num text-xs font-bold text-[#7E96B0]">
                             +{mission.rewardXp ?? 150} XP
                           </div>
                         </div>
                       </div>
 
-                      <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                      <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#1D2532]">
                         <div
                           className={`h-full rounded-full transition-all duration-300 ${
-                            completed ? 'bg-emerald-400' : 'bg-amber-400'
+                            completed ? 'bg-[#7A9E7E]' : 'bg-[#C8AE7D]'
                           }`}
                           style={{ width: `${pct}%` }}
                         />
@@ -701,7 +701,7 @@ export function SideDrawer({
                           type="button"
                           data-testid="claim-mission-btn"
                           onClick={() => onClaimMission(mission)}
-                          className="min-h-[40px] rounded-xl bg-amber-400 px-4 text-xs font-bold text-slate-950 hover:bg-amber-300"
+                          className="min-h-[40px] rounded-xl bg-[#C8AE7D] px-4 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E]"
                         >
                           Ödülü Al & Yenile
                         </button>
@@ -719,13 +719,13 @@ export function SideDrawer({
         {tab === 'market' && (
           <div className="space-y-3">
             {/* Game Calendar Card */}
-            <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+            <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#334155] bg-[#222B38] p-3">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <CalendarDays className="h-5 w-5 text-amber-400" />
+                <CalendarDays className="h-5 w-5 text-[#C8AE7D]" />
                 <span>{clock.label}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
-                <span className="rounded-lg bg-slate-800 px-2.5 py-1 font-bold text-amber-300">
+                <span className="rounded-lg bg-[#1D2532] px-2.5 py-1 font-bold text-[#C8AE7D]">
                   {clock.totalDaysLabel}
                 </span>
                 <span>Haftalık Temettü: Her 7. Gün · Aylık Bilanço: Her 30. Gün</span>
@@ -734,8 +734,8 @@ export function SideDrawer({
 
             {/* Active Market Event */}
             {state.activeEvent && (
-              <section className="rounded-xl border border-amber-400/45 bg-amber-500/10 p-3.5">
-                <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+              <section className="rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 p-3.5">
+                <div className="flex items-center justify-between text-xs font-bold text-[#C8AE7D]">
                   <span className="flex items-center gap-1.5">
                     <Flame className="h-4 w-4" />
                     Son Dakika · Aktif Ekonomik Gündem
@@ -748,7 +748,7 @@ export function SideDrawer({
                 <p className="mt-1 text-xs leading-relaxed text-slate-200">
                   {state.activeEvent.description}
                 </p>
-                <div className="mt-2.5 flex items-center gap-3 text-xs font-bold text-emerald-300">
+                <div className="mt-2.5 flex items-center gap-3 text-xs font-bold text-[#7A9E7E]">
                   <span>Gelir x{state.activeEvent.incomeMultiplier.toFixed(2)}</span>
                   <span aria-hidden="true">·</span>
                   <span>Mülk Değeri x{state.activeEvent.valuationMultiplier.toFixed(2)}</span>
@@ -759,8 +759,8 @@ export function SideDrawer({
             {/* Sector Trend & Interest Rate Bulletins */}
             <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2">
               {topGainerStock && (
-                <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                <section className="rounded-xl border border-[#334155] bg-[#222B38] p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#7A9E7E]">
                     <TrendingUp className="h-4 w-4" />
                     <span>Borsa & Sektör Trendi</span>
                   </div>
@@ -772,7 +772,7 @@ export function SideDrawer({
                       </div>
                       <div className="text-xs text-slate-300">
                         {topGainerStock.sector} sektörü öne çıkıyor · Fiyat:{' '}
-                        <strong className="font-mono-num text-emerald-400">
+                        <strong className="font-mono-num text-[#7A9E7E]">
                           ₺{topGainerStock.price.toFixed(2)}
                         </strong>
                       </div>
@@ -781,19 +781,19 @@ export function SideDrawer({
                 </section>
               )}
 
-              <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400">
+              <section className="rounded-xl border border-[#334155] bg-[#222B38] p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#7E96B0]">
                   <Landmark className="h-4 w-4" />
                   <span>Faiz & Kredi Piyasası</span>
                 </div>
                 <div className="text-xs text-slate-200 leading-relaxed">
                   Piyasa ortalama banka baz faizi{' '}
-                  <strong className="font-mono-num text-amber-300">
+                  <strong className="font-mono-num text-[#C8AE7D]">
                     %{(avgBankRate * 100).toFixed(1)}
                   </strong>{' '}
                   seviyesinde. Kredi notunuz ({state.creditScore} ·{' '}
                   <strong className="text-white">{creditTier.label}</strong>) ile{' '}
-                  <strong className="font-mono-num text-emerald-400">
+                  <strong className="font-mono-num text-[#7A9E7E]">
                     {formatTL(creditTier.maxLoanAmount, true)}
                   </strong>{' '}
                   limite erişebilirsiniz.
@@ -803,15 +803,15 @@ export function SideDrawer({
 
             {/* Rival Holding Activity */}
             {competitorBusinesses.length > 0 && (
-              <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 space-y-2">
-                <div className="text-xs font-bold text-rose-300">
+              <section className="rounded-xl border border-[#334155] bg-[#222B38] p-3 space-y-2">
+                <div className="text-xs font-bold text-[#B86B5E]">
                   Rakip Holding Hamleleri ({competitorBusinesses.length} Aktif Mülk)
                 </div>
                 <div className="grid grid-cols-1 gap-2 min-[900px]:grid-cols-2">
                   {competitorBusinesses.slice(0, 4).map((rival) => (
                     <div
                       key={rival.id}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/75 px-3 py-2 text-xs"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-[#334155] bg-black/70 px-3 py-2 text-xs"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <BrandLogo brandKey={rival.owner_name} size={30} />
@@ -822,7 +822,7 @@ export function SideDrawer({
                           </div>
                         </div>
                       </div>
-                      <span className="shrink-0 font-mono-num font-bold text-amber-300">
+                      <span className="shrink-0 font-mono-num font-bold text-[#C8AE7D]">
                         {formatTL(rival.valuation, true)}
                       </span>
                     </div>
@@ -834,7 +834,7 @@ export function SideDrawer({
             {/* Company Tiers */}
             <section className="space-y-2">
               <div className="flex items-center gap-1.5 text-sm font-bold text-white">
-                <Crown className="h-4 w-4 text-amber-400" />
+                <Crown className="h-4 w-4 text-[#C8AE7D]" />
                 <span>Şirket Seviyeleri ve Şube Kotaları</span>
               </div>
               <div className="grid grid-cols-1 gap-2 min-[900px]:grid-cols-2">
@@ -846,17 +846,17 @@ export function SideDrawer({
                       key={tier.level}
                       className={`rounded-xl border px-3 py-2.5 text-xs ${
                         isCurrent
-                          ? 'border-amber-400 bg-amber-400/12 text-white'
+                          ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/12 text-white'
                           : unlocked
-                          ? 'border-slate-700 bg-slate-900/80 text-slate-200'
-                          : 'border-slate-800 bg-slate-950/60 text-slate-500'
+                          ? 'border-[#334155] bg-[#222B38] text-slate-200'
+                          : 'border-[#334155] bg-black/70 text-slate-500'
                       }`}
                     >
                       <div className="flex items-center justify-between font-bold">
                         <span>
                           Sv.{tier.level} · {tier.title}
                         </span>
-                        <span className="font-mono-num text-amber-300">
+                        <span className="font-mono-num text-[#C8AE7D]">
                           {formatTL(tier.minNetWorth, true)}
                         </span>
                       </div>

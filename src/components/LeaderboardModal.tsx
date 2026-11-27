@@ -122,25 +122,25 @@ export function LeaderboardModal({
                 key={row.id}
                 className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${
                   row.isSelf
-                    ? 'border-amber-400 bg-amber-400/12'
-                    : 'border-slate-800 bg-slate-900/80'
+                    ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/12'
+                    : 'border-[#334155] bg-[#222B38]'
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#181F29] font-mono-num text-xs font-black text-[#C8AE7D]">
                     #{idx + 1}
                   </span>
                   <BrandLogo brandKey={row.name} size={38} />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold text-white">
-                      {row.name} {row.isSelf && <span className="text-amber-300">(Siz)</span>}
+                      {row.name} {row.isSelf && <span className="text-[#C8AE7D]">(Siz)</span>}
                     </div>
                     <div className="text-xs text-slate-400">
                       {row.businesses} şube · {row.cities} il
                     </div>
                   </div>
                 </div>
-                <span className="shrink-0 font-mono-num text-sm font-black text-emerald-400">
+                <span className="shrink-0 font-mono-num text-sm font-black text-[#7A9E7E]">
                   {formatTL(row.netWorth, true)}
                 </span>
               </div>
@@ -150,7 +150,7 @@ export function LeaderboardModal({
 
         {tab === 'city' &&
           (cityLeaders.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-xs text-slate-400">
+            <div className="rounded-xl border border-dashed border-[#334155] p-8 text-center text-xs text-slate-400">
               {activeProvince.code} {activeProvince.name} odasında henüz kayıtlı şube yok. İlk
               işletmeyi kurarak il lideri olun!
             </div>
@@ -161,25 +161,25 @@ export function LeaderboardModal({
                   key={`${row.name}-${idx}`}
                   className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${
                     row.isSelf
-                      ? 'border-amber-400 bg-amber-400/12'
-                      : 'border-slate-800 bg-slate-900/80'
+                      ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/12'
+                      : 'border-[#334155] bg-[#222B38]'
                   }`}
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#181F29] font-mono-num text-xs font-black text-[#C8AE7D]">
                       #{idx + 1}
                     </span>
                     <BrandLogo brandKey={row.name} size={38} />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-white">
-                        {row.name} {row.isSelf && <span className="text-amber-300">(Siz)</span>}
+                        {row.name} {row.isSelf && <span className="text-[#C8AE7D]">(Siz)</span>}
                       </div>
                       <div className="text-xs text-slate-400">
                         {activeProvince.name} içinde {row.branches} şube
                       </div>
                     </div>
                   </div>
-                  <span className="shrink-0 font-mono-num text-sm font-black text-emerald-400">
+                  <span className="shrink-0 font-mono-num text-sm font-black text-[#7A9E7E]">
                     {formatTL(row.value, true)}
                   </span>
                 </div>
@@ -192,10 +192,10 @@ export function LeaderboardModal({
             {sortedFranchises.map((f, idx) => (
               <div
                 key={f.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
+                className="flex items-center justify-between gap-3 rounded-xl border border-[#334155] bg-[#222B38] p-3"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#181F29] font-mono-num text-xs font-black text-[#C8AE7D]">
                     #{idx + 1}
                   </span>
                   <BrandLogo brandKey={f.id || f.brandName} size={38} />
@@ -207,8 +207,8 @@ export function LeaderboardModal({
                   </div>
                 </div>
                 <div className="shrink-0 text-right font-mono-num">
-                  <div className="text-xs font-bold text-amber-300">{f.branchCount} Bayi</div>
-                  <div className="text-xs text-emerald-400">
+                  <div className="text-xs font-bold text-[#C8AE7D]">{f.branchCount} Bayi</div>
+                  <div className="text-xs text-[#7A9E7E]">
                     {formatTL(f.totalRoyaltyEarned, true)}
                   </div>
                 </div>
@@ -222,10 +222,10 @@ export function LeaderboardModal({
             {sortedBanks.map((b, idx) => (
               <div
                 key={b.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3"
+                className="flex items-center justify-between gap-3 rounded-xl border border-[#334155] bg-[#222B38] p-3"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-950 font-mono-num text-xs font-black text-amber-300">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#181F29] font-mono-num text-xs font-black text-[#C8AE7D]">
                     #{idx + 1}
                   </span>
                   <BrandLogo brandKey={b.id || b.bankName} customColor={b.brandColor} size={38} />
@@ -238,7 +238,7 @@ export function LeaderboardModal({
                   </div>
                 </div>
                 <div className="shrink-0 text-right font-mono-num">
-                  <div className="text-sm font-black text-emerald-400">
+                  <div className="text-sm font-black text-[#7A9E7E]">
                     {formatTL(b.poolCapital, true)}
                   </div>
                   <div className="text-[11px] text-slate-400">Havuz</div>

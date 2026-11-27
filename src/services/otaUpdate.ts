@@ -1,7 +1,7 @@
 import type { OtaCheckResult, OtaVersionManifest } from '../types/game';
 
-export const APP_VERSION = '1.5.8';
-export const APP_BUILD_DATE = '2026-11-26';
+export const APP_VERSION = '1.7.0';
+export const APP_BUILD_DATE = '2026-11-27';
 
 function parseSemverParts(v: string): { nums: number[]; fixRank: number } {
   const cleaned = v.trim().replace(/^v/i, '');
@@ -47,8 +47,24 @@ export async function checkForOtaUpdate(
   manifestUrl = './version.json'
 ): Promise<OtaCheckResult> {
   const checkedAt = Date.now();
+  const offlineFallback = (reason: string): OtaCheckResult => ({
+    hasUpdate: false,
+    currentVersion,
+    remoteManifest: null,
+    checkedAt,
+    fallbackLocal: true,
+    error: reason,
+  });
+
+  if (typeof fetch !== 'function') {
+    return offlineFallback('Yerel paket arayüzü aktif.');
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return offlineFallback('Çevrimdışı mod — yerel paket sürümüyle devam ediliyor.');
+  }
+
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 4500) : null;
   try {
     const separator = manifestUrl.includes('?') ? '&' : '?';
     const res = await fetch(`${manifestUrl}${separator}t=${checkedAt}`, {
@@ -61,24 +77,12 @@ export async function checkForOtaUpdate(
     });
 
     if (!res.ok) {
-      return {
-        hasUpdate: false,
-        currentVersion,
-        remoteManifest: null,
-        checkedAt,
-        error: `Sürüm sunucusuna ulaşılamadı (HTTP ${res.status}).`,
-      };
+      return offlineFallback(`Sürüm sunucusuna ulaşılamadı (HTTP ${res.status}). Yerel sürümle devam ediliyor.`);
     }
 
     const data = (await res.json()) as Partial<OtaVersionManifest>;
     if (!data?.version || !Array.isArray(data.notes)) {
-      return {
-        hasUpdate: false,
-        currentVersion,
-        remoteManifest: null,
-        checkedAt,
-        error: 'Geçersiz sürüm bildirim formatı.',
-      };
+      return offlineFallback('Geçersiz sürüm bildirim formatı — yerel sürüm aktif.');
     }
 
     const remoteManifest: OtaVersionManifest = {
@@ -94,15 +98,10 @@ export async function checkForOtaUpdate(
       currentVersion,
       remoteManifest,
       checkedAt,
+      fallbackLocal: false,
     };
   } catch {
-    return {
-      hasUpdate: false,
-      currentVersion,
-      remoteManifest: null,
-      checkedAt,
-      error: 'Bağlantı sağlanamadı. Çevrimdışı yedek modda çalışıyorsunuz.',
-    };
+    return offlineFallback('Güncelleme sunucusuna erişilemedi. Yerel paket arayüzü ile açıldı.');
   } finally {
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
@@ -111,6 +110,7 @@ export async function checkForOtaUpdate(
 }
 
 export async function applyOtaUpdate(): Promise<void> {
+  if (typeof window === 'undefined') return;
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
@@ -121,7 +121,7 @@ export async function applyOtaUpdate(): Promise<void> {
   }
 
   try {
-    if ('serviceWorker' in navigator) {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((reg) => reg.unregister()));
     }
@@ -129,7 +129,15 @@ export async function applyOtaUpdate(): Promise<void> {
     // ignore SW unregister failures
   }
 
-  const url = new URL(window.location.href);
-  url.searchParams.set('ota', String(Date.now()));
-  window.location.replace(url.toString());
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('ota', String(Date.now()));
+    window.location.replace(url.toString());
+  } catch {
+    try {
+      window.location.reload();
+    } catch {
+      // keep running local bundled UI safely
+    }
+  }
 }

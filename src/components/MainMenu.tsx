@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
-  Sun,
-  Moon,
+  Crown,
   Settings,
   RefreshCw,
   LogIn,
@@ -10,12 +9,13 @@ import {
   Play,
   MapPin,
   Building2,
-  Bell,
+  Globe,
   Eye,
   EyeOff,
   AlertCircle,
   Loader2,
   User,
+  Briefcase,
 } from 'lucide-react';
 import type { ThemeMode, UserProfile } from '../types/game';
 import { TURKEY_PROVINCES } from '../game/provinces81';
@@ -44,8 +44,6 @@ interface MainMenuProps {
 type AuthTab = 'login' | 'register';
 
 export function MainMenu({
-  theme,
-  onToggleTheme,
   user,
   authLoading,
   authError,
@@ -115,28 +113,21 @@ export function MainMenu({
   return (
     <main
       data-testid="main-menu"
-      className="relative flex h-full w-full flex-col overflow-hidden bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-[#0B1221] dark:text-slate-100 safe-inset"
+      className="relative flex h-full w-full flex-col overflow-hidden bg-[#181F29] text-slate-100 safe-inset"
     >
-      {/* Subtle architectural topographic grid backdrop */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.45] dark:opacity-[0.18]"
-        style={{
-          backgroundImage:
-            'radial-gradient(circle at 18% 24%, rgba(217,119,6,0.14), transparent 44%), radial-gradient(circle at 82% 76%, rgba(15,23,42,0.12), transparent 48%)',
-        }}
-      />
-
-      {/* Compact Top Utility Strip */}
-      <div className="relative z-10 flex shrink-0 items-center justify-between px-[clamp(14px,3vw,36px)] pt-[clamp(8px,1.5vh,18px)] pb-1">
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-          <span className="font-semibold text-amber-700 dark:text-amber-400">fu Games</span>
-          <span aria-hidden="true">·</span>
-          <span className="font-mono-num">v{APP_VERSION}</span>
+      {/* Matte Top Utility Strip */}
+      <header className="relative z-10 flex shrink-0 items-center justify-between border-b border-[#334155]/70 px-[clamp(14px,3vw,32px)] py-2.5">
+        <div className="flex items-center gap-2.5 text-xs font-medium text-slate-400">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-[#C8AE7D]/60 bg-[#222B38]">
+            <Crown className="h-3.5 w-3.5 text-[#C8AE7D]" strokeWidth={1.5} />
+          </div>
+          <span className="font-semibold tracking-[0.08em] text-slate-100">MÜLK İMPARATORLUĞU</span>
+          <span aria-hidden="true" className="text-[#334155]">•</span>
+          <span className="font-mono-num text-[#7E96B0]">v{APP_VERSION}</span>
           {user && savedBusinessCount > 0 && (
             <>
-              <span aria-hidden="true">·</span>
-              <span>{savedBusinessCount} kayıtlı işletme</span>
+              <span aria-hidden="true" className="hidden sm:inline text-[#334155]">•</span>
+              <span className="hidden sm:inline text-[#7A9E7E]">{savedBusinessCount} aktif şube</span>
             </>
           )}
         </div>
@@ -144,137 +135,116 @@ export function MainMenu({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onToggleTheme}
-            aria-label={theme === 'light' ? 'Karanlık Temaya Geç' : 'Açık Temaya Geç'}
-            className="flex min-h-[38px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-100 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
-          >
-            {theme === 'light' ? (
-              <>
-                <Moon className="h-4 w-4 text-slate-600" />
-                <span>Karanlık Tema</span>
-              </>
-            ) : (
-              <>
-                <Sun className="h-4 w-4 text-amber-400" />
-                <span>Açık Tema</span>
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
             onClick={onCheckUpdate}
             disabled={checkingUpdate}
             aria-label="Güncellemeleri Denetle"
-            className="flex min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 text-slate-700 shadow-xs transition-colors hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-[#334155] bg-[#222B38] px-3 text-xs font-medium text-slate-200 hover:bg-[#2A3444] disabled:opacity-60"
             title="Güncellemeleri Denetle"
           >
-            <RefreshCw className={`h-4 w-4 ${checkingUpdate ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-3.5 w-3.5 text-[#7E96B0] ${checkingUpdate ? 'animate-spin' : ''}`}
+              strokeWidth={1.5}
+            />
+            <span className="hidden sm:inline">Güncelleme</span>
           </button>
 
           <button
             type="button"
             onClick={onOpenSettings}
             aria-label="Ayarlar"
-            className="flex min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 text-slate-700 shadow-xs transition-colors hover:bg-slate-100 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-[#334155] bg-[#222B38] px-3 text-xs font-medium text-slate-200 hover:bg-[#2A3444]"
             title="Ayarlar"
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-3.5 w-3.5 text-[#C8AE7D]" strokeWidth={1.5} />
+            <span className="hidden sm:inline">Ayarlar</span>
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Main Landscape 2-Column Content */}
-      <div className="relative z-10 mx-auto flex min-h-0 flex-1 w-full max-w-6xl items-center justify-center gap-[clamp(16px,3.5vw,52px)] px-[clamp(14px,3vw,42px)] py-[clamp(6px,1.5vh,18px)]">
-        {/* Left Column: Framed Logo Showcase & Title */}
+      <div className="relative z-10 mx-auto flex min-h-0 flex-1 w-full max-w-6xl items-center justify-center gap-[clamp(16px,3.5vw,48px)] px-[clamp(14px,3vw,36px)] py-[clamp(8px,1.5vh,18px)]">
+        {/* Left Column: Minimal Crown Emblem & Brand Pillars */}
         <div className="flex min-w-0 flex-1 flex-col items-start justify-center">
-          <div className="flex items-center gap-[clamp(12px,2vw,24px)]">
-            <div className="shrink-0 rounded-[22px] p-1 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 shadow-[0_14px_34px_rgba(180,83,9,0.22)] dark:shadow-[0_14px_38px_rgba(217,119,6,0.24)]">
-              <div className="h-[clamp(68px,16vh,118px)] w-[clamp(68px,16vh,118px)] overflow-hidden rounded-[18px] bg-[#0B1426]">
-                <img
-                  src="./icon.png"
-                  alt="Türkiye Mülk İmparatoru Logosu"
-                  className="h-full w-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
+          <div className="flex items-center gap-[clamp(14px,2vw,22px)]">
+            <div className="flex h-[clamp(64px,13vh,92px)] w-[clamp(64px,13vh,92px)] shrink-0 items-center justify-center rounded-[20px] border border-[#C8AE7D]/55 bg-[#222B38]">
+              <Crown className="h-[clamp(30px,6vh,44px)] w-[clamp(30px,6vh,44px)] text-[#C8AE7D]" strokeWidth={1.5} />
             </div>
 
             <div className="min-w-0">
-              <h1 className="font-display text-[clamp(1.25rem,2.9vw,2.55rem)] font-bold leading-tight tracking-tight text-slate-900 dark:text-white [text-wrap:balance]">
-                Türkiye Mülk İmparatoru
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7E96B0]">
+                Holding Yönetim Simülasyonu
+              </p>
+              <h1 className="mt-1 text-[clamp(1.3rem,2.8vw,2.35rem)] font-bold leading-tight tracking-[0.04em] text-slate-100">
+                MÜLK İMPARATORLUĞU
               </h1>
-              <p className="mt-1 max-w-md text-[clamp(0.74rem,1.2vw,0.92rem)] leading-snug text-slate-600 dark:text-slate-300">
-                Türkiye haritasında dilediğiniz noktaya pin bırakın, stratejik işletmeler kurun ve
-                gerçek oyuncularla emlak imparatorluğunuzu büyütün.
+              <p className="mt-1.5 max-w-md text-[clamp(0.75rem,1.15vw,0.88rem)] leading-relaxed text-slate-400">
+                Türkiye haritasında stratejik noktalara şubeler kurun, nakit akışını yönetin ve
+                gerçek oyuncularla holdinginizi büyütün.
               </p>
             </div>
           </div>
 
-          {/* 3 Concise Gameplay Pillars */}
-          <div className="mt-[clamp(12px,2.5vh,24px)] grid w-full max-w-lg grid-cols-3 gap-3 border-t border-slate-200/90 pt-[clamp(8px,1.8vh,16px)] dark:border-slate-800">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                <MapPin className="h-3.5 w-3.5 shrink-0" />
-                <span>Serbest Pin</span>
-              </div>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                81 ilde dilediğiniz noktaya işletme kurun.
+          {/* 3 Matte Pillar Cards */}
+          <div className="mt-[clamp(12px,2.4vh,24px)] grid w-full max-w-lg grid-cols-3 gap-2.5">
+            <div className="rounded-[20px] border border-[#334155] bg-[#222B38] p-3">
+              <MapPin className="h-4 w-4 text-[#C8AE7D]" strokeWidth={1.5} />
+              <p className="mt-2 text-xs font-semibold text-slate-100">81 İl Harita</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
+                Dilediğiniz noktada şube ve mülk yatırımı.
               </p>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                <Building2 className="h-3.5 w-3.5 shrink-0" />
-                <span>14 Sektör</span>
-              </div>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                Kafeden holding gökdelenine tam ekonomi.
+            <div className="rounded-[20px] border border-[#334155] bg-[#222B38] p-3">
+              <Building2 className="h-4 w-4 text-[#7A9E7E]" strokeWidth={1.5} />
+              <p className="mt-2 text-xs font-semibold text-slate-100">14 Sektör</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
+                Kafeden borsaya ve holding kulesine tam akış.
               </p>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                <Bell className="h-3.5 w-3.5 shrink-0" />
-                <span>Canlı Dünya</span>
-              </div>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                Gerçek patron hesapları ve canlı harita.
+            <div className="rounded-[20px] border border-[#334155] bg-[#222B38] p-3">
+              <Globe className="h-4 w-4 text-[#7E96B0]" strokeWidth={1.5} />
+              <p className="mt-2 text-xs font-semibold text-slate-100">Canlı Rekabet</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
+                Gerçek patron hesapları ve canlı piyasa.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Real Account Auth / Active Patron Panel */}
+        {/* Right Column: Matte Save Slot / Account Card */}
         <section
           aria-label="Hesap Girişi ve Kayıt"
-          className="max-h-full w-[clamp(320px,44vw,430px)] shrink-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-[clamp(12px,2vh,20px)] shadow-lg shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-black/30"
+          className="max-h-full w-[clamp(320px,44vw,430px)] shrink-0 overflow-y-auto rounded-[20px] border border-[#334155] bg-[#222B38] p-[clamp(14px,2.2vh,22px)]"
         >
           {user ? (
             <div data-testid="logged-in-panel" className="flex flex-col gap-3">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-2.5 dark:border-slate-800">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-base font-extrabold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+              <div className="flex items-center gap-3 rounded-[16px] border border-[#334155] bg-[#181F29] p-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8AE7D]/50 bg-[#222B38] text-base font-bold text-[#C8AE7D]">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p
                     data-testid="menu-patron-name"
-                    className="truncate text-sm font-bold text-slate-900 dark:text-white"
+                    className="truncate text-sm font-bold text-slate-100"
                   >
                     {user.name}
                   </p>
                   <p
                     data-testid="menu-patron-username"
-                    className="truncate text-xs font-medium text-slate-500 dark:text-slate-400"
+                    className="truncate text-xs text-slate-400"
                   >
-                    @{user.username} · Kayıtlı Patron Hesabı
+                    @{user.username} · Kayıtlı Holding Slotu
                   </p>
                 </div>
+                <span className="rounded-full border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-2.5 py-1 text-[10px] font-semibold text-[#7A9E7E]">
+                  {savedBusinessCount > 0 ? `${savedBusinessCount} Şube` : 'Hazır'}
+                </span>
               </div>
 
               {savedBusinessCount === 0 && (
                 <div>
                   <label
                     htmlFor="hq-city-select-logged"
-                    className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                    className="block text-[11px] font-semibold text-slate-300"
                   >
                     Merkez Şehir (Başlangıç İli)
                   </label>
@@ -283,7 +253,7 @@ export function MainMenu({
                     data-testid="starting-city-select"
                     value={startingCityPlate}
                     onChange={(e) => onSelectStartingCity(Number(e.target.value))}
-                    className="mt-1 min-h-[38px] w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-xs font-bold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    className="mt-1 min-h-[38px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] px-3 text-xs font-medium text-slate-100 focus:border-[#C8AE7D] focus:outline-none"
                   >
                     {TURKEY_PROVINCES.map((prov) => (
                       <option key={prov.plate} value={prov.plate}>
@@ -299,29 +269,29 @@ export function MainMenu({
                 data-start="true"
                 data-testid="continue-game-btn"
                 onClick={onContinueLoggedIn}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-700 active:scale-[0.99] whitespace-nowrap"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[14px] bg-[#C8AE7D] px-4 py-2.5 text-sm font-bold text-[#181F29] hover:bg-[#D2BB8E] whitespace-nowrap"
               >
-                <Play className="h-4 w-4 fill-current" />
-                <span>OYUNA DEVAM ET</span>
+                <Play className="h-4 w-4" strokeWidth={1.75} />
+                <span>Devam Et</span>
               </button>
 
               <button
                 type="button"
                 data-testid="menu-signout-btn"
                 onClick={onSignOut}
-                className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 whitespace-nowrap"
+                className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-[14px] border border-[#334155] bg-[#181F29] px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-[#2A3444] whitespace-nowrap"
               >
-                <LogOut className="h-3.5 w-3.5" />
-                <span>Hesaptan Çıkış Yap</span>
+                <LogOut className="h-3.5 w-3.5 text-[#B86B5E]" strokeWidth={1.5} />
+                <span>Yeni Holding Kur / Hesap Değiştir</span>
               </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2.5">
-              {/* Segmented Tabs: Giriş Yap / Yeni Hesap Oluştur */}
+              {/* Segmented Matte Tabs: Giriş Yap / Yeni Holding Kur */}
               <div
                 role="tablist"
                 aria-label="Hesap Sekmeleri"
-                className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/90"
+                className="grid grid-cols-2 gap-1.5 rounded-[14px] border border-[#334155] bg-[#181F29] p-1"
               >
                 <button
                   type="button"
@@ -329,13 +299,13 @@ export function MainMenu({
                   aria-selected={activeTab === 'login'}
                   data-testid="auth-tab-login"
                   onClick={() => handleSwitchTab('login')}
-                  className={`flex min-h-[34px] items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold transition-all whitespace-nowrap ${
+                  className={`flex min-h-[34px] items-center justify-center gap-1.5 rounded-[10px] px-2 text-xs font-semibold whitespace-nowrap ${
                     activeTab === 'login'
-                      ? 'bg-white text-slate-900 shadow-xs dark:bg-amber-500 dark:text-slate-950'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                      ? 'bg-[#334155] text-slate-100'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <LogIn className="h-3.5 w-3.5 shrink-0" />
+                  <LogIn className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                   <span>Giriş Yap</span>
                 </button>
                 <button
@@ -344,14 +314,14 @@ export function MainMenu({
                   aria-selected={activeTab === 'register'}
                   data-testid="auth-tab-register"
                   onClick={() => handleSwitchTab('register')}
-                  className={`flex min-h-[34px] items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold transition-all whitespace-nowrap ${
+                  className={`flex min-h-[34px] items-center justify-center gap-1.5 rounded-[10px] px-2 text-xs font-semibold whitespace-nowrap ${
                     activeTab === 'register'
-                      ? 'bg-white text-slate-900 shadow-xs dark:bg-amber-500 dark:text-slate-950'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                      ? 'bg-[#334155] text-slate-100'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <UserPlus className="h-3.5 w-3.5 shrink-0" />
-                  <span>Yeni Hesap Oluştur</span>
+                  <Briefcase className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+                  <span>Yeni Holding Kur</span>
                 </button>
               </div>
 
@@ -360,12 +330,15 @@ export function MainMenu({
                   <div>
                     <label
                       htmlFor="auth-username"
-                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                      className="block text-[11px] font-semibold text-slate-300"
                     >
-                      Kullanıcı Adı <span className="text-rose-500">*</span>
+                      Kullanıcı Adı <span className="text-[#B86B5E]">*</span>
                     </label>
-                    <div className="relative mt-0.5">
-                      <User className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <div className="relative mt-1">
+                      <User
+                        className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                        strokeWidth={1.5}
+                      />
                       <input
                         id="auth-username"
                         data-testid="login-username-input"
@@ -381,7 +354,7 @@ export function MainMenu({
                         autoCapitalize="none"
                         spellCheck={false}
                         maxLength={24}
-                        className="min-h-[38px] w-full rounded-xl border border-slate-300 bg-slate-50 pl-8 pr-3 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+                        className="min-h-[38px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] pl-8 pr-3 text-xs font-medium text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -389,11 +362,11 @@ export function MainMenu({
                   <div>
                     <label
                       htmlFor="auth-password"
-                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                      className="block text-[11px] font-semibold text-slate-300"
                     >
-                      Şifre <span className="text-rose-500">*</span>
+                      Şifre <span className="text-[#B86B5E]">*</span>
                     </label>
-                    <div className="relative mt-0.5">
+                    <div className="relative mt-1">
                       <input
                         id="auth-password"
                         data-testid="login-password-input"
@@ -407,15 +380,19 @@ export function MainMenu({
                         placeholder="••••••••"
                         autoComplete="current-password"
                         maxLength={64}
-                        className="min-h-[38px] w-full rounded-xl border border-slate-300 bg-slate-50 pl-3 pr-9 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+                        className="min-h-[38px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] pl-3 pr-9 text-xs font-medium text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
                         aria-label={showPassword ? 'Şifreyi Gizle' : 'Şifreyi Göster'}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-200"
                       >
-                        {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        {showPassword ? (
+                          <EyeOff className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        ) : (
+                          <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -425,12 +402,15 @@ export function MainMenu({
                   <div>
                     <label
                       htmlFor="auth-username"
-                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                      className="block text-[11px] font-semibold text-slate-300"
                     >
-                      Kullanıcı Adı <span className="text-rose-500">*</span>
+                      Kullanıcı Adı <span className="text-[#B86B5E]">*</span>
                     </label>
-                    <div className="relative mt-0.5">
-                      <User className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <div className="relative mt-1">
+                      <User
+                        className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                        strokeWidth={1.5}
+                      />
                       <input
                         id="auth-username"
                         data-testid="register-username-input"
@@ -446,7 +426,7 @@ export function MainMenu({
                         autoCapitalize="none"
                         spellCheck={false}
                         maxLength={24}
-                        className="min-h-[36px] w-full rounded-xl border border-slate-300 bg-slate-50 pl-7 pr-2 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+                        className="min-h-[36px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] pl-7 pr-2 text-xs font-medium text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -454,11 +434,11 @@ export function MainMenu({
                   <div>
                     <label
                       htmlFor="auth-password"
-                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                      className="block text-[11px] font-semibold text-slate-300"
                     >
-                      Şifre <span className="text-rose-500">*</span>
+                      Şifre <span className="text-[#B86B5E]">*</span>
                     </label>
-                    <div className="relative mt-0.5">
+                    <div className="relative mt-1">
                       <input
                         id="auth-password"
                         data-testid="register-password-input"
@@ -472,15 +452,19 @@ export function MainMenu({
                         placeholder="En az 4 krk."
                         autoComplete="new-password"
                         maxLength={64}
-                        className="min-h-[36px] w-full rounded-xl border border-slate-300 bg-slate-50 pl-2.5 pr-8 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+                        className="min-h-[36px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] pl-2.5 pr-8 text-xs font-medium text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
                         aria-label={showPassword ? 'Şifreyi Gizle' : 'Şifreyi Göster'}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-200"
                       >
-                        {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        {showPassword ? (
+                          <EyeOff className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        ) : (
+                          <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -488,9 +472,9 @@ export function MainMenu({
                   <div>
                     <label
                       htmlFor="auth-displayname"
-                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                      className="block text-[11px] font-semibold text-slate-300"
                     >
-                      Patron / Görünen Ad <span className="text-rose-500">*</span>
+                      Patron / Görünen Ad <span className="text-[#B86B5E]">*</span>
                     </label>
                     <input
                       id="auth-displayname"
@@ -504,14 +488,14 @@ export function MainMenu({
                       }}
                       placeholder="Kemal Holding"
                       maxLength={32}
-                      className="mt-0.5 min-h-[36px] w-full rounded-xl border border-slate-300 bg-slate-50 px-2.5 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+                      className="mt-1 min-h-[36px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] px-2.5 text-xs font-medium text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
                     />
                   </div>
 
                   <div>
                     <label
                       htmlFor="hq-city-select"
-                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300"
+                      className="block text-[11px] font-semibold text-slate-300"
                     >
                       Merkez Şehir
                     </label>
@@ -520,7 +504,7 @@ export function MainMenu({
                       data-testid="starting-city-select"
                       value={startingCityPlate}
                       onChange={(e) => onSelectStartingCity(Number(e.target.value))}
-                      className="mt-0.5 min-h-[36px] w-full rounded-xl border border-slate-300 bg-slate-50 px-2 text-xs font-bold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      className="mt-1 min-h-[36px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] px-2 text-xs font-medium text-slate-100 focus:border-[#C8AE7D] focus:outline-none"
                     >
                       {TURKEY_PROVINCES.map((prov) => (
                         <option key={prov.plate} value={prov.plate}>
@@ -537,9 +521,9 @@ export function MainMenu({
                 <div
                   role="alert"
                   data-testid="auth-error-alert"
-                  className="flex items-start gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 dark:text-rose-300"
+                  className="flex items-start gap-1.5 rounded-[14px] border border-[#B86B5E]/50 bg-[#B86B5E]/15 px-3 py-2 text-[11px] font-medium text-[#E8B4AA]"
                 >
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#B86B5E]" strokeWidth={1.5} />
                   <span>{displayedError}</span>
                 </div>
               )}
@@ -549,22 +533,22 @@ export function MainMenu({
                 disabled={authLoading}
                 data-start="true"
                 data-testid={activeTab === 'login' ? 'login-submit-btn' : 'register-submit-btn'}
-                className="mt-0.5 flex min-h-[40px] w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold tracking-wide text-white shadow-sm transition-colors hover:bg-amber-700 active:scale-[0.99] disabled:opacity-60 whitespace-nowrap"
+                className="mt-1 flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[14px] bg-[#C8AE7D] px-4 py-2 text-xs font-bold tracking-wide text-[#181F29] hover:bg-[#D2BB8E] disabled:opacity-60 whitespace-nowrap"
               >
                 {authLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                    <span>{activeTab === 'login' ? 'GİRİŞ YAPILIYOR...' : 'HESAP OLUŞTURULUYOR...'}</span>
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0" strokeWidth={1.5} />
+                    <span>{activeTab === 'login' ? 'GİRİŞ YAPILIYOR...' : 'HOLDİNG KURULUYOR...'}</span>
                   </>
                 ) : activeTab === 'login' ? (
                   <>
-                    <LogIn className="h-4 w-4 shrink-0" />
-                    <span>GİRİŞ YAP</span>
+                    <LogIn className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                    <span>Giriş Yap ve Devam Et</span>
                   </>
                 ) : (
                   <>
-                    <UserPlus className="h-4 w-4 shrink-0" />
-                    <span>HESAP OLUŞTUR VE BAŞLA</span>
+                    <UserPlus className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                    <span>Yeni Holding Kur ve Başla</span>
                   </>
                 )}
               </button>
@@ -573,9 +557,9 @@ export function MainMenu({
         </section>
       </div>
 
-      {/* Subtle Bottom Hint Line */}
-      <footer className="relative z-10 flex shrink-0 items-center justify-center px-4 pb-[clamp(6px,1.2vh,12px)] text-[11px] text-slate-400 dark:text-slate-500">
-        <span>Yatay Ekran · Haritada Pin Bırak · İşletmeni Kur · İmparatorluğunu Yönet</span>
+      {/* Subtle Matte Footer */}
+      <footer className="relative z-10 flex shrink-0 items-center justify-center px-4 pb-[clamp(6px,1.2vh,12px)] text-[11px] text-slate-500">
+        <span>fu Games · Yatay Yönetici Paneli · 81 İl Canlı Holding Simülasyonu</span>
       </footer>
     </main>
   );

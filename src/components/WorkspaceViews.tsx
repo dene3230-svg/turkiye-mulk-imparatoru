@@ -121,54 +121,54 @@ export function FinansWorkspace({
         data-testid="finance-kpi-strip"
         className="grid shrink-0 grid-cols-2 gap-1.5 min-[680px]:grid-cols-4 lg:gap-3"
       >
-        <div className="rounded-2xl border border-cyan-500/30 bg-[#101B30]/88 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+        <div className="rounded-[20px] border border-[#334155] bg-[#222B38] px-2.5 py-1.5 lg:px-3.5 lg:py-2.5">
           <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
             Toplam Likit Kasa
           </div>
           <div
             data-testid="finance-kpi-cash"
             className={`mt-0.5 truncate font-mono-num text-xs font-extrabold lg:mt-1 lg:text-lg ${
-              metrics.totalCash < 0 ? 'text-rose-400' : 'text-white'
+              metrics.totalCash < 0 ? 'text-[#B86B5E]' : 'text-white'
             }`}
           >
             {formatTL(metrics.totalCash)}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-amber-400/35 bg-gradient-to-r from-[#211E17]/90 to-[#181728]/90 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+        <div className="rounded-[20px] border border-[#C8AE7D]/45 bg-[#222B38] px-2.5 py-1.5 lg:px-3.5 lg:py-2.5">
           <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
             Kredi Puanı & Aktif Borç
           </div>
           <div
             data-testid="finance-kpi-credit"
-            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-amber-300 lg:mt-1 lg:text-lg"
+            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-[#C8AE7D] lg:mt-1 lg:text-lg"
           >
             {state.creditScore} <span className="text-slate-500">·</span>{' '}
-            <span className={metrics.activeLoanDebt > 0 ? 'text-rose-300' : 'text-rose-200'}>
+            <span className={metrics.activeLoanDebt > 0 ? 'text-[#B86B5E]' : 'text-[#B86B5E]'}>
               {formatTL(metrics.activeLoanDebt, true)}
             </span>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-indigo-400/30 bg-[#121B35]/88 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+        <div className="rounded-[20px] border border-[#334155] bg-[#222B38] px-2.5 py-1.5 lg:px-3.5 lg:py-2.5">
           <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
             Borsa & Yatırım Portföyü
           </div>
           <div
             data-testid="finance-kpi-portfolio"
-            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-indigo-300 lg:mt-1 lg:text-lg"
+            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-[#7E96B0] lg:mt-1 lg:text-lg"
           >
             {formatTL(metrics.stockPortfolioValue)}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-rose-500/30 bg-[#1B172C]/88 px-2.5 py-1.5 backdrop-blur-md lg:px-3.5 lg:py-2.5">
+        <div className="rounded-[20px] border border-[#B86B5E]/45 bg-[#222B38] px-2.5 py-1.5 lg:px-3.5 lg:py-2.5">
           <div className="truncate text-[9.5px] font-medium text-slate-400 lg:text-[11px]">
             Günlük Operasyon Gideri
           </div>
           <div
             data-testid="finance-kpi-expenses"
-            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-rose-300 lg:mt-1 lg:text-lg"
+            className="mt-0.5 truncate font-mono-num text-xs font-extrabold text-[#B86B5E] lg:mt-1 lg:text-lg"
           >
             {formatTL(metrics.dailyOperatingExpenses)}
           </div>
@@ -182,16 +182,16 @@ export function FinansWorkspace({
            ============================================================ */}
         <div
           data-testid="finance-col-banking"
-          className="flex min-h-0 flex-col justify-between rounded-2xl border border-amber-400/40 bg-gradient-to-b from-[#2B2312]/90 via-[#151B2C]/92 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(251,191,36,0.14)] backdrop-blur-md min-[680px]:col-span-4 lg:p-4"
+          className="flex min-h-0 flex-col justify-between rounded-[20px] border border-[#C8AE7D]/45 bg-[#222B38] p-2.5 min-[680px]:col-span-4 lg:p-4"
         >
           {/* Top Icon + Limit Badge */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-400/45 bg-amber-500/15 text-amber-300 lg:h-10 lg:w-10">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D] lg:h-10 lg:w-10">
               <Landmark className="h-4 w-4 lg:h-5 lg:w-5" />
             </div>
             <span
               data-testid="finance-credit-limit-badge"
-              className="rounded-full border border-amber-400/40 bg-amber-500/15 px-2.5 py-0.5 font-mono-num text-[9.5px] font-extrabold text-amber-200 lg:px-3 lg:py-1 lg:text-xs"
+              className="rounded-full border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-2.5 py-0.5 font-mono-num text-[9.5px] font-extrabold text-[#C8AE7D] lg:px-3 lg:py-1 lg:text-xs"
             >
               Limit: {formatTL(metrics.availableCreditLimit, true)}
             </span>
@@ -210,7 +210,7 @@ export function FinansWorkspace({
           {/* Credit Eligibility Progress Bar */}
           <div
             data-testid="finance-credit-eligibility"
-            className="mt-2 rounded-xl border border-slate-700/70 bg-[#0D1526]/80 px-2.5 py-1.5 lg:mt-3 lg:px-3 lg:py-2.5"
+            className="mt-2 rounded-xl border border-[#334155] bg-[#181F29] px-2.5 py-1.5 lg:mt-3 lg:px-3 lg:py-2.5"
           >
             <div className="flex items-center justify-between gap-1.5 text-[9.5px] lg:text-[11px]">
               <span className="font-bold text-slate-200">Kredi Uygunluğu</span>
@@ -218,8 +218,8 @@ export function FinansWorkspace({
                 data-testid="finance-credit-lock-badge"
                 className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-mono-num text-[8.5px] font-extrabold lg:px-2 lg:text-[10px] ${
                   fm.creditUnlocked
-                    ? 'border border-emerald-400/45 bg-emerald-500/15 text-emerald-300'
-                    : 'border border-rose-400/45 bg-rose-500/15 text-rose-300'
+                    ? 'border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E]'
+                    : 'border border-[#B86B5E]/45 bg-[#B86B5E]/15 text-[#B86B5E]'
                 }`}
               >
                 {fm.creditUnlocked ? (
@@ -230,12 +230,12 @@ export function FinansWorkspace({
                 {fm.creditUnlocked ? `UYGUN · %100` : `KİLİTLİ · %${fm.creditEligibilityPct}`}
               </span>
             </div>
-            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800/95 lg:h-2">
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532] lg:h-2">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${
                   fm.creditUnlocked
-                    ? 'bg-gradient-to-r from-emerald-400 to-cyan-300 shadow-[0_0_10px_rgba(52,211,153,0.45)]'
-                    : 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 shadow-[0_0_8px_rgba(56,189,248,0.35)]'
+                    ? 'bg-[#7A9E7E] '
+                    : 'bg-[#7E96B0] '
                 }`}
                 style={{ width: `${fm.creditEligibilityPct}%` }}
               />
@@ -253,10 +253,10 @@ export function FinansWorkspace({
             </span>
             <span
               data-testid="finance-interest-discount"
-              className="rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 font-mono-num text-[9px] font-bold text-amber-200 lg:px-2.5 lg:text-[11px]"
+              className="rounded-full border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-2 py-0.5 font-mono-num text-[9px] font-bold text-[#C8AE7D] lg:px-2.5 lg:text-[11px]"
             >
               Faiz İndirimi:{' '}
-              <strong className="text-cyan-300">-%{metrics.loanInterestDiscountPct}</strong>
+              <strong className="text-[#7E96B0]">-%{metrics.loanInterestDiscountPct}</strong>
             </span>
           </div>
 
@@ -266,7 +266,7 @@ export function FinansWorkspace({
               type="button"
               data-testid="finance-btn-take-loan"
               onClick={() => onOpenBanking('loans')}
-              className="flex min-h-[32px] items-center justify-center rounded-xl border border-amber-300/55 bg-amber-500/20 px-2 py-1 text-[9.5px] font-extrabold tracking-wide text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.16)] transition-all hover:bg-amber-500/30 active:scale-[0.98] lg:min-h-[40px] lg:text-xs"
+              className="flex min-h-[32px] items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 px-2 py-1 text-[9.5px] font-extrabold tracking-wide text-amber-100 transition-all hover:bg-[#C8AE7D]/15 active:scale-[0.98] lg:min-h-[40px] lg:text-xs"
             >
               KREDİ ÇEK
             </button>
@@ -274,12 +274,12 @@ export function FinansWorkspace({
               type="button"
               data-testid="finance-btn-create-bank"
               onClick={() => onOpenBanking('own-bank')}
-              className="flex min-h-[32px] flex-col items-center justify-center rounded-xl border border-slate-600/80 bg-[#1A243B]/90 px-1.5 py-1 text-center transition-all hover:border-amber-300/60 hover:bg-[#222E4A] active:scale-[0.98] lg:min-h-[40px]"
+              className="flex min-h-[32px] flex-col items-center justify-center rounded-xl border border-slate-600/80 bg-[#1A243B]/90 px-1.5 py-1 text-center transition-all hover:border-[#C8AE7D]/45 hover:bg-[#222E4A] active:scale-[0.98] lg:min-h-[40px]"
             >
               <span className="text-[9px] font-extrabold leading-none tracking-wide text-white lg:text-[11px]">
                 BANKA KUR
               </span>
-              <span className="mt-0.5 font-mono-num text-[7.5px] font-bold leading-none text-amber-300 lg:text-[9.5px]">
+              <span className="mt-0.5 font-mono-num text-[7.5px] font-bold leading-none text-[#C8AE7D] lg:text-[9.5px]">
                 (5 Milyar ₺)
               </span>
             </button>
@@ -296,18 +296,18 @@ export function FinansWorkspace({
           {/* TOP CARD: BİLANÇO, VERGİ & MUHASEBE */}
           <div
             data-testid="finance-card-accounting"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-cyan-400/35 bg-gradient-to-b from-[#102B3D]/90 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(34,211,238,0.12)] backdrop-blur-md lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2.5 lg:p-3.5"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-500/15 text-cyan-300 lg:h-9 lg:w-9">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-9 lg:w-9">
                 <FileSpreadsheet className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
               </div>
               <span
                 data-testid="finance-pending-tax-badge"
                 className={`rounded-full border px-2 py-0.5 font-mono-num text-[9px] font-extrabold lg:px-2.5 lg:text-[11px] ${
                   fm.unpaidTaxCount > 0
-                    ? 'border-amber-400/50 bg-amber-500/15 text-amber-200'
-                    : 'border-cyan-400/40 bg-cyan-500/15 text-cyan-200'
+                    ? 'border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D]'
+                    : 'border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0]'
                 }`}
               >
                 {fm.unpaidTaxCount} Bekleyen Vergi
@@ -330,7 +330,7 @@ export function FinansWorkspace({
                   Muhasebe:{' '}
                   <strong
                     className={
-                      fm.accountingAutoActive ? 'text-emerald-300' : 'text-cyan-200'
+                      fm.accountingAutoActive ? 'text-[#7A9E7E]' : 'text-[#7E96B0]'
                     }
                   >
                     {fm.accountingAutoActive ? 'Otomatik Takip' : 'Manuel Takip'}
@@ -338,7 +338,7 @@ export function FinansWorkspace({
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-[8px] text-slate-400 lg:text-[9.5px]">
                   <span className="inline-flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#7E96B0]" />
                     Gelir
                   </span>
                   <span className="inline-flex items-center gap-1">
@@ -352,7 +352,7 @@ export function FinansWorkspace({
               <div
                 data-testid="finance-mini-barchart"
                 aria-label="Gelir gider mini grafiği"
-                className="flex h-7 shrink-0 items-end gap-1.5 rounded-lg border border-slate-700/60 bg-[#0B1324]/80 px-2 py-1 lg:h-11 lg:gap-2 lg:px-2.5"
+                className="flex h-7 shrink-0 items-end gap-1.5 rounded-lg border border-[#334155] bg-[#181F29] px-2 py-1 lg:h-11 lg:gap-2 lg:px-2.5"
               >
                 {fm.miniBars.map((bar, idx) => (
                   <div key={`${bar.label}-${idx}`} className="flex h-full items-end gap-0.5">
@@ -375,7 +375,7 @@ export function FinansWorkspace({
               type="button"
               data-testid="finance-btn-accounting"
               onClick={onOpenAccounting}
-              className="mt-1.5 flex min-h-[28px] w-full items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-500/15 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/25 active:scale-[0.98] lg:mt-2 lg:min-h-[34px] lg:text-xs"
+              className="mt-1.5 flex min-h-[28px] w-full items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-cyan-100 transition-all hover:bg-[#7E96B0]/15 active:scale-[0.98] lg:mt-2 lg:min-h-[34px] lg:text-xs"
             >
               DETAY / ÖDE
               {fm.unpaidTaxTotal > 0 ? ` (${formatTL(fm.unpaidTaxTotal, true)})` : ''}
@@ -385,10 +385,10 @@ export function FinansWorkspace({
           {/* BOTTOM CARD: 00:00 GÜN SONU KAPANIŞI */}
           <div
             data-testid="finance-card-dayend"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-emerald-400/35 bg-gradient-to-b from-[#10302C]/90 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(52,211,153,0.12)] backdrop-blur-md lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#7A9E7E]/45 bg-[#222B38] p-2.5 lg:p-3.5"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-emerald-400/40 bg-emerald-500/15 text-emerald-300 lg:h-9 lg:w-9">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E] lg:h-9 lg:w-9">
                 <CalendarCheck2 className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
               </div>
               <button
@@ -397,8 +397,8 @@ export function FinansWorkspace({
                 onClick={onOpenDayEnd}
                 className={`rounded-full border px-2 py-0.5 font-mono-num text-[9px] font-extrabold transition-colors lg:px-2.5 lg:text-[11px] ${
                   fm.pendingDayEndCount > 0
-                    ? 'border-emerald-300/60 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30'
-                    : 'border-slate-600/70 bg-slate-800/70 text-slate-300 hover:border-emerald-400/40'
+                    ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E] hover:bg-[#7A9E7E]/15'
+                    : 'border-slate-600/70 bg-[#1D2532] text-slate-300 hover:border-[#7A9E7E]/45'
                 }`}
               >
                 {fm.pendingDayEndCount} Bekleyen Kapanış
@@ -423,8 +423,8 @@ export function FinansWorkspace({
                   className={`shrink-0 font-mono-num font-extrabold ${
                     (fm.pendingDayEndCount > 0 ? fm.pendingDayEndNetCash : fm.accruedTodayNetCash) <
                     0
-                      ? 'text-rose-300'
-                      : 'text-emerald-300'
+                      ? 'text-[#B86B5E]'
+                      : 'text-[#7A9E7E]'
                   }`}
                 >
                   {fm.pendingDayEndCount > 0
@@ -452,8 +452,8 @@ export function FinansWorkspace({
               }}
               className={`mt-1.5 flex min-h-[28px] w-full items-center justify-center rounded-xl px-3 py-1 text-[9.5px] font-extrabold tracking-wide transition-all active:scale-[0.98] lg:mt-2 lg:min-h-[34px] lg:text-xs ${
                 fm.pendingDayEndCount > 0
-                  ? 'border border-cyan-300/75 bg-gradient-to-r from-emerald-500/30 to-cyan-500/30 text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.28)] hover:brightness-110'
-                  : 'border border-cyan-400/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+                  ? 'border border-[#334155] bg-[#7A9E7E] text-cyan-100  hover:brightness-110'
+                  : 'border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] hover:bg-[#7E96B0]/15'
               }`}
             >
               HASILATI AKTAR
@@ -466,18 +466,18 @@ export function FinansWorkspace({
            ============================================================ */}
         <div
           data-testid="finance-col-borsa"
-          className="flex min-h-0 flex-col justify-between rounded-2xl border border-indigo-400/40 bg-gradient-to-b from-[#1E1F4D]/92 via-[#151A38]/92 to-[#101829]/95 p-2.5 shadow-[inset_0_1px_0_rgba(129,140,248,0.16)] backdrop-blur-md min-[680px]:col-span-4 lg:p-4"
+          className="flex min-h-0 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2.5 min-[680px]:col-span-4 lg:p-4"
         >
           {/* Top Icon + Stock Positions Badge */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-400/45 bg-indigo-500/15 text-indigo-300 lg:h-10 lg:w-10">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-10 lg:w-10">
               <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5" />
             </div>
             <button
               type="button"
               data-testid="finance-positions-badge"
               onClick={onOpenInvestments}
-              className="rounded-full border border-indigo-400/45 bg-indigo-500/15 px-2.5 py-0.5 font-mono-num text-[9.5px] font-extrabold text-indigo-200 transition-colors hover:bg-indigo-500/25 lg:px-3 lg:py-1 lg:text-xs"
+              className="rounded-full border border-[#334155] bg-[#7E96B0]/15 px-2.5 py-0.5 font-mono-num text-[9.5px] font-extrabold text-[#7E96B0] transition-colors hover:bg-[#7E96B0]/15 lg:px-3 lg:py-1 lg:text-xs"
             >
               {fm.stockPositionCount} Hisse Pozisyonu
             </button>
@@ -496,7 +496,7 @@ export function FinansWorkspace({
           {/* Live BIST 100 Sparkline Box */}
           <div
             data-testid="finance-bist-sparkline"
-            className="mt-1.5 rounded-xl border border-indigo-400/25 bg-[#0D132B]/85 px-2.5 py-1.5 lg:mt-2.5 lg:px-3 lg:py-2.5"
+            className="mt-1.5 rounded-xl border border-[#334155] bg-[#0D132B]/85 px-2.5 py-1.5 lg:mt-2.5 lg:px-3 lg:py-2.5"
           >
             <div className="flex items-center justify-between gap-2 text-[9.5px] lg:text-xs">
               <span className="font-bold text-slate-200">
@@ -508,7 +508,7 @@ export function FinansWorkspace({
               <span
                 data-testid="finance-bist-change"
                 className={`font-mono-num font-extrabold ${
-                  bistUp ? 'text-cyan-300' : 'text-rose-400'
+                  bistUp ? 'text-[#7E96B0]' : 'text-[#B86B5E]'
                 }`}
               >
                 {bistUp ? '↗ +' : '↘ '}
@@ -524,12 +524,12 @@ export function FinansWorkspace({
             >
               <defs>
                 <linearGradient id="bistSparkFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={bistUp ? '#38BDF8' : '#FB7185'} stopOpacity="0.42" />
-                  <stop offset="100%" stopColor="#6366F1" stopOpacity="0.02" />
+                  <stop offset="0%" stopColor={bistUp ? '#7E96B0' : '#B86B5E'} stopOpacity="0.35" />
+                  <stop offset="100%" stopColor="#181F29" stopOpacity="0.02" />
                 </linearGradient>
                 <linearGradient id="bistSparkStroke" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#818CF8" />
-                  <stop offset="100%" stopColor={bistUp ? '#22D3EE' : '#FB7185'} />
+                  <stop offset="0%" stopColor="#7E96B0" />
+                  <stop offset="100%" stopColor={bistUp ? '#7A9E7E' : '#B86B5E'} />
                 </linearGradient>
               </defs>
               <path d={spark.areaPath} fill="url(#bistSparkFill)" />
@@ -545,7 +545,7 @@ export function FinansWorkspace({
                 cx={spark.last.x}
                 cy={spark.last.y}
                 r="3"
-                fill={bistUp ? '#22D3EE' : '#FB7185'}
+                fill={bistUp ? '#7A9E7E' : '#B86B5E'}
               />
             </svg>
           </div>
@@ -556,14 +556,14 @@ export function FinansWorkspace({
             className="mt-1.5 flex flex-col gap-1 text-[9px] lg:mt-2 lg:text-[11px]"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-semibold text-indigo-200">{fm.ipoStatusText}</span>
+              <span className="truncate font-semibold text-[#7E96B0]">{fm.ipoStatusText}</span>
               <span className="shrink-0 font-mono-num text-[8.5px] font-bold text-slate-400 lg:text-[10px]">
                 {formatTL(fm.ipoNetWorth, true)} / {formatTL(fm.ipoTargetNetWorth, true)}
               </span>
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800/95">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-400 to-cyan-300"
+                className="h-full rounded-full bg-[#7E96B0]"
                 style={{ width: `${Math.max(5, fm.ipoNetWorthPct)}%` }}
               />
             </div>
@@ -574,7 +574,7 @@ export function FinansWorkspace({
             type="button"
             data-testid="finance-btn-borsa"
             onClick={onOpenBorsa}
-            className="mt-2 flex min-h-[32px] w-full items-center justify-center rounded-xl border border-indigo-400/55 bg-indigo-500/20 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-indigo-100 shadow-[0_0_14px_rgba(99,102,241,0.22)] transition-all hover:bg-indigo-500/30 active:scale-[0.98] lg:mt-3 lg:min-h-[40px] lg:text-xs"
+            className="mt-2 flex min-h-[32px] w-full items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-3 py-1 text-[9.5px] font-extrabold tracking-wide text-indigo-100 transition-all hover:bg-[#7E96B0]/15 active:scale-[0.98] lg:mt-3 lg:min-h-[40px] lg:text-xs"
           >
             BORSA & HALKA ARZ AÇ
           </button>
@@ -686,14 +686,14 @@ export function BusinessesWorkspace({
       {/* ==================== TOP ACTION BAR (NO ŞUBE KOTASI!) ==================== */}
       <div
         data-testid="businesses-top-action-bar"
-        className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 rounded-2xl border border-slate-700/75 bg-[#101A30]/90 px-2.5 py-1.5 backdrop-blur-md lg:gap-2 lg:px-4 lg:py-2.5"
+        className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 rounded-[20px] border border-[#334155] bg-[#101A30]/90 px-2.5 py-1.5 lg:gap-2 lg:px-4 lg:py-2.5"
       >
         <div className="flex flex-wrap items-center gap-1.5 lg:gap-2">
           <button
             type="button"
             data-testid="biz-top-hr-btn"
             onClick={() => onOpenHr(state.businesses[0]?.id)}
-            className="flex items-center gap-1.5 rounded-xl border border-cyan-400/45 bg-cyan-500/15 px-2.5 py-1 text-[10px] font-bold text-cyan-200 transition-colors hover:bg-cyan-500/25 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
+            className="flex items-center gap-1.5 rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-2.5 py-1 text-[10px] font-bold text-[#7E96B0] transition-colors hover:bg-[#7E96B0]/15 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
           >
             <Users className="h-3.5 w-3.5" />
             İK & Personel
@@ -702,7 +702,7 @@ export function BusinessesWorkspace({
             type="button"
             data-testid="biz-top-franchise-btn"
             onClick={onOpenFranchise}
-            className="flex items-center gap-1.5 rounded-xl border border-emerald-400/45 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-200 transition-colors hover:bg-emerald-500/25 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
+            className="flex items-center gap-1.5 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-2.5 py-1 text-[10px] font-bold text-[#7A9E7E] transition-colors hover:bg-[#7A9E7E]/15 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
           >
             <Store className="h-3.5 w-3.5" />
             Franchise & Bayilik
@@ -711,7 +711,7 @@ export function BusinessesWorkspace({
             type="button"
             data-testid="biz-top-rivals-btn"
             onClick={onOpenRivals}
-            className="flex items-center gap-1.5 rounded-xl border border-rose-400/45 bg-rose-500/15 px-2.5 py-1 text-[10px] font-bold text-rose-200 transition-colors hover:bg-rose-500/25 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
+            className="flex items-center gap-1.5 rounded-xl border border-[#B86B5E]/45 bg-[#B86B5E]/15 px-2.5 py-1 text-[10px] font-bold text-[#B86B5E] transition-colors hover:bg-[#B86B5E]/15 whitespace-nowrap lg:px-3.5 lg:py-1.5 lg:text-xs"
           >
             <Swords className="h-3.5 w-3.5" />
             Rakip İşletmeler ({competitorBusinesses.length})
@@ -722,9 +722,9 @@ export function BusinessesWorkspace({
           type="button"
           data-testid="new-branch-on-map-btn"
           onClick={onGoMapNewBranch}
-          className="flex items-center gap-1.5 rounded-xl border border-amber-400/75 bg-gradient-to-r from-amber-500/25 to-yellow-500/15 px-3 py-1 text-[10px] font-extrabold text-amber-100 shadow-[0_0_14px_rgba(245,158,11,0.2)] transition-all hover:brightness-115 whitespace-nowrap lg:px-4 lg:py-1.5 lg:text-xs"
+          className="flex items-center gap-1.5 rounded-[14px] bg-[#C8AE7D] px-3 py-1.5 text-[10px] font-bold text-[#181F29] transition-colors hover:bg-[#D2BB8E] whitespace-nowrap lg:px-4 lg:py-1.5 lg:text-xs"
         >
-          <MapPin className="h-3.5 w-3.5 text-amber-300" />
+          <MapPin className="h-3.5 w-3.5 text-[#181F29]" strokeWidth={1.5} />
           Haritada Yeni Şube Kur
         </button>
       </div>
@@ -737,12 +737,12 @@ export function BusinessesWorkspace({
         {/* CARD 1 (TOP-LEFT): İŞLETMELERİM */}
         <div
           data-testid="biz-card-my-branches"
-          className="flex flex-col justify-between rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-[#132642]/92 via-[#101C35]/94 to-[#0C1528]/96 p-2.5 shadow-[inset_0_1px_0_rgba(34,211,238,0.16)] backdrop-blur-md lg:min-h-0 lg:p-4"
+          className="flex flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2.5 lg:min-h-0 lg:p-4"
         >
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-500/15 text-cyan-300 lg:h-10 lg:w-10">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-10 lg:w-10">
                   <Store className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <div className="min-w-0">
@@ -754,7 +754,7 @@ export function BusinessesWorkspace({
                   </p>
                 </div>
               </div>
-              <span className="shrink-0 rounded-full border border-cyan-400/40 bg-cyan-500/15 px-2 py-0.5 font-mono-num text-[9.5px] font-extrabold text-cyan-200 lg:px-2.5 lg:text-xs">
+              <span className="shrink-0 rounded-full border border-[#334155] bg-[#7E96B0]/15 px-2 py-0.5 font-mono-num text-[9.5px] font-extrabold text-[#7E96B0] lg:px-2.5 lg:text-xs">
                 {metrics.activeBranches} Aktif
                 {metrics.underConstructionBranches > 0
                   ? ` · ${metrics.underConstructionBranches} İnşaat`
@@ -763,13 +763,13 @@ export function BusinessesWorkspace({
             </div>
 
             {/* Lead Branch Summary Box */}
-            <div className="rounded-xl border border-slate-700/70 bg-[#0B1427]/85 px-2.5 py-2 lg:px-3 lg:py-2.5">
+            <div className="rounded-xl border border-[#334155] bg-[#0B1427]/85 px-2.5 py-2 lg:px-3 lg:py-2.5">
               {metrics.leadBranch ? (
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-[11px] font-extrabold text-white lg:text-sm">
                       {metrics.leadBranch.name}{' '}
-                      <span className="font-mono-num text-cyan-300">
+                      <span className="font-mono-num text-[#7E96B0]">
                         (Sv. {metrics.leadBranch.level})
                       </span>
                     </div>
@@ -777,7 +777,7 @@ export function BusinessesWorkspace({
                       Toplam {metrics.totalBranches} şube · Öncü: {metrics.leadBranch.sectorName}
                     </div>
                   </div>
-                  <div className="shrink-0 text-right font-mono-num text-xs font-extrabold text-emerald-300 lg:text-sm">
+                  <div className="shrink-0 text-right font-mono-num text-xs font-extrabold text-[#7A9E7E] lg:text-sm">
                     {formatTL(metrics.leadBranch.dailyRevenue, true)}
                     <span className="ml-0.5 text-[9px] font-semibold text-slate-400">/gün</span>
                   </div>
@@ -792,13 +792,13 @@ export function BusinessesWorkspace({
               <div className="mt-2">
                 <div className="mb-1 flex items-center justify-between text-[9px] lg:text-[11px]">
                   <span className="font-semibold text-slate-300">Ortalama Hizmet Kalitesi</span>
-                  <span className="font-mono-num font-extrabold text-cyan-300">
+                  <span className="font-mono-num font-extrabold text-[#7E96B0]">
                     %{metrics.avgQualityPct} ({metrics.avgServiceQuality.toFixed(1)}/5)
                   </span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800 lg:h-2">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532] lg:h-2">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all"
+                    className="h-full rounded-full bg-[#7A9E7E] transition-all"
                     style={{ width: `${Math.max(6, metrics.avgQualityPct)}%` }}
                   />
                 </div>
@@ -811,7 +811,7 @@ export function BusinessesWorkspace({
               type="button"
               data-testid="biz-open-branch-selector-btn"
               onClick={openBranchSelector}
-              className="flex min-h-[32px] w-full items-center justify-center rounded-xl border border-cyan-300/70 bg-gradient-to-r from-cyan-500/30 via-sky-500/25 to-emerald-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.22)] transition-all hover:brightness-115 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
+              className="flex min-h-[32px] w-full items-center justify-center rounded-[14px] border border-[#7E96B0]/50 bg-[#7E96B0]/20 px-3 py-1 text-[10px] font-bold tracking-wide text-slate-100 transition-colors hover:bg-[#7E96B0]/30 lg:min-h-[38px] lg:text-xs"
             >
               ŞUBELERİ GÖR / YÖNET
             </button>
@@ -824,11 +824,11 @@ export function BusinessesWorkspace({
         {/* CARD 2 (TOP-RIGHT): İŞLETMELERİN TOPLAM DURUMU */}
         <div
           data-testid="biz-card-total-status"
-          className="flex flex-col justify-between rounded-2xl border border-sky-400/35 bg-gradient-to-br from-[#14233F]/92 via-[#101B33]/94 to-[#0C1427]/96 p-2.5 shadow-[inset_0_1px_0_rgba(56,189,248,0.14)] backdrop-blur-md lg:min-h-0 lg:p-4"
+          className="flex flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2.5 lg:min-h-0 lg:p-4"
         >
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-sky-400/45 bg-sky-500/15 text-sky-300 lg:h-10 lg:w-10">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-10 lg:w-10">
                 <BarChart3 className="h-4 w-4 lg:h-5 lg:w-5" />
               </div>
               <div className="min-w-0">
@@ -842,32 +842,32 @@ export function BusinessesWorkspace({
             </div>
 
             {/* 3 Summary KPI Figures */}
-            <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-slate-700/70 bg-[#0B1427]/85 p-2 lg:gap-2 lg:p-2.5">
+            <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[#334155] bg-[#0B1427]/85 p-2 lg:gap-2 lg:p-2.5">
               <div className="min-w-0">
                 <div className="truncate text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
                   Günlük Ciro
                 </div>
                 <div
                   data-testid="biz-total-daily-revenue"
-                  className="mt-0.5 truncate font-mono-num text-[11px] font-extrabold text-emerald-300 lg:text-sm"
+                  className="mt-0.5 truncate font-mono-num text-[11px] font-extrabold text-[#7A9E7E] lg:text-sm"
                 >
                   {formatTL(metrics.totalDailyRevenue, true)}
                 </div>
               </div>
-              <div className="min-w-0 border-x border-slate-800 px-1.5">
+              <div className="min-w-0 border-x border-[#334155] px-1.5">
                 <div className="truncate text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
                   Hizmet Kalitesi
                 </div>
-                <div className="mt-0.5 flex items-center gap-1 font-mono-num text-[11px] font-extrabold text-amber-300 lg:text-sm">
+                <div className="mt-0.5 flex items-center gap-1 font-mono-num text-[11px] font-extrabold text-[#C8AE7D] lg:text-sm">
                   <span>{metrics.avgServiceQuality.toFixed(1)}</span>
-                  <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+                  <Star className="h-3 w-3 shrink-0 fill-amber-400 text-[#C8AE7D]" />
                 </div>
               </div>
               <div className="min-w-0">
                 <div className="truncate text-[8.5px] font-semibold text-slate-400 lg:text-[10px]">
                   Franchise Teklifi
                 </div>
-                <div className="mt-0.5 truncate font-mono-num text-[11px] font-extrabold text-cyan-200 lg:text-sm">
+                <div className="mt-0.5 truncate font-mono-num text-[11px] font-extrabold text-[#7E96B0] lg:text-sm">
                   {metrics.pendingFranchiseAppsCount} Bekleyen
                 </div>
               </div>
@@ -880,13 +880,13 @@ export function BusinessesWorkspace({
               <div>
                 <div className="flex justify-between text-[9px] lg:text-[11px]">
                   <span className="truncate text-slate-300">Müşteri Memnuniyeti</span>
-                  <span className="font-mono-num font-bold text-emerald-300">
+                  <span className="font-mono-num font-bold text-[#7A9E7E]">
                     %{metrics.customerSatisfactionPct}
                   </span>
                 </div>
-                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                    className="h-full rounded-full bg-[#7A9E7E]"
                     style={{ width: `${Math.max(5, metrics.customerSatisfactionPct)}%` }}
                   />
                 </div>
@@ -894,13 +894,13 @@ export function BusinessesWorkspace({
               <div>
                 <div className="flex justify-between text-[9px] lg:text-[11px]">
                   <span className="truncate text-slate-300">Marka Tanınırlığı</span>
-                  <span className="font-mono-num font-bold text-amber-300">
+                  <span className="font-mono-num font-bold text-[#C8AE7D]">
                     %{metrics.brandRecognitionPct}
                   </span>
                 </div>
-                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-yellow-300"
+                    className="h-full rounded-full bg-[#C8AE7D]"
                     style={{ width: `${Math.max(5, metrics.brandRecognitionPct)}%` }}
                   />
                 </div>
@@ -911,7 +911,7 @@ export function BusinessesWorkspace({
               type="button"
               data-testid="biz-open-reports-btn"
               onClick={() => setFlowStep('reports')}
-              className="flex min-h-[32px] shrink-0 items-center justify-center rounded-xl border border-sky-400/55 bg-sky-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-sky-100 transition-all hover:bg-sky-500/30 active:scale-[0.98] lg:min-h-[38px] lg:px-4 lg:text-xs"
+              className="flex min-h-[32px] shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-3 py-1 text-[10px] font-extrabold tracking-wide text-sky-100 transition-all hover:bg-[#7E96B0]/15 active:scale-[0.98] lg:min-h-[38px] lg:px-4 lg:text-xs"
             >
               RAPORLARI GÖR
             </button>
@@ -921,12 +921,12 @@ export function BusinessesWorkspace({
         {/* CARD 3 (BOTTOM-LEFT): PERSONELLER / EKİP LİSTESİ */}
         <div
           data-testid="biz-card-staff-list"
-          className="flex flex-col justify-between rounded-2xl border border-indigo-400/35 bg-gradient-to-br from-[#162040]/92 via-[#111933]/94 to-[#0C1327]/96 p-2.5 shadow-[inset_0_1px_0_rgba(129,140,248,0.14)] backdrop-blur-md lg:min-h-0 lg:p-4"
+          className="flex flex-col justify-between rounded-[20px] border border-[#334155] bg-[#222B38] p-2.5 lg:min-h-0 lg:p-4"
         >
           <div className="space-y-2 lg:min-h-0">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-400/45 bg-indigo-500/15 text-indigo-300 lg:h-10 lg:w-10">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-10 lg:w-10">
                   <Users className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <div className="min-w-0">
@@ -938,13 +938,13 @@ export function BusinessesWorkspace({
                   </p>
                 </div>
               </div>
-              <span className="shrink-0 font-mono-num text-[10px] font-bold text-indigo-200 lg:text-xs">
+              <span className="shrink-0 font-mono-num text-[10px] font-bold text-[#7E96B0] lg:text-xs">
                 {metrics.totalStaffCount} Kişi
               </span>
             </div>
 
             {/* Compact Staff Rows */}
-            <div className="space-y-1 rounded-xl border border-slate-700/70 bg-[#0B1326]/85 p-2">
+            <div className="space-y-1 rounded-xl border border-[#334155] bg-[#0B1326]/85 p-2">
               {visibleStaff.length === 0 ? (
                 <div className="py-2 text-center text-[10px] text-slate-400 lg:text-xs">
                   Henüz atanmış personel bulunmuyor. İK menüsünden ekip kurabilirsiniz.
@@ -959,12 +959,12 @@ export function BusinessesWorkspace({
                       <span className="font-bold text-white">{member.name}</span>
                       <span className="ml-1 text-slate-400">({member.roleTitle})</span>
                     </div>
-                    <span className="shrink-0 font-mono-num font-bold text-cyan-300">
+                    <span className="shrink-0 font-mono-num font-bold text-[#7E96B0]">
                       Sv.{member.level}
                     </span>
                     <span
                       className={`shrink-0 font-bold ${
-                        member.status === 'Çalışıyor' ? 'text-emerald-300' : 'text-amber-300'
+                        member.status === 'Çalışıyor' ? 'text-[#7A9E7E]' : 'text-[#C8AE7D]'
                       }`}
                     >
                       {member.status}
@@ -979,7 +979,7 @@ export function BusinessesWorkspace({
             type="button"
             data-testid="biz-open-hr-payroll-btn"
             onClick={() => onOpenHr(state.businesses[0]?.id)}
-            className="mt-2 flex min-h-[32px] w-full items-center justify-center rounded-xl border border-indigo-400/55 bg-indigo-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-indigo-100 transition-all hover:bg-indigo-500/30 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
+            className="mt-2 flex min-h-[32px] w-full items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 px-3 py-1 text-[10px] font-extrabold tracking-wide text-indigo-100 transition-all hover:bg-[#7E96B0]/15 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
           >
             İK & MAAŞ YÖNETİMİ
           </button>
@@ -988,11 +988,11 @@ export function BusinessesWorkspace({
         {/* CARD 4 (BOTTOM-RIGHT): PERSONEL DURUMU & VERİMLİLİK */}
         <div
           data-testid="biz-card-staff-efficiency"
-          className="flex flex-col justify-between rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-[#122738]/92 via-[#101D32]/94 to-[#0B1426]/96 p-2.5 shadow-[inset_0_1px_0_rgba(16,185,129,0.14)] backdrop-blur-md lg:min-h-0 lg:p-4"
+          className="flex flex-col justify-between rounded-[20px] border border-[#7A9E7E]/45 bg-[#222B38] p-2.5 lg:min-h-0 lg:p-4"
         >
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-emerald-400/45 bg-emerald-500/15 text-emerald-300 lg:h-10 lg:w-10">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E] lg:h-10 lg:w-10">
                 <Activity className="h-4 w-4 lg:h-5 lg:w-5" />
               </div>
               <div className="min-w-0">
@@ -1006,7 +1006,7 @@ export function BusinessesWorkspace({
             </div>
 
             {/* Split Metrics + Colored Dot Indicators */}
-            <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-700/70 bg-[#0B1427]/85 p-2 lg:gap-3 lg:p-2.5">
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#334155] bg-[#0B1427]/85 p-2 lg:gap-3 lg:p-2.5">
               <div className="space-y-1 text-[9.5px] lg:text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Boşta Personel:</span>
@@ -1018,7 +1018,7 @@ export function BusinessesWorkspace({
                   <span className="text-slate-400">Yorulma Seviyesi:</span>
                   <span
                     className={`font-mono-num font-extrabold ${
-                      metrics.fatiguePct >= 60 ? 'text-rose-400' : 'text-amber-300'
+                      metrics.fatiguePct >= 60 ? 'text-[#B86B5E]' : 'text-[#C8AE7D]'
                     }`}
                   >
                     %{metrics.fatiguePct}
@@ -1026,27 +1026,27 @@ export function BusinessesWorkspace({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Ortalama Verim:</span>
-                  <span className="font-mono-num font-extrabold text-emerald-300">
+                  <span className="font-mono-num font-extrabold text-[#7A9E7E]">
                     %{metrics.avgEfficiencyPct}
                   </span>
                 </div>
               </div>
 
-              <div className="space-y-1 border-l border-slate-800 pl-2 lg:pl-3">
+              <div className="space-y-1 border-l border-[#334155] pl-2 lg:pl-3">
                 <StatusDotsRow
                   label="Başarım"
                   filled={metrics.performanceDots}
-                  colorClass="bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.55)]"
+                  colorClass="bg-[#C8AE7D] "
                 />
                 <StatusDotsRow
                   label="Moral"
                   filled={metrics.moraleDots}
-                  colorClass="bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.55)]"
+                  colorClass="bg-[#7E96B0] "
                 />
                 <StatusDotsRow
                   label="Verimlilik"
                   filled={metrics.efficiencyDots}
-                  colorClass="bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.55)]"
+                  colorClass="bg-[#7A9E7E] "
                 />
               </div>
             </div>
@@ -1056,7 +1056,7 @@ export function BusinessesWorkspace({
             type="button"
             data-testid="biz-hire-train-staff-btn"
             onClick={() => onOpenHr(state.businesses[0]?.id)}
-            className="mt-2 flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-400/55 bg-emerald-500/20 px-3 py-1 text-[10px] font-extrabold tracking-wide text-emerald-100 transition-all hover:bg-emerald-500/30 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
+            className="mt-2 flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 px-3 py-1 text-[10px] font-extrabold tracking-wide text-emerald-100 transition-all hover:bg-[#7A9E7E]/15 active:scale-[0.98] lg:min-h-[38px] lg:text-xs"
           >
             <UserPlus className="h-3.5 w-3.5" />
             YENİ PERSONEL AL / EĞİT
@@ -1176,7 +1176,7 @@ export function OfficeWorkspace({
               <h2 className="text-[10px] font-extrabold tracking-wide text-slate-100 lg:text-xs">
                 MEVCUT OFİS
               </h2>
-              <span className="font-mono-num text-[9px] font-bold text-amber-300 lg:text-[10px]">
+              <span className="font-mono-num text-[9px] font-bold text-[#C8AE7D] lg:text-[10px]">
                 Kademe {currentTier.level}/4
               </span>
             </div>
@@ -1191,13 +1191,13 @@ export function OfficeWorkspace({
           {/* Architectural Interior Preview Card */}
           <div
             data-testid="office-interior-preview"
-            className="relative min-h-[96px] flex-[1.15] overflow-hidden rounded-2xl border border-slate-700/75 bg-[#0D1628] shadow-[0_8px_28px_rgba(2,6,23,0.45)]"
+            className="relative min-h-[96px] flex-[1.15] overflow-hidden rounded-[20px] border border-[#334155] bg-[#0D1628]"
           >
             <OfficeInteriorPreview tierId={currentTier.id} />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0B1221]/85 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#181F29]/85 to-transparent" />
             <div className="absolute bottom-1.5 left-2 right-2 flex items-center justify-between text-[8.5px] font-bold text-slate-200 lg:bottom-2 lg:left-3 lg:right-3 lg:text-[10px]">
               <span className="truncate drop-shadow">{currentTier.subtitle}</span>
-              <span className="shrink-0 rounded-md bg-slate-950/75 px-1.5 py-0.5 font-mono-num text-amber-300 border border-amber-400/35">
+              <span className="shrink-0 rounded-md bg-black/70 px-1.5 py-0.5 font-mono-num text-[#C8AE7D] border border-[#C8AE7D]/45">
                 Tanınırlık %{metrics.brandRecognitionPct}
               </span>
             </div>
@@ -1210,22 +1210,22 @@ export function OfficeWorkspace({
                 PRESTİJ PUANI:{' '}
                 <strong
                   data-testid="office-prestige-score"
-                  className="font-mono-num text-amber-400"
+                  className="font-mono-num text-[#C8AE7D]"
                 >
                   {prestigePct}
                 </strong>{' '}
                 <span className="font-mono-num font-semibold text-slate-400">/ 100</span>
               </span>
-              <span className="font-mono-num text-[9.5px] font-bold text-amber-300 lg:text-[11px]">
+              <span className="font-mono-num text-[9.5px] font-bold text-[#C8AE7D] lg:text-[11px]">
                 %{prestigePct}
               </span>
             </div>
-            <div className="relative h-3.5 w-full overflow-hidden rounded-full border border-slate-700/70 bg-slate-900/90 lg:h-4.5">
+            <div className="relative h-3.5 w-full overflow-hidden rounded-full border border-[#334155] bg-[#222B38] lg:h-4.5">
               <div
-                className="flex h-full items-center justify-end rounded-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 pr-1.5 shadow-[0_0_16px_rgba(251,191,36,0.45)] transition-all duration-300"
+                className="flex h-full items-center justify-end rounded-full bg-[#C8AE7D] pr-1.5 transition-all duration-300"
                 style={{ width: `${Math.max(14, prestigePct)}%` }}
               >
-                <span className="font-mono-num text-[8px] font-black text-slate-950 lg:text-[9.5px]">
+                <span className="font-mono-num text-[8px] font-black text-[#181F29] lg:text-[9.5px]">
                   {prestigePct}%
                 </span>
               </div>
@@ -1235,7 +1235,7 @@ export function OfficeWorkspace({
           {/* Active Office Bonuses Card */}
           <div
             data-testid="office-active-bonuses"
-            className="shrink-0 rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
+            className="shrink-0 rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
           >
             <div className="text-[9.5px] font-extrabold tracking-wide text-slate-100 lg:text-[11px]">
               AKTİF OFİS BONUSLARI
@@ -1243,19 +1243,19 @@ export function OfficeWorkspace({
             <div className="mt-1.5 flex flex-col gap-1.5 lg:mt-2 lg:gap-2">
               <div
                 data-testid="office-bonus-interest"
-                className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-cyan-400/55 bg-cyan-500/10 px-2.5 py-0.5 text-[9.5px] font-bold text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.14)] lg:px-3 lg:py-1 lg:text-xs"
+                className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-[#334155] bg-[#7E96B0]/15 px-2.5 py-0.5 text-[9.5px] font-bold text-[#7E96B0] lg:px-3 lg:py-1 lg:text-xs"
               >
                 <span className="truncate">Banka Faiz İndirimi:</span>
-                <strong className="shrink-0 font-mono-num text-cyan-300">
+                <strong className="shrink-0 font-mono-num text-[#7E96B0]">
                   -%{metrics.loanInterestDiscountPct}
                 </strong>
               </div>
               <div
                 data-testid="office-bonus-supply"
-                className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-rose-400/55 bg-rose-500/10 px-2.5 py-0.5 text-[9.5px] font-bold text-rose-200 shadow-[0_0_12px_rgba(251,113,133,0.14)] lg:px-3 lg:py-1 lg:text-xs"
+                className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-[#B86B5E]/45 bg-[#B86B5E]/15 px-2.5 py-0.5 text-[9.5px] font-bold text-[#B86B5E] lg:px-3 lg:py-1 lg:text-xs"
               >
                 <span className="truncate">Tedarikçi İndirimi:</span>
-                <strong className="shrink-0 font-mono-num text-rose-300">
+                <strong className="shrink-0 font-mono-num text-[#B86B5E]">
                   -%{metrics.supplyDiscountPct}
                 </strong>
               </div>
@@ -1288,10 +1288,10 @@ export function OfficeWorkspace({
                 <div
                   key={item.id}
                   data-testid={`office-equip-card-${item.id}`}
-                  className="flex min-h-0 flex-1 items-center justify-between gap-1.5 rounded-2xl border border-slate-700/70 bg-[#111B30]/85 px-2 py-1.5 backdrop-blur-md transition-colors hover:border-cyan-400/40 lg:gap-2.5 lg:px-3.5 lg:py-2.5"
+                  className="flex min-h-0 flex-1 items-center justify-between gap-1.5 rounded-[20px] border border-[#334155] bg-[#111B30]/85 px-2 py-1.5 transition-colors hover:border-[#334155] lg:gap-2.5 lg:px-3.5 lg:py-2.5"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:gap-3">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-indigo-400/35 bg-indigo-500/15 text-sky-300 lg:h-10 lg:w-10">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-10 lg:w-10">
                       <EquipmentIcon id={item.id} />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -1304,7 +1304,7 @@ export function OfficeWorkspace({
                         </span>
                         <span
                           data-testid={`office-equip-level-${item.id}`}
-                          className="shrink-0 font-mono-num text-[9px] font-bold leading-tight text-cyan-300 lg:text-[11px]"
+                          className="shrink-0 font-mono-num text-[9px] font-bold leading-tight text-[#7E96B0] lg:text-[11px]"
                         >
                           (Sv. {level})
                         </span>
@@ -1312,9 +1312,9 @@ export function OfficeWorkspace({
                       <div className="hidden truncate text-[10px] text-slate-400 lg:block">
                         {item.shortBenefit}
                       </div>
-                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800/95 lg:mt-1.5 lg:h-2">
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#1D2532] lg:mt-1.5 lg:h-2">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-300 shadow-[0_0_8px_rgba(52,211,153,0.45)] transition-all duration-300"
+                          className="h-full rounded-full bg-[#7A9E7E] transition-all duration-300"
                           style={{ width: `${Math.max(10, pct)}%` }}
                         />
                       </div>
@@ -1333,10 +1333,10 @@ export function OfficeWorkspace({
                     }
                     className={`flex shrink-0 flex-col items-center justify-center rounded-full px-2 py-1 text-center transition-all lg:min-w-[84px] lg:px-3.5 lg:py-1.5 ${
                       isMax
-                        ? 'cursor-default border border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                        ? 'cursor-default border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E]'
                         : canAfford
-                        ? 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950 shadow-[0_0_16px_rgba(34,211,238,0.38)] hover:brightness-110 active:scale-95'
-                        : 'border border-cyan-400/35 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
+                        ? 'bg-[#7E96B0] text-[#181F29]  hover:brightness-110 active:scale-95'
+                        : 'border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] hover:bg-[#7E96B0]/15'
                     }`}
                   >
                     <span className="text-[8.5px] font-black leading-none tracking-wide lg:text-[10.5px] whitespace-nowrap">
@@ -1345,7 +1345,7 @@ export function OfficeWorkspace({
                     {!isMax && (
                       <span
                         className={`mt-0.5 font-mono-num text-[7.5px] font-bold leading-none lg:text-[9px] whitespace-nowrap ${
-                          canAfford ? 'text-slate-900' : 'text-cyan-300/90'
+                          canAfford ? 'text-slate-900' : 'text-[#7E96B0]/90'
                         }`}
                       >
                         {formatTL(upgradeCost, true)}
@@ -1374,11 +1374,11 @@ export function OfficeWorkspace({
           {/* Card A — Akıllı Telefonum */}
           <div
             data-testid="office-card-phone"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-500/15 text-cyan-300 lg:h-10 lg:w-10">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#334155] bg-[#7E96B0]/15 text-[#7E96B0] lg:h-10 lg:w-10">
                   <Smartphone className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <div className="min-w-0 leading-tight">
@@ -1388,14 +1388,14 @@ export function OfficeWorkspace({
                   <div className="mt-0.5 truncate text-[9px] text-slate-300 lg:text-[11px]">
                     Sosyal Medya & Mesajlar
                     {unreadNotifCount + chatCount > 0 && (
-                      <span className="ml-1 font-mono-num text-cyan-300">
+                      <span className="ml-1 font-mono-num text-[#7E96B0]">
                         · {unreadNotifCount > 0 ? `${unreadNotifCount} yeni` : `${chatCount} msj`}
                       </span>
                     )}
                   </div>
                 </div>
               </div>
-              <span className="font-mono-num text-[11px] font-extrabold text-cyan-300 lg:text-xs">
+              <span className="font-mono-num text-[11px] font-extrabold text-[#7E96B0] lg:text-xs">
                 A
               </span>
             </div>
@@ -1405,7 +1405,7 @@ export function OfficeWorkspace({
                 type="button"
                 data-testid="office-open-phone-btn"
                 onClick={() => onOpenOfficeModal('phone')}
-                className="min-w-[84px] rounded-full border border-sky-400/60 bg-sky-500/15 px-5 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-sky-500/25 lg:min-w-[112px] lg:py-1.5 lg:text-[11px] whitespace-nowrap"
+                className="min-w-[84px] rounded-full border border-[#334155] bg-[#7E96B0]/15 px-5 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-[#7E96B0]/15 lg:min-w-[112px] lg:py-1.5 lg:text-[11px] whitespace-nowrap"
               >
                 AÇ
               </button>
@@ -1415,11 +1415,11 @@ export function OfficeWorkspace({
           {/* Card B — Ofis Seviyesi Yükselt */}
           <div
             data-testid="office-card-tier-upgrade"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-amber-400/35 bg-amber-500/15 text-amber-300 lg:h-10 lg:w-10">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#C8AE7D]/15 text-[#C8AE7D] lg:h-10 lg:w-10">
                   <Building2 className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <div className="min-w-0 leading-tight">
@@ -1436,7 +1436,7 @@ export function OfficeWorkspace({
                   </div>
                 </div>
               </div>
-              <span className="font-mono-num text-[11px] font-extrabold text-amber-300 lg:text-xs">
+              <span className="font-mono-num text-[11px] font-extrabold text-[#C8AE7D] lg:text-xs">
                 B
               </span>
             </div>
@@ -1453,10 +1453,10 @@ export function OfficeWorkspace({
                 }}
                 className={`rounded-full py-1 text-[9.5px] font-extrabold tracking-wide transition-all lg:py-1.5 lg:text-[11px] whitespace-nowrap ${
                   !nextTier
-                    ? 'cursor-default border border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                    ? 'cursor-default border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E]'
                     : canAffordNextTier
-                    ? 'border border-emerald-300 bg-emerald-500/25 text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.35)] hover:bg-emerald-500/35'
-                    : 'border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
+                    ? 'border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-emerald-100  hover:bg-[#7A9E7E]/35'
+                    : 'border border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E] hover:bg-[#7A9E7E]/15'
                 }`}
               >
                 {nextTier ? 'YÜKSELT' : 'MAKSİMUM'}
@@ -1465,7 +1465,7 @@ export function OfficeWorkspace({
                 type="button"
                 data-testid="office-open-upgrades-btn"
                 onClick={() => onOpenOfficeModal('design')}
-                className="rounded-full border border-sky-400/60 bg-sky-500/15 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-sky-500/25 lg:py-1.5 lg:text-[11px] whitespace-nowrap"
+                className="rounded-full border border-[#334155] bg-[#7E96B0]/15 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-[#7E96B0]/15 lg:py-1.5 lg:text-[11px] whitespace-nowrap"
               >
                 DETAY
               </button>
@@ -1475,11 +1475,11 @@ export function OfficeWorkspace({
           {/* Card C — Kişisel Varlıklar */}
           <div
             data-testid="office-card-assets"
-            className="flex min-h-0 flex-1 flex-col justify-between rounded-2xl border border-slate-700/70 bg-[#111B30]/85 p-2 backdrop-blur-md lg:p-3.5"
+            className="flex min-h-0 flex-1 flex-col justify-between rounded-[20px] border border-[#334155] bg-[#111B30]/85 p-2 lg:p-3.5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2 lg:gap-2.5">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-fuchsia-400/35 bg-fuchsia-500/15 text-indigo-300 lg:h-10 lg:w-10">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-fuchsia-400/35 bg-fuchsia-500/15 text-[#7E96B0] lg:h-10 lg:w-10">
                   <Car className="h-4 w-4 lg:h-5 lg:w-5" />
                 </div>
                 <div className="min-w-0 leading-tight">
@@ -1510,7 +1510,7 @@ export function OfficeWorkspace({
                 type="button"
                 data-testid="office-open-assets-btn"
                 onClick={() => onOpenOfficeModal('assets')}
-                className="min-w-[84px] rounded-full border border-sky-400/60 bg-sky-500/15 px-5 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-sky-500/25 lg:min-w-[112px] lg:py-1.5 lg:text-[11px] whitespace-nowrap"
+                className="min-w-[84px] rounded-full border border-[#334155] bg-[#7E96B0]/15 px-5 py-1 text-[9.5px] font-extrabold tracking-wide text-sky-100 hover:bg-[#7E96B0]/15 lg:min-w-[112px] lg:py-1.5 lg:text-[11px] whitespace-nowrap"
               >
                 AÇ
               </button>

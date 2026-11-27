@@ -123,7 +123,7 @@ export function StockTradeModal({
   return (
     <div
       data-testid="stock-trade-modal"
-      className="fixed inset-0 z-[1320] flex items-center justify-center bg-slate-950/80 p-3 backdrop-blur-sm"
+      className="fixed inset-0 z-[1320] flex items-center justify-center bg-black/70 p-3"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -131,10 +131,10 @@ export function StockTradeModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[94dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-500/70 bg-slate-950/98 text-slate-100 shadow-[0_24px_80px_rgba(0,0,0,0.85)]"
+        className="flex max-h-[94dvh] w-full max-w-xl flex-col overflow-hidden rounded-[20px] border border-slate-500/70 bg-[#181F29] text-slate-100"
       >
         {/* Header */}
-        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700/80 bg-slate-900/95 px-3.5 py-2 sm:px-4 sm:py-3">
+        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[#334155] bg-[#222B38] px-3.5 py-2 sm:px-4 sm:py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <BrandLogo brandKey={quote.ticker || quote.name} size={32} />
             <div className="min-w-0">
@@ -142,13 +142,13 @@ export function StockTradeModal({
                 <span
                   className={`rounded-md border px-1.5 py-0.5 text-[10px] font-black uppercase ${
                     isBuy
-                      ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-300'
-                      : 'border-rose-400/70 bg-rose-500/20 text-rose-300'
+                      ? 'border-[#7A9E7E]/45 bg-[#7A9E7E]/15 text-[#7A9E7E]'
+                      : 'border-[#B86B5E]/45 bg-[#B86B5E]/15 text-[#B86B5E]'
                   }`}
                 >
                   {isBuy ? 'ALIM EMRİ' : 'SATIM EMRİ'}
                 </span>
-                <span className="font-mono-num text-xs font-black text-amber-300">
+                <span className="font-mono-num text-xs font-black text-[#C8AE7D]">
                   {quote.ticker}
                 </span>
                 <span className="truncate text-xs sm:text-sm font-bold text-white">{quote.name}</span>
@@ -159,7 +159,7 @@ export function StockTradeModal({
                 </span>
                 <span
                   className={`inline-flex items-center gap-0.5 font-mono-num font-bold ${
-                    positive ? 'text-emerald-400' : 'text-rose-400'
+                    positive ? 'text-[#7A9E7E]' : 'text-[#B86B5E]'
                   }`}
                 >
                   {positive ? (
@@ -184,7 +184,7 @@ export function StockTradeModal({
             type="button"
             onClick={onClose}
             aria-label="Emir penceresini kapat"
-            className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg border border-slate-500/60 bg-slate-800/90 text-slate-100 transition-all duration-200 ease-out hover:border-rose-400/70 hover:bg-rose-500/20 active:scale-[0.98]"
+            className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg border border-slate-500/60 bg-[#1D2532] text-slate-100 transition-all duration-200 ease-out hover:border-[#B86B5E]/45 hover:bg-[#B86B5E]/15 active:scale-[0.98]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -193,7 +193,7 @@ export function StockTradeModal({
         {/* Scrollable Body */}
         <div className="flex-1 min-h-0 overflow-y-auto px-3.5 py-2.5 sm:p-4 space-y-2.5">
           {/* Available Budget / Holdings (mobile portrait) */}
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-600/60 bg-slate-900/85 px-2.5 py-1.5 text-xs sm:hidden">
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-600/60 bg-[#222B38] px-2.5 py-1.5 text-xs sm:hidden">
             <div>
               <div className="text-[10px] text-slate-400">
                 {isBuy ? 'Mevcut Nakit Bütçe' : 'Elimdeki Hisse'}
@@ -206,7 +206,7 @@ export function StockTradeModal({
               <div className="text-[10px] text-slate-400">
                 {isBuy ? 'Alınabilir Maks. Lot' : 'Güncel Toplam Değer'}
               </div>
-              <div className="font-mono-num text-xs font-black text-amber-300">
+              <div className="font-mono-num text-xs font-black text-[#C8AE7D]">
                 {isBuy
                   ? `${maxQty.toLocaleString('tr-TR')} Lot`
                   : formatTL(Math.round(ownedShares * unitPrice))}
@@ -231,7 +231,7 @@ export function StockTradeModal({
                 value={qtyText}
                 onChange={(e) => handleQtyInputChange(e.target.value)}
                 placeholder="0"
-                className="mt-1 min-h-[38px] w-full rounded-lg border border-slate-500/70 bg-slate-900 px-2.5 font-mono-num text-sm font-black text-white outline-none transition-all duration-200 focus:border-amber-400"
+                className="mt-1 min-h-[38px] w-full rounded-lg border border-slate-500/70 bg-[#222B38] px-2.5 font-mono-num text-sm font-black text-white outline-none transition-all duration-200 focus:border-[#C8AE7D]/45"
               />
             </div>
 
@@ -251,16 +251,16 @@ export function StockTradeModal({
                 value={tlText}
                 onChange={(e) => handleTlInputChange(e.target.value)}
                 placeholder="0"
-                className="mt-1 min-h-[38px] w-full rounded-lg border border-slate-500/70 bg-slate-900 px-2.5 font-mono-num text-sm font-black text-amber-300 outline-none transition-all duration-200 focus:border-amber-400"
+                className="mt-1 min-h-[38px] w-full rounded-lg border border-slate-500/70 bg-[#222B38] px-2.5 font-mono-num text-sm font-black text-[#C8AE7D] outline-none transition-all duration-200 focus:border-[#C8AE7D]/45"
               />
             </div>
           </div>
 
           {/* Interactive Range Slider + Quick Percentage Shortcuts */}
-          <div className="rounded-xl border border-slate-600/60 bg-slate-900/75 px-3 py-2 space-y-1.5">
+          <div className="rounded-xl border border-slate-600/60 bg-[#222B38] px-3 py-2 space-y-1.5">
             <div className="flex items-center justify-between text-[11px]">
               <span className="font-semibold text-slate-300">Miktar Kaydırma Çubuğu</span>
-              <span className="font-mono-num font-black text-amber-300">
+              <span className="font-mono-num font-black text-[#C8AE7D]">
                 {clampedQty.toLocaleString('tr-TR')} / {maxQty.toLocaleString('tr-TR')} Lot
               </span>
             </div>
@@ -274,7 +274,7 @@ export function StockTradeModal({
               disabled={maxQty <= 0}
               value={clampedQty}
               onChange={(e) => applyQty(Number(e.target.value))}
-              className={`h-2 w-full cursor-pointer rounded-lg border border-slate-600/70 bg-slate-800 ${
+              className={`h-2 w-full cursor-pointer rounded-lg border border-slate-600/70 bg-[#1D2532] ${
                 isBuy ? 'accent-emerald-400' : 'accent-rose-400'
               } disabled:opacity-40`}
             />
@@ -298,8 +298,8 @@ export function StockTradeModal({
                     onClick={() => handleSelectPercent(preset.ratio)}
                     className={`min-h-[34px] rounded-lg border text-xs font-black transition-all duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
                       isActive
-                        ? 'border-amber-400/80 bg-amber-400 text-slate-950 shadow-sm shadow-amber-500/20'
-                        : 'border-slate-500/60 bg-slate-800/90 text-slate-100 hover:border-amber-400/60 hover:bg-slate-700/90'
+                        ? 'border-[#C8AE7D]/45 bg-[#C8AE7D] text-[#181F29]  '
+                        : 'border-slate-500/60 bg-[#1D2532] text-slate-100 hover:border-[#C8AE7D]/45 hover:bg-[#2A3444]'
                     }`}
                   >
                     {preset.label}
@@ -310,7 +310,7 @@ export function StockTradeModal({
           </div>
 
           {/* Order Confirmation Summary */}
-          <div className="rounded-xl border border-slate-600/70 bg-slate-900/90 px-3 py-2 space-y-1 text-xs">
+          <div className="rounded-xl border border-slate-600/70 bg-[#222B38] px-3 py-2 space-y-1 text-xs">
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-200">
                 {isBuy ? 'Toplam Ödenecek Tutar' : 'Kasaya Geçecek Tutar'}
@@ -318,7 +318,7 @@ export function StockTradeModal({
               <strong
                 data-testid="trade-total-tl"
                 className={`font-mono-num text-sm sm:text-base font-black ${
-                  isBuy ? 'text-emerald-400' : 'text-amber-300'
+                  isBuy ? 'text-[#7A9E7E]' : 'text-[#C8AE7D]'
                 }`}
               >
                 {formatTL(totalTL)}
@@ -335,7 +335,7 @@ export function StockTradeModal({
               ) : (
                 <span
                   className={`font-mono-num font-bold ${
-                    estimatedSellPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                    estimatedSellPnl >= 0 ? 'text-[#7A9E7E]' : 'text-[#B86B5E]'
                   }`}
                 >
                   K/Z: {estimatedSellPnl >= 0 ? '+' : ''}
@@ -347,12 +347,12 @@ export function StockTradeModal({
         </div>
 
         {/* Footer Actions */}
-        <footer className="flex shrink-0 items-center gap-2.5 border-t border-slate-700/80 bg-slate-900/95 px-3.5 py-2 sm:px-4 sm:py-3">
+        <footer className="flex shrink-0 items-center gap-2.5 border-t border-[#334155] bg-[#222B38] px-3.5 py-2 sm:px-4 sm:py-3">
           <button
             type="button"
             data-testid="trade-cancel-btn"
             onClick={onClose}
-            className="min-h-[40px] sm:min-h-[44px] flex-1 rounded-lg border border-slate-500/70 bg-slate-800/90 px-4 text-xs font-bold text-slate-100 transition-all duration-200 ease-out hover:border-slate-400 hover:bg-slate-700 active:scale-[0.98]"
+            className="min-h-[40px] sm:min-h-[44px] flex-1 rounded-lg border border-slate-500/70 bg-[#1D2532] px-4 text-xs font-bold text-slate-100 transition-all duration-200 ease-out hover:border-slate-400 hover:bg-[#2A3444] active:scale-[0.98]"
           >
             İptal
           </button>
@@ -365,10 +365,10 @@ export function StockTradeModal({
               onConfirm(quote.ticker, clampedQty);
               onClose();
             }}
-            className={`inline-flex min-h-[40px] sm:min-h-[44px] flex-[1.6] items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-black transition-all duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 ${
+            className={`inline-flex min-h-[40px] sm:min-h-[44px] flex-[1.6] items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-black transition-all duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:border-[#334155] disabled:bg-[#1D2532] disabled:text-slate-500 ${
               isBuy
-                ? 'border-emerald-300/80 bg-emerald-500 text-slate-950 hover:bg-emerald-400'
-                : 'border-rose-300/80 bg-rose-500 text-white hover:bg-rose-400'
+                ? 'border-[#7A9E7E]/45 bg-[#7A9E7E] text-[#181F29] hover:bg-[#7A9E7E]'
+                : 'border-[#B86B5E]/45 bg-[#B86B5E] text-white hover:bg-[#C6796C]'
             }`}
           >
             {isBuy ? <CheckCircle2 className="h-4 w-4" /> : <Coins className="h-4 w-4" />}
