@@ -6,8 +6,9 @@ import type {
   MissionDef,
 } from '../types/game';
 
-// v1.4.1 Gerçekçi Türkiye Ekonomisi Ölçeği (2025/2026)
-export const STARTING_CASH = 3_000_000; // ₺3.000.000 başlangıç sermayesi
+// v1.8.0 Kariyer Başlangıç Sermayesi: Çalışan olarak ₺2.500 ile başla -> Sermaye biriktir -> Kendi işini kur
+export const STARTING_CASH = 2_500; // ₺2.500 başlangıç sermayesi ("Çalışan" statüsü)
+export const FIRST_SHOP_ENTRY_COST = 20_000; // İlk mahalle kafesi / başlangıç dükkanı için mikro girişimci sermaye şartı
 export const STARTING_CREDIT_SCORE = 1100;
 export const STARTING_BRAND_RECOGNITION = 5; // %5 başlangıç firma tanınırlığı
 export const MIN_BUSINESS_DISTANCE_METERS = 75;

@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { X, Search, MapPin, Building2 } from 'lucide-react';
+import { X, Search, MapPin, Building2, Lock } from 'lucide-react';
 import type { GeographicRegion, OwnedBusiness, ProvinceInfo } from '../types/game';
 import { GEOGRAPHIC_REGIONS, TURKEY_PROVINCES } from '../game/provinces81';
 
 interface CityPickerModalProps {
   open: boolean;
   activePlate: number;
+  unlockedCityPlates?: number[];
   ownBusinesses: OwnedBusiness[];
   onSelectProvince: (province: ProvinceInfo) => void;
   onClose: () => void;
@@ -14,12 +15,17 @@ interface CityPickerModalProps {
 export function CityPickerModal({
   open,
   activePlate,
+  unlockedCityPlates,
   ownBusinesses,
   onSelectProvince,
   onClose,
 }: CityPickerModalProps) {
   const [search, setSearch] = useState('');
   const [regionFilter, setRegionFilter] = useState<GeographicRegion | 'all'>('all');
+  const unlockedSet = useMemo(
+    () => (unlockedCityPlates ? new Set(unlockedCityPlates) : null),
+    [unlockedCityPlates]
+  );
 
   const countsByPlate = useMemo(() => {
     const map = new Map<number, number>();
@@ -132,6 +138,7 @@ export function CityPickerModal({
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
               {filteredProvinces.map((prov) => {
                 const isActive = prov.plate === activePlate;
+                const isLocked = unlockedSet !== null && !unlockedSet.has(prov.plate);
                 const ownCount = countsByPlate.get(prov.plate) ?? 0;
 
                 return (
@@ -144,30 +151,42 @@ export function CityPickerModal({
                     }}
                     className={`flex items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
                       isActive
-                        ? 'border-[#C8AE7D]/45 bg-amber-50 dark:border-[#C8AE7D]/45 dark:bg-[#C8AE7D]/15'
-                        : 'border-slate-200/80 bg-white hover:border-[#C8AE7D]/45 hover:bg-slate-50 border-[#334155] bg-[#222B38] dark:hover:border-[#334155] dark:hover:bg-[#1D2532]'
+                        ? 'border-[#C8AE7D]/70 bg-[#C8AE7D]/15'
+                        : isLocked
+                        ? 'border-[#334155]/70 bg-[#181F29]/75 opacity-75 hover:border-[#475569]'
+                        : 'border-[#334155] bg-[#222B38] hover:border-[#7A9E7E]/60 hover:bg-[#1D2532]'
                     }`}
                   >
                     <div
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg font-mono-num text-xs font-extrabold ${
                         isActive
                           ? 'bg-[#C8AE7D] text-[#181F29]'
-                          : 'bg-[#222B38] text-[#C8AE7D] bg-[#1D2532]'
+                          : isLocked
+                          ? 'bg-[#222B38] text-slate-500'
+                          : 'bg-[#1D2532] text-[#7A9E7E]'
                       }`}
                     >
-                      {prov.code}
+                      {isLocked ? <Lock className="h-3.5 w-3.5" strokeWidth={1.5} /> : prov.code}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
-                        <span className="truncate text-xs font-bold text-slate-100">
+                        <span
+                          className={`truncate text-xs font-bold ${
+                            isLocked ? 'text-slate-400' : 'text-slate-100'
+                          }`}
+                        >
                           {prov.name}
                         </span>
-                        {ownCount > 0 && (
-                          <span className="flex shrink-0 items-center gap-0.5 font-mono-num text-[10px] font-bold text-emerald-700 dark:text-[#7A9E7E]">
+                        {ownCount > 0 ? (
+                          <span className="flex shrink-0 items-center gap-0.5 font-mono-num text-[10px] font-bold text-[#7A9E7E]">
                             <Building2 className="h-3 w-3" />
                             {ownCount}
                           </span>
-                        )}
+                        ) : isLocked ? (
+                          <span className="shrink-0 text-[9.5px] font-semibold text-slate-500">
+                            Kilitli
+                          </span>
+                        ) : null}
                       </div>
                       <div className="mt-0.5 flex items-center justify-between text-[10px] text-slate-400">
                         <span className="truncate">{prov.region}</span>

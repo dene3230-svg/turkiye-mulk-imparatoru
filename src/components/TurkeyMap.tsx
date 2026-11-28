@@ -1,22 +1,45 @@
-import { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import { Plus, Minus, Compass } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Briefcase,
+  Building2,
+  Globe2,
+  Lock,
+  MapPin,
+  Minus,
+  Plus,
+  Radio,
+  RotateCcw,
+  Store,
+  Unlock,
+  X,
+} from 'lucide-react';
 import type {
-  BusinessTypeId,
   OwnedBusiness,
   PinLocationInfo,
+  ProvinceInfo,
   RemoteBusinessRecord,
   ThemeMode,
 } from '../types/game';
-import { MIN_BUSINESS_DISTANCE_METERS } from '../game/catalog';
-import { calculateVaultCapacity } from '../game/economy';
+import { formatTL } from '../game/economy';
+import { getProvinceByPlate } from '../game/provinces81';
 import {
-  DEFAULT_PROVINCE_PLATE,
-  TURKEY_BOUNDS,
-  TURKEY_CENTER,
-  getProvinceByPlate,
-} from '../game/provinces81';
-import { getBrandLogoSvgString } from './BrandLogo';
+  getProvinceUnlockRequirement,
+  generateCityJobListings,
+} from '../game/careerEngine';
+import {
+  LAKE_VAN_POINTS,
+  MARMARA_SEA_POINTS,
+  SVG_MAP_HEIGHT,
+  SVG_MAP_WIDTH,
+  TUZ_GOLU_POINTS,
+  getAllProvinceVectorShapes,
+  getProvinceDistrictShapes,
+  getProvinceVectorShape,
+  getTurkeyOutlinePathD,
+  getWaterFeaturePathD,
+  projectLatLngToSvg,
+  type DistrictVectorShape,
+} from '../game/turkeyVectorGeo';
 import {
   applyRealtimeBusinessDelete,
   applyRealtimeBusinessPatch,
@@ -24,33 +47,23 @@ import {
   computeWorldDbStats,
   fetchAllWorldBusinesses,
   isRealPlayerBusiness,
-  parseOwnerAndHolding,
   subscribeToGlobalBusinesses,
   syncPlayerBusinessesToWorld,
   WORLD_POLL_INTERVAL_MS,
   type RoomSyncStatus,
   type WorldDbSyncSnapshot,
 } from '../services/cityRoom';
+import { soundEngine } from '../services/soundEngine';
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function truncateLabel(text: string, maxLen = 18): string {
-  const clean = text.trim();
-  if (clean.length <= maxLen) return clean;
-  return `${clean.slice(0, maxLen - 1)}…`;
-}
+export type VectorMapViewMode = 'turkey' | 'city';
 
 interface TurkeyMapProps {
   theme: ThemeMode;
   mapStyle: 'osm' | 'carto';
   activePlate: number;
+  unlockedCityPlates: number[];
+  playerLevel: number;
+  playerCash: number;
   currentUserId?: string;
   ownBusinesses: OwnedBusiness[];
   localSyncRecords: RemoteBusinessRecord[];
@@ -63,7 +76,10 @@ interface TurkeyMapProps {
   pinDropMode: boolean;
   initialCenter?: { lat: number; lng: number; zoom: number };
   flyTarget: { lat: number; lng: number; zoom: number; nonce: number } | null;
-  onMapClick: (lat: number, lng: number) => void;
+  onMapClick: (lat: number, lng: number, districtName?: string) => void;
+  onSelectProvince?: (prov: ProvinceInfo) => void;
+  onUnlockProvince?: (plate: number) => void;
+  onOpenDistrictJobs?: (plate: number, districtName: string) => void;
   onSelectOwnBusiness: (businessId: string) => void;
   onSelectCompetitor: (record: RemoteBusinessRecord) => void;
   onWorldSyncUpdate?: (snapshot: WorldDbSyncSnapshot) => void;
@@ -73,47 +89,11 @@ interface TurkeyMapProps {
   isVisible?: boolean;
 }
 
-const TILE_URLS = {
-  osm: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  cartoLight: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  cartoDark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-};
-
-const TYPE_GLYPHS: Record<BusinessTypeId, string> = {
-  kafe: '☕',
-  internet_kafe: '🖥',
-  ps_salonu: '🎮',
-  oyun_merkezi: '🥽',
-  restoran: '🍽',
-  supermarket: '🛒',
-  otel: '🏨',
-  avm: '🏬',
-  otopark: '🅿️',
-  katli_otopark: '🚗',
-  gida_fabrikasi: '🏭',
-  elektronik_fabrikasi: '⚙️',
-  tekstil_fabrikasi: '🧵',
-  enerji_santrali: '⚡',
-};
-
-interface MapPinItem {
-  id: string;
-  lat: number;
-  lng: number;
-  level: number;
-  type: BusinessTypeId;
-  isOwn: boolean;
-  isRealPlayer: boolean;
-  readyRing: boolean;
-  constructionDaysRemaining?: number;
-  own?: OwnedBusiness;
-  competitor?: RemoteBusinessRecord;
-}
-
 export function TurkeyMap({
-  theme,
-  mapStyle,
   activePlate,
+  unlockedCityPlates,
+  playerLevel,
+  playerCash,
   currentUserId,
   ownBusinesses,
   localSyncRecords,
@@ -122,31 +102,24 @@ export function TurkeyMap({
   selectedBusinessId,
   selectedCompetitorId,
   droppedPin,
-  droppedPinBlocked,
-  pinDropMode,
-  initialCenter,
-  flyTarget,
   onMapClick,
+  onSelectProvince,
+  onUnlockProvince,
+  onOpenDistrictJobs,
   onSelectOwnBusiness,
   onSelectCompetitor,
   onWorldSyncUpdate,
   onRemoteInsert,
   onRemoteUpdate,
   onRemoteDelete,
-  isVisible = true,
 }: TurkeyMapProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const circleLayerRef = useRef<L.LayerGroup | null>(null);
-  const markerLayerRef = useRef<L.LayerGroup | null>(null);
-  const droppedPinMarkerRef = useRef<L.Marker | null>(null);
-  const initialCenterRef = useRef(initialCenter);
-  const [zoomLevel, setZoomLevel] = useState<number>(initialCenter?.zoom ?? 13);
+  const [viewMode, setViewMode] = useState<VectorMapViewMode>('turkey');
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const [hoveredPlate, setHoveredPlate] = useState<number | null>(null);
+  const [lockedInspectPlate, setLockedInspectPlate] = useState<number | null>(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<DistrictVectorShape | null>(null);
+  const [roomStatus, setRoomStatus] = useState<RoomSyncStatus>('connecting');
 
-  const onMapClickRef = useRef(onMapClick);
-  const onSelectOwnRef = useRef(onSelectOwnBusiness);
-  const onSelectCompetitorRef = useRef(onSelectCompetitor);
   const onWorldSyncUpdateRef = useRef(onWorldSyncUpdate);
   const onRemoteInsertRef = useRef(onRemoteInsert);
   const onRemoteUpdateRef = useRef(onRemoteUpdate);
@@ -157,9 +130,6 @@ export function TurkeyMap({
   const roomStatusRef = useRef<RoomSyncStatus>('connecting');
   const syncErrorRef = useRef<string | null>(null);
 
-  onMapClickRef.current = onMapClick;
-  onSelectOwnRef.current = onSelectOwnBusiness;
-  onSelectCompetitorRef.current = onSelectCompetitor;
   onWorldSyncUpdateRef.current = onWorldSyncUpdate;
   onRemoteInsertRef.current = onRemoteInsert;
   onRemoteUpdateRef.current = onRemoteUpdate;
@@ -168,11 +138,12 @@ export function TurkeyMap({
   currentUserIdRef.current = currentUserId;
 
   // ============================================================================
-  // SINGLE CENTRALIZED MULTIPLAYER MAP SYNC (UPSERT OWN -> SELECT '*' -> REALTIME)
+  // CENTRALIZED MULTIPLAYER SYNC (SUPABASE public.businesses REALTIME + 10s POLL)
   // ============================================================================
   const emitSnapshot = (loading = false) => {
     const ownIds = new Set(localSyncRecordsRef.current.map((r) => r.id));
     const stats = computeWorldDbStats(dbRecordsRef.current, currentUserIdRef.current, ownIds);
+    setRoomStatus(roomStatusRef.current);
     onWorldSyncUpdateRef.current?.({
       records: dbRecordsRef.current,
       dbTotal: stats.dbTotal,
@@ -184,7 +155,6 @@ export function TurkeyMap({
     });
   };
 
-  // Silent read-only background refresh (used by 10s fallback polling & visibility resume)
   const pollWorldCompetitorsNowRef = useRef<(() => Promise<void>) | null>(null);
   pollWorldCompetitorsNowRef.current = async () => {
     const fetchRes = await fetchAllWorldBusinesses();
@@ -201,13 +171,11 @@ export function TurkeyMap({
     emitSnapshot(false);
   };
 
-  // Full sync (upserts changed local player portfolio -> fetches full world snapshot)
   const syncWorldNowRef = useRef<(() => Promise<void>) | null>(null);
   syncWorldNowRef.current = async () => {
     let latestError: string | null = null;
     const ownLocal = localSyncRecordsRef.current;
 
-    // 1) Upsert all local player businesses into `public.businesses`
     if (ownLocal.length > 0) {
       const upsertRes = await syncPlayerBusinessesToWorld(ownLocal);
       if (!upsertRes.ok && upsertRes.error) {
@@ -215,7 +183,6 @@ export function TurkeyMap({
       }
     }
 
-    // 2) Fetch ALL businesses across Turkey (`select('*')` without city restriction)
     const fetchRes = await fetchAllWorldBusinesses();
     if (fetchRes.error) {
       latestError = fetchRes.error;
@@ -231,7 +198,6 @@ export function TurkeyMap({
     emitSnapshot(false);
   };
 
-  // Mount-level single unified sync + Realtime subscription (INSERT/UPDATE/DELETE) + 10s silent fallback poll
   useEffect(() => {
     let active = true;
     emitSnapshot(true);
@@ -260,6 +226,12 @@ export function TurkeyMap({
         dbRecordsRef.current = applyRealtimeBusinessPatch(dbRecordsRef.current, id, patch);
         emitSnapshot(false);
       },
+      onDelete: (id) => {
+        if (!active) return;
+        dbRecordsRef.current = applyRealtimeBusinessDelete(dbRecordsRef.current, id);
+        emitSnapshot(false);
+        onRemoteDeleteRef.current?.(id);
+      },
       onInsert: (rec) => {
         if (!active) return;
         onRemoteInsertRef.current?.(rec);
@@ -268,12 +240,6 @@ export function TurkeyMap({
         if (!active) return;
         onRemoteUpdateRef.current?.(rec);
       },
-      onDelete: (id) => {
-        if (!active) return;
-        dbRecordsRef.current = applyRealtimeBusinessDelete(dbRecordsRef.current, id);
-        emitSnapshot(false);
-        onRemoteDeleteRef.current?.(id);
-      },
       onStatus: (status) => {
         if (!active) return;
         roomStatusRef.current = status;
@@ -281,570 +247,722 @@ export function TurkeyMap({
       },
       onReconnect: () => {
         if (!active) return;
-        runFullSync();
+        runSilentPoll();
       },
     });
 
-    // Silent 10-second fallback polling in case Realtime WebSocket drops
-    const pollTimer = window.setInterval(() => {
-      if (active) runSilentPoll();
-    }, WORLD_POLL_INTERVAL_MS);
-
-    const handleOnline = () => {
-      if (active) runFullSync();
-    };
-    const handleVisibilityChange = () => {
-      if (active && document.visibilityState === 'visible') {
+    const fallbackInterval = window.setInterval(runSilentPoll, WORLD_POLL_INTERVAL_MS);
+    const onOnline = () => runFullSync();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
         runSilentPoll();
       }
     };
-    window.addEventListener('online', handleOnline);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       active = false;
-      window.clearInterval(pollTimer);
-      window.removeEventListener('online', handleOnline);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(fallbackInterval);
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       unsubscribe();
     };
   }, []);
 
-  // Re-sync whenever player builds/upgrades/acquires branches or clicks manual refresh
-  const portfolioSyncSig = `${currentUserId ?? ''}|${syncRefreshNonce}|${localSyncRecords
-    .map((r) => `${r.id}@${r.level}:${r.business_name}:${r.owner_name}`)
-    .join(',')}`;
-  const lastSigRef = useRef<string>('');
+  const localSyncSignature = localSyncRecords
+    .map((r) => `${r.id}:${r.level}:${Math.round(r.hourly_income)}:${r.business_name}`)
+    .join('|');
+
   useEffect(() => {
-    if (lastSigRef.current === '') {
-      lastSigRef.current = portfolioSyncSig;
+    if (!localSyncSignature && syncRefreshNonce === 0) return;
+    const t = window.setTimeout(() => {
+      syncWorldNowRef.current?.();
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [localSyncSignature, syncRefreshNonce]);
+
+  // Reset selected district when switching provinces
+  useEffect(() => {
+    setSelectedDistrict(null);
+  }, [activePlate]);
+
+  // ============================================================================
+  // VECTOR GEOMETRY (81 PROVINCES + REAL DISTRICTS)
+  // ============================================================================
+  const provinceShapes = useMemo(() => getAllProvinceVectorShapes(), []);
+  const turkeyOutlineD = useMemo(() => getTurkeyOutlinePathD(), []);
+  const marmaraPathD = useMemo(() => getWaterFeaturePathD(MARMARA_SEA_POINTS), []);
+  const lakeVanPathD = useMemo(() => getWaterFeaturePathD(LAKE_VAN_POINTS), []);
+  const tuzGoluPathD = useMemo(() => getWaterFeaturePathD(TUZ_GOLU_POINTS), []);
+
+  const unlockedSet = useMemo(() => new Set(unlockedCityPlates), [unlockedCityPlates]);
+  const activeProvShape = useMemo(() => getProvinceVectorShape(activePlate), [activePlate]);
+  const activeProvInfo = useMemo(() => getProvinceByPlate(activePlate), [activePlate]);
+  const activeDistricts = useMemo(() => getProvinceDistrictShapes(activePlate), [activePlate]);
+
+  // Compute dynamic SVG viewBox for "Tüm Türkiye (81 İl)" vs "Sadece Seçili Şehir"
+  const svgViewBox = useMemo(() => {
+    if (viewMode === 'city') {
+      const { minX, minY, maxX, maxY } = activeProvShape.bounds;
+      const bw = Math.max(40, maxX - minX);
+      const bh = Math.max(30, maxY - minY);
+      const padX = bw * 0.35;
+      const padY = bh * 0.35;
+      const rawW = (bw + padX * 2) / zoomScale;
+      const rawH = (bh + padY * 2) / zoomScale;
+      const cx = (minX + maxX) * 0.5;
+      const cy = (minY + maxY) * 0.5;
+      return `${(cx - rawW / 2).toFixed(1)} ${(cy - rawH / 2).toFixed(1)} ${rawW.toFixed(1)} ${rawH.toFixed(1)}`;
+    }
+    const vw = SVG_MAP_WIDTH / zoomScale;
+    const vh = SVG_MAP_HEIGHT / zoomScale;
+    const vx = (SVG_MAP_WIDTH - vw) * 0.5;
+    const vy = (SVG_MAP_HEIGHT - vh) * 0.5;
+    return `${vx.toFixed(1)} ${vy.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`;
+  }, [viewMode, activeProvShape, zoomScale]);
+
+  const ownBusinessCountByPlate = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const b of ownBusinesses) {
+      map.set(b.cityPlate, (map.get(b.cityPlate) ?? 0) + 1);
+    }
+    return map;
+  }, [ownBusinesses]);
+
+  const rivalBusinessCountByPlate = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const c of competitorBusinesses) {
+      if (isRealPlayerBusiness(c)) {
+        map.set(c.city_plate, (map.get(c.city_plate) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [competitorBusinesses]);
+
+  const visibleOwnPins = useMemo(() => {
+    if (viewMode === 'city') {
+      return ownBusinesses.filter((b) => b.cityPlate === activePlate);
+    }
+    return ownBusinesses;
+  }, [ownBusinesses, viewMode, activePlate]);
+
+  const visibleCompetitorPins = useMemo(() => {
+    const realRivals = competitorBusinesses.filter(
+      (c) => isRealPlayerBusiness(c) && (!currentUserId || c.owner_id !== currentUserId)
+    );
+    if (viewMode === 'city') {
+      return realRivals.filter((c) => c.city_plate === activePlate);
+    }
+    return realRivals;
+  }, [competitorBusinesses, currentUserId, viewMode, activePlate]);
+
+  const lockedInspectReq = useMemo(() => {
+    if (!lockedInspectPlate) return null;
+    return getProvinceUnlockRequirement(lockedInspectPlate, unlockedCityPlates);
+  }, [lockedInspectPlate, unlockedCityPlates]);
+
+  const districtJobs = useMemo(() => {
+    if (!selectedDistrict) return [];
+    return generateCityJobListings(activePlate, selectedDistrict.name).slice(0, 3);
+  }, [activePlate, selectedDistrict]);
+
+  const handleProvinceClick = (plate: number) => {
+    soundEngine.playClick();
+    if (!unlockedSet.has(plate)) {
+      setLockedInspectPlate(plate);
       return;
     }
-    if (lastSigRef.current === portfolioSyncSig) return;
-    lastSigRef.current = portfolioSyncSig;
-    syncWorldNowRef.current?.();
-  }, [portfolioSyncSig]);
+    setLockedInspectPlate(null);
+    const prov = getProvinceByPlate(plate);
+    onSelectProvince?.(prov);
+    setViewMode('city');
+    setZoomScale(1);
+  };
 
-  // Recalculate Leaflet viewport cleanly whenever the Map tab becomes visible
-  useEffect(() => {
-    if (!isVisible) return;
-    const map = mapRef.current;
-    if (!map) return;
-    const raf = window.requestAnimationFrame(() => {
-      map.invalidateSize({ animate: false });
-    });
-    const timer = window.setTimeout(() => {
-      map.invalidateSize({ animate: false });
-    }, 180);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.clearTimeout(timer);
-    };
-  }, [isVisible]);
+  const handleDistrictClick = (district: DistrictVectorShape) => {
+    soundEngine.playClick();
+    setSelectedDistrict(district);
+  };
 
-  // Mount Leaflet map once
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+  const handleInvestInDistrict = (district: DistrictVectorShape) => {
+    soundEngine.playClick();
+    setSelectedDistrict(null);
+    // Slight deterministic offset if multiple shops exist near district center
+    const jitter = ((ownBusinesses.length % 5) - 2) * 0.004;
+    onMapClick(district.lat + jitter, district.lng + jitter, district.name);
+  };
 
-    const initialProv = getProvinceByPlate(DEFAULT_PROVINCE_PLATE);
-    const startView = initialCenterRef.current ?? {
-      lat: initialProv.lat,
-      lng: initialProv.lng,
-      zoom: initialProv.zoom,
-    };
-    const map = L.map(containerRef.current, {
-      center: [startView.lat, startView.lng],
-      zoom: startView.zoom,
-      minZoom: 6,
-      maxZoom: 18,
-      maxBounds: L.latLngBounds(
-        L.latLng(TURKEY_BOUNDS[0][0] - 1.5, TURKEY_BOUNDS[0][1] - 2),
-        L.latLng(TURKEY_BOUNDS[1][0] + 1.5, TURKEY_BOUNDS[1][1] + 2)
-      ),
-      zoomControl: false,
-      attributionControl: true,
-    });
-
-    const circleLayer = L.layerGroup().addTo(map);
-    const markerLayer = L.layerGroup().addTo(map);
-    mapRef.current = map;
-    circleLayerRef.current = circleLayer;
-    markerLayerRef.current = markerLayer;
-
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      onMapClickRef.current(e.latlng.lat, e.latlng.lng);
-    });
-
-    map.on('zoomend', () => {
-      setZoomLevel(map.getZoom());
-    });
-
-    const ro = new ResizeObserver(() => {
-      map.invalidateSize({ animate: false });
-    });
-    ro.observe(containerRef.current);
-
-    return () => {
-      ro.disconnect();
-      map.remove();
-      mapRef.current = null;
-      tileLayerRef.current = null;
-      circleLayerRef.current = null;
-      markerLayerRef.current = null;
-      droppedPinMarkerRef.current = null;
-    };
-  }, []);
-
-  // Swap tile layer cleanly when theme or mapStyle changes
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const isCarto = mapStyle === 'carto';
-    const url = isCarto
-      ? theme === 'dark'
-        ? TILE_URLS.cartoDark
-        : TILE_URLS.cartoLight
-      : TILE_URLS.osm;
-
-    const attribution = isCarto
-      ? '&copy; OpenStreetMap &copy; CARTO'
-      : '&copy; OpenStreetMap';
-
-    if (tileLayerRef.current) {
-      map.removeLayer(tileLayerRef.current);
-    }
-
-    tileLayerRef.current = L.tileLayer(url, {
-      attribution,
-      subdomains: isCarto ? 'abcd' : 'abc',
-      maxZoom: 19,
-    }).addTo(map);
-  }, [theme, mapStyle]);
-
-  // Smooth fly-to when requested
-  useEffect(() => {
-    if (!flyTarget || !mapRef.current) return;
-    mapRef.current.flyTo([flyTarget.lat, flyTarget.lng], flyTarget.zoom, {
-      duration: 0.75,
-    });
-  }, [flyTarget]);
-
-  // Render dropped pin marker (Gold when valid/checking, Red when blocked by water or 75m rule)
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    if (droppedPinMarkerRef.current) {
-      map.removeLayer(droppedPinMarkerRef.current);
-      droppedPinMarkerRef.current = null;
-    }
-
-    if (!droppedPin) return;
-
-    const isBlocked =
-      droppedPinBlocked ||
-      droppedPin.landStatus === 'water' ||
-      droppedPin.landStatus === 'invalid';
-    const ringColor = isBlocked ? '#DC2626' : '#D97706';
-    const bgGrad = isBlocked
-      ? 'linear-gradient(135deg,#EF4444,#991B1B)'
-      : 'linear-gradient(135deg,#F59E0B,#B45309)';
-    const symbol = isBlocked ? '!' : '+';
-
-    const icon = L.divIcon({
-      className: 'custom-drop-pin',
-      html: `
-        <div style="position:relative;width:44px;height:44px;transform:translate(-50%,-100%);pointer-events:none;">
-          <div class="pin-pulse-ring" style="position:absolute;left:50%;top:88%;width:30px;height:30px;border-radius:9999px;border:2.5px solid ${ringColor};background:${isBlocked ? 'rgba(220,38,38,0.22)' : 'rgba(217,119,6,0.2)'};"></div>
-          <div style="position:absolute;left:50%;top:4px;transform:translateX(-50%);width:32px;height:32px;border-radius:9999px 9999px 9999px 0;background:${bgGrad};border:2.5px solid #FFFFFF;box-shadow:0 6px 16px rgba(15,23,42,0.45);transform-origin:center;rotate:-45deg;display:flex;align-items:center;justify-content:center;">
-            <span style="rotate:45deg;font-size:14px;font-weight:800;color:#FFFFFF;">${symbol}</span>
-          </div>
-        </div>
-      `,
-      iconSize: [0, 0],
-      iconAnchor: [0, 0],
-    });
-
-    droppedPinMarkerRef.current = L.marker([droppedPin.lat, droppedPin.lng], {
-      icon,
-      interactive: false,
-      zIndexOffset: 950,
-    }).addTo(map);
-  }, [droppedPin, droppedPinBlocked]);
-
-  // Render own (Gold/Emerald) & other players' (Bright Red + Player Name) pins, 75m rings & clustering
-  useEffect(() => {
-    const map = mapRef.current;
-    const circleLayer = circleLayerRef.current;
-    const markerLayer = markerLayerRef.current;
-    if (!map || !circleLayer || !markerLayer) return;
-
-    circleLayer.clearLayers();
-    markerLayer.clearLayers();
-
-    const items: MapPinItem[] = [
-      ...ownBusinesses.map((biz) => {
-        const cap = calculateVaultCapacity(biz);
-        const ratio = cap > 0 ? biz.pendingCash / cap : 0;
-        const remDays = biz.constructionDaysRemaining ?? 0;
-        return {
-          id: biz.id,
-          lat: biz.lat,
-          lng: biz.lng,
-          level: biz.level,
-          type: biz.blueprintId,
-          isOwn: true,
-          isRealPlayer: false,
-          readyRing: remDays === 0 && ratio >= 0.35,
-          constructionDaysRemaining: remDays,
-          own: biz,
-        };
-      }),
-      ...competitorBusinesses.map((rec) => ({
-        id: rec.id,
-        lat: rec.lat,
-        lng: rec.lng,
-        level: rec.level,
-        type: rec.business_type,
-        isOwn: false,
-        isRealPlayer: isRealPlayerBusiness(rec),
-        readyRing: false,
-        competitor: rec,
-      })),
-    ];
-
-    // Draw subtle 75m protection circles when zoomed in
-    if (zoomLevel >= 13) {
-      for (const item of items) {
-        const strokeCol = item.isOwn
-          ? '#059669'
-          : item.isRealPlayer
-          ? '#DC2626'
-          : '#991B1B';
-        const fillCol = item.isOwn
-          ? '#10B981'
-          : item.isRealPlayer
-          ? '#EF4444'
-          : '#DC2626';
-        L.circle([item.lat, item.lng], {
-          radius: MIN_BUSINESS_DISTANCE_METERS,
-          color: strokeCol,
-          weight: item.isRealPlayer ? 1.8 : 1,
-          opacity: 0.55,
-          fillColor: fillCol,
-          fillOpacity: item.isRealPlayer ? 0.14 : 0.1,
-          interactive: false,
-        }).addTo(circleLayer);
-      }
-    }
-
-    // Cluster nearby pins only when zoomed out wide (zoom <= 10) so city-level red player pins stay clearly visible
-    const shouldCluster = zoomLevel <= 10;
-    const cellSizeDeg = zoomLevel <= 7 ? 0.85 : zoomLevel <= 9 ? 0.25 : 0.08;
-
-    if (shouldCluster && items.length > 1) {
-      const buckets = new Map<string, MapPinItem[]>();
-      for (const item of items) {
-        const key = `${Math.floor(item.lat / cellSizeDeg)}:${Math.floor(item.lng / cellSizeDeg)}`;
-        const arr = buckets.get(key);
-        if (arr) arr.push(item);
-        else buckets.set(key, [item]);
-      }
-
-      for (const group of buckets.values()) {
-        if (group.length > 1) {
-          const avgLat = group.reduce((s, i) => s + i.lat, 0) / group.length;
-          const avgLng = group.reduce((s, i) => s + i.lng, 0) / group.length;
-          const ownCount = group.filter((g) => g.isOwn).length;
-          const realCount = group.filter((g) => g.isRealPlayer).length;
-          const borderCol =
-            realCount > 0 ? '#FCA5A5' : ownCount > 0 ? '#10B981' : '#EF4444';
-          const bgCol =
-            ownCount === group.length
-              ? '#065F46'
-              : realCount > 0
-              ? 'linear-gradient(135deg,#EF4444,#991B1B)'
-              : ownCount > 0
-              ? '#0F172A'
-              : '#991B1B';
-
-          const clusterIcon = L.divIcon({
-            className: 'business-cluster-badge',
-            html: `
-              <div style="
-                transform:translate(-50%,-50%);
-                width:40px;height:40px;border-radius:9999px;
-                background:${bgCol};color:#FFFFFF;
-                border:3px solid ${borderCol};
-                box-shadow:0 6px 18px rgba(15,23,42,0.48);
-                display:flex;align-items:center;justify-content:center;
-                font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;
-                cursor:pointer;
-              ">${group.length}</div>
-            `,
-            iconSize: [40, 40],
-            iconAnchor: [20, 20],
-          });
-
-          const marker = L.marker([avgLat, avgLng], { icon: clusterIcon, zIndexOffset: 600 });
-          marker.on('click', (e) => {
-            L.DomEvent.stopPropagation(e);
-            map.flyTo([avgLat, avgLng], Math.min(15, zoomLevel + 2), { duration: 0.55 });
-          });
-          marker.addTo(markerLayer);
-          continue;
-        }
-
-        renderSingleMarker(group[0], markerLayer);
-      }
-    } else {
-      for (const item of items) {
-        renderSingleMarker(item, markerLayer);
-      }
-    }
-
-    function renderSingleMarker(item: MapPinItem, targetLayer: L.LayerGroup) {
-      const glyph = TYPE_GLYPHS[item.type] ?? '🏢';
-      const isSelected = item.isOwn
-        ? item.id === selectedBusinessId
-        : item.id === selectedCompetitorId;
-
-      const markerSize = isSelected ? 44 : 38;
-      const isUnderConstruction = item.isOwn && (item.constructionDaysRemaining ?? 0) > 0;
-      const borderStyle = isSelected
-        ? '3px solid #FEF08A'
-        : isUnderConstruction
-        ? '2.5px dashed #FEF08A'
-        : item.isOwn
-        ? '2.5px solid #ECFDF5'
-        : item.isRealPlayer
-        ? '2.5px solid #FFFFFF'
-        : '2.5px solid #FCA5A5';
-
-      const parsedOwner =
-        !item.isOwn && item.competitor
-          ? parseOwnerAndHolding(item.competitor.owner_name, item.competitor.company_name)
-          : null;
-
-      const innerContent = item.isOwn
-        ? isUnderConstruction
-          ? '<span>🏗️</span>'
-          : `<span>${glyph}</span>`
-        : item.isRealPlayer
-        ? `<span>${glyph}</span>`
-        : item.competitor
-        ? getBrandLogoSvgString(parsedOwner?.holdingName || item.competitor.owner_name, markerSize - 8)
-        : `<span>${glyph}</span>`;
-
-      // Own Active = Gold/Emerald | Own Construction = Amber | Real Player = Bold Crimson Red | AI = Dark Red/Slate
-      const bgStyle = isUnderConstruction
-        ? 'linear-gradient(135deg,#F59E0B,#92400E)'
-        : item.isOwn
-        ? 'linear-gradient(135deg,#D97706,#059669)'
-        : item.isRealPlayer
-        ? 'linear-gradient(135deg,#EF4444,#B91C1C)'
-        : 'linear-gradient(135deg,#7F1D1D,#0F172A)';
-
-      const badgeBg = isUnderConstruction
-        ? '#78350F'
-        : item.isOwn
-        ? '#064E3B'
-        : item.isRealPlayer
-        ? '#991B1B'
-        : '#7F1D1D';
-
-      const glowShadow = item.isRealPlayer
-        ? '0 0 0 3px rgba(239,68,68,0.42), 0 6px 18px rgba(153,27,27,0.55)'
-        : `0 6px 18px rgba(15,23,42,${isSelected ? '0.52' : '0.4'})`;
-
-      // Real competitor player name tag sits prominently right above/on the red pin
-      const realPlayerTopTagHtml =
-        !item.isOwn && item.isRealPlayer && parsedOwner
-          ? `<div
-              data-testid="real-player-pin-label"
-              style="
-                margin-bottom:3px;
-                max-width:142px;
-                padding:2px 7px;
-                border-radius:9999px;
-                background:rgba(185,28,28,0.96);
-                border:1.5px solid #FEE2E2;
-                color:#FFFFFF;
-                font-size:10px;
-                font-weight:800;
-                line-height:1.15;
-                white-space:nowrap;
-                overflow:hidden;
-                text-overflow:ellipsis;
-                box-shadow:0 3px 8px rgba(0,0,0,0.45);
-                pointer-events:none;
-              ">${escapeHtml(truncateLabel(parsedOwner.playerName, 20))}</div>`
-          : '';
-
-      const bottomTagHtml = isUnderConstruction
-        ? `<div style="
-              margin-top:4px;
-              padding:1.5px 6px;
-              border-radius:9999px;
-              background:rgba(120,53,15,0.95);
-              border:1px solid rgba(251,191,36,0.9);
-              color:#FEF3C7;
-              font-size:9px;
-              font-weight:800;
-              line-height:1.2;
-              white-space:nowrap;
-              box-shadow:0 2px 6px rgba(0,0,0,0.45);
-              pointer-events:none;
-            ">🏗️ ${item.constructionDaysRemaining}g Kaldı</div>`
-        : !item.isOwn && !item.isRealPlayer && parsedOwner
-        ? `<div style="
-              margin-top:4px;
-              max-width:124px;
-              padding:1.5px 6px;
-              border-radius:9999px;
-              background:rgba(15,23,42,0.9);
-              border:1px solid rgba(248,113,113,0.6);
-              color:#FEE2E2;
-              font-size:9px;
-              font-weight:800;
-              line-height:1.2;
-              white-space:nowrap;
-              overflow:hidden;
-              text-overflow:ellipsis;
-              box-shadow:0 2px 6px rgba(0,0,0,0.45);
-              pointer-events:none;
-            ">${escapeHtml(truncateLabel(parsedOwner.holdingName || parsedOwner.playerName, 16))}</div>`
-        : '';
-
-      const pinTitle = item.isOwn
-        ? isUnderConstruction
-          ? `${item.own?.customName ?? 'Şubem'} (İnşaat: ${item.constructionDaysRemaining} gün kaldı)`
-          : `${item.own?.customName ?? 'Şubem'} (S${item.level})`
-        : `${item.competitor?.business_name ?? 'Rakip'} · ${parsedOwner?.playerName ?? ''}`;
-
-      const icon = L.divIcon({
-        className: item.isOwn
-          ? 'own-business-marker'
-          : item.isRealPlayer
-          ? 'real-player-business-marker'
-          : 'rival-business-marker',
-        html: `
-          <div
-            data-player-type="${item.isOwn ? 'own' : item.isRealPlayer ? 'real' : 'ai'}"
-            data-business-id="${escapeHtml(item.id)}"
-            data-under-construction="${isUnderConstruction ? 'true' : 'false'}"
-            style="position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;"
-          >
-            ${realPlayerTopTagHtml}
-            <div style="
-              width:${markerSize}px;
-              height:${markerSize}px;
-              border-radius:${item.isRealPlayer ? '9999px' : '12px'};
-              background:${bgStyle};
-              border:${borderStyle};
-              box-shadow:${glowShadow};
-              display:flex;align-items:center;justify-content:center;
-              font-size:${isSelected ? '18px' : '16px'};
-              position:relative;
-              overflow:visible;
-            ">
-              ${innerContent}
-              <span style="
-                position:absolute;bottom:-6px;right:-6px;
-                background:${badgeBg};color:#FEF08A;
-                font-size:9px;font-weight:800;
-                padding:1px 4px;border-radius:5px;
-                border:1px solid rgba(255,255,255,0.85);
-                line-height:1.1;
-              ">${isUnderConstruction ? `${item.constructionDaysRemaining}g` : `S${item.level}`}</span>
-              ${
-                item.readyRing
-                  ? `<span style="position:absolute;top:-5px;left:-5px;width:11px;height:11px;border-radius:9999px;background:#10B981;border:2px solid #FFFFFF;"></span>`
-                  : item.isRealPlayer
-                  ? `<span style="position:absolute;top:-4px;left:-4px;width:11px;height:11px;border-radius:9999px;background:#EF4444;border:2px solid #FFFFFF;box-shadow:0 0 8px #EF4444;"></span>`
-                  : ''
-              }
-            </div>
-            ${bottomTagHtml}
-          </div>
-        `,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
-      });
-
-      const marker = L.marker([item.lat, item.lng], {
-        icon,
-        title: pinTitle,
-        alt: pinTitle,
-        zIndexOffset: isSelected ? 820 : item.isRealPlayer ? 660 : item.isOwn ? 560 : 480,
-      });
-
-      marker.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
-        if (item.isOwn && item.own) {
-          onSelectOwnRef.current(item.own.id);
-        } else if (item.competitor) {
-          onSelectCompetitorRef.current(item.competitor);
-        }
-      });
-
-      marker.addTo(targetLayer);
-    }
-  }, [
-    ownBusinesses,
-    competitorBusinesses,
-    activePlate,
-    selectedBusinessId,
-    selectedCompetitorId,
-    zoomLevel,
-  ]);
-
-  const handleZoomIn = () => mapRef.current?.zoomIn();
-  const handleZoomOut = () => mapRef.current?.zoomOut();
-  const handleResetTurkey = () =>
-    mapRef.current?.flyTo(TURKEY_CENTER, 6, { duration: 0.85 });
+  const markerScale = viewMode === 'city' ? 0.34 / zoomScale : 1 / Math.sqrt(zoomScale);
 
   return (
     <div
-      className={`relative h-full w-full ${pinDropMode ? 'cursor-crosshair' : ''} ${
-        mapStyle === 'osm' ? 'map-dark-osm' : ''
-      }`}
-      data-testid="turkey-map"
+      data-testid="vector-turkey-map"
+      className="relative flex h-full w-full flex-col overflow-hidden bg-[#181F29] select-none"
     >
-      <div ref={containerRef} className="h-full w-full" />
+      {/* Top Centered View Mode Switcher: [ Tüm Türkiye (81 İl) ] | [ Sadece Seçili Şehir ] */}
+      <div className="pointer-events-none absolute inset-x-0 top-12 z-[510] flex justify-center px-3 sm:top-2.5">
+        <div
+          role="tablist"
+          aria-label="Harita Görünüm Modu"
+          className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-[#334155] bg-[#222B38]/95 p-1"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'turkey'}
+            data-testid="map-mode-turkey-btn"
+            onClick={() => {
+              soundEngine.playClick();
+              setViewMode('turkey');
+              setZoomScale(1);
+              setSelectedDistrict(null);
+            }}
+            className={`flex min-h-[30px] items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+              viewMode === 'turkey'
+                ? 'bg-[#C8AE7D] text-[#181F29]'
+                : 'text-slate-300 hover:text-slate-100'
+            }`}
+          >
+            <Globe2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <span>Tüm Türkiye (81 İl)</span>
+          </button>
 
-      {/* Compact Left-Side Map Controls with Safe-Area Margin */}
-      <div
-        data-testid="map-zoom-controls"
-        className="pointer-events-auto absolute left-[max(14px,calc(var(--safe-left)+12px))] top-1/2 z-[400] flex -translate-y-1/2 flex-col gap-1.5"
-      >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'city'}
+            data-testid="map-mode-city-btn"
+            onClick={() => {
+              soundEngine.playClick();
+              setViewMode('city');
+              setZoomScale(1);
+              setLockedInspectPlate(null);
+            }}
+            className={`flex min-h-[30px] items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+              viewMode === 'city'
+                ? 'bg-[#7A9E7E] text-[#181F29]'
+                : 'text-slate-300 hover:text-slate-100'
+            }`}
+          >
+            <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <span>Sadece Seçili Şehir ({activeProvInfo.name})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Responsive Vector SVG Viewport */}
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#151C25]">
+        {/* Subtle nautical/cartographic grid lines */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-20"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, #2A3647 1px, transparent 1px), linear-gradient(to bottom, #2A3647 1px, transparent 1px)',
+            backgroundSize: '48px 48px',
+          }}
+        />
+
+        <svg
+          viewBox={svgViewBox}
+          preserveAspectRatio="xMidYMid meet"
+          className="h-full w-full"
+          role="img"
+          aria-label={
+            viewMode === 'turkey'
+              ? 'Türkiye 81 İl Vektörel Haritası'
+              : `${activeProvInfo.name} Gerçek İlçe Haritası`
+          }
+        >
+          {/* MODE A: ALL TURKEY (81 PROVINCES) */}
+          {viewMode === 'turkey' && (
+            <g>
+              {/* Soft Base Land Silhouette */}
+              <path
+                d={turkeyOutlineD}
+                fill="#1D2633"
+                stroke="#334155"
+                strokeWidth="2"
+              />
+
+              {/* All 81 Province Polygons */}
+              {provinceShapes.map((prov) => {
+                const isUnlocked = unlockedSet.has(prov.plate);
+                const isActive = prov.plate === activePlate;
+                const isHovered = prov.plate === hoveredPlate;
+                const ownCnt = ownBusinessCountByPlate.get(prov.plate) ?? 0;
+                const rivalCnt = rivalBusinessCountByPlate.get(prov.plate) ?? 0;
+
+                const fill = isActive
+                  ? '#3A534B'
+                  : isUnlocked
+                  ? isHovered
+                    ? '#435F55'
+                    : '#2F4640'
+                  : isHovered
+                  ? '#263242'
+                  : '#1E2733';
+
+                const stroke = isActive
+                  ? '#C8AE7D'
+                  : isUnlocked
+                  ? '#7A9E7E'
+                  : '#334155';
+
+                return (
+                  <g
+                    key={prov.plate}
+                    data-testid={`province-poly-${prov.plate}`}
+                    onClick={() => handleProvinceClick(prov.plate)}
+                    onMouseEnter={() => setHoveredPlate(prov.plate)}
+                    onMouseLeave={() => setHoveredPlate(null)}
+                    className="cursor-pointer transition-colors duration-150"
+                  >
+                    <path
+                      d={prov.pathD}
+                      fill={fill}
+                      stroke={stroke}
+                      strokeWidth={isActive ? 1.8 : isUnlocked ? 1.25 : 0.75}
+                    />
+                    <title>
+                      {prov.code} {prov.name} ({isUnlocked ? 'Açık İl' : 'Kilitli İl'})
+                      {ownCnt > 0 ? ` · ${ownCnt} Şuben` : ''}
+                      {rivalCnt > 0 ? ` · ${rivalCnt} Rakip` : ''}
+                    </title>
+
+                    {/* Unlocked Province Label vs Locked Small Lock Icon */}
+                    {isUnlocked ? (
+                      <g pointerEvents="none">
+                        <text
+                          x={prov.labelX}
+                          y={prov.labelY - 1}
+                          textAnchor="middle"
+                          fill="#F1F5F9"
+                          fontSize={isActive ? '8.5' : '7.5'}
+                          fontWeight="700"
+                        >
+                          {prov.name}
+                        </text>
+                        <text
+                          x={prov.labelX}
+                          y={prov.labelY + 7.5}
+                          textAnchor="middle"
+                          fill="#C8AE7D"
+                          fontSize="6"
+                          fontWeight="600"
+                        >
+                          {prov.code}
+                        </text>
+                      </g>
+                    ) : (
+                      <g
+                        transform={`translate(${prov.labelX}, ${prov.labelY})`}
+                        pointerEvents="none"
+                        opacity={isHovered ? 0.95 : 0.55}
+                      >
+                        {/* Minimal 1.5px outline lock glyph */}
+                        <rect
+                          x="-3.6"
+                          y="-1"
+                          width="7.2"
+                          height="5.4"
+                          rx="1.2"
+                          fill="#181F29"
+                          stroke="#64748B"
+                          strokeWidth="0.9"
+                        />
+                        <path
+                          d="M -2 -1 L -2 -3 A 2 2 0 0 1 2 -3 L 2 -1"
+                          fill="none"
+                          stroke="#64748B"
+                          strokeWidth="0.9"
+                        />
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Marmara Sea, Lake Van & Tuz Gölü overlays */}
+              <path d={marmaraPathD} fill="#151C25" stroke="#2D3B4E" strokeWidth="0.8" pointerEvents="none" />
+              <path d={lakeVanPathD} fill="#16212E" stroke="#334155" strokeWidth="0.7" pointerEvents="none" />
+              <path d={tuzGoluPathD} fill="#1A2634" stroke="#334155" strokeWidth="0.7" pointerEvents="none" />
+            </g>
+          )}
+
+          {/* MODE B: ONLY SELECTED CITY (REAL DISTRICTS ZOOMED VIEW) */}
+          {viewMode === 'city' && (
+            <g>
+              {/* Outer Province Border Highlight */}
+              <path
+                d={activeProvShape.pathD}
+                fill="#1D2633"
+                stroke="#C8AE7D"
+                strokeWidth={0.9 / zoomScale}
+              />
+
+              {/* Real District Polygons */}
+              {activeDistricts.map((dist) => {
+                const isSelected = selectedDistrict?.id === dist.id;
+                return (
+                  <g
+                    key={dist.id}
+                    data-testid={`district-poly-${dist.name}`}
+                    onClick={() => handleDistrictClick(dist)}
+                    className="cursor-pointer"
+                  >
+                    <path
+                      d={dist.pathD}
+                      fill={isSelected ? '#3D574D' : '#243140'}
+                      stroke={isSelected ? '#C8AE7D' : '#475569'}
+                      strokeWidth={(isSelected ? 0.9 : 0.45) / zoomScale}
+                    />
+                    <text
+                      x={dist.centerX}
+                      y={dist.centerY}
+                      textAnchor="middle"
+                      fill={isSelected ? '#F8FAFC' : '#CBD5E1'}
+                      fontSize={Math.max(2.6, 3.6 / zoomScale)}
+                      fontWeight="700"
+                      pointerEvents="none"
+                    >
+                      {dist.name}
+                    </text>
+                    <text
+                      x={dist.centerX}
+                      y={dist.centerY + Math.max(3.2, 4.4 / zoomScale)}
+                      textAnchor="middle"
+                      fill="#C8AE7D"
+                      fontSize={Math.max(1.8, 2.4 / zoomScale)}
+                      fontWeight="600"
+                      pointerEvents="none"
+                    >
+                      {dist.jobCount} ilan · Yatırım
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          )}
+
+          {/* LIVE MULTIPLAYER COMPETITOR PINS (FROM SUPABASE public.businesses) */}
+          {visibleCompetitorPins.map((rec) => {
+            const pt = projectLatLngToSvg(rec.lat, rec.lng);
+            const isSel = rec.id === selectedCompetitorId;
+            const blockClickForLockedOverview =
+              viewMode === 'turkey' && !unlockedSet.has(rec.city_plate);
+            return (
+              <g
+                key={rec.id}
+                transform={`translate(${pt.x}, ${pt.y}) scale(${markerScale})`}
+                pointerEvents={blockClickForLockedOverview ? 'none' : 'auto'}
+                onClick={(e) => {
+                  if (blockClickForLockedOverview) return;
+                  e.stopPropagation();
+                  soundEngine.playClick();
+                  onSelectCompetitor(rec);
+                }}
+                className={blockClickForLockedOverview ? '' : 'cursor-pointer'}
+              >
+                <circle
+                  r={isSel ? 8.5 : 6.5}
+                  fill="#B86B5E"
+                  stroke="#F8FAFC"
+                  strokeWidth={isSel ? 2.2 : 1.3}
+                />
+                <text
+                  y="2.5"
+                  textAnchor="middle"
+                  fill="#FFFFFF"
+                  fontSize="6.5"
+                  fontWeight="800"
+                  pointerEvents="none"
+                >
+                  S{rec.level}
+                </text>
+                <title>
+                  {rec.business_name} ({rec.owner_name}) · {rec.city_name}/{rec.district}
+                </title>
+              </g>
+            );
+          })}
+
+          {/* OWN BUSINESS PINS */}
+          {visibleOwnPins.map((biz) => {
+            const pt = projectLatLngToSvg(biz.lat, biz.lng);
+            const isSel = biz.id === selectedBusinessId;
+            return (
+              <g
+                key={biz.id}
+                transform={`translate(${pt.x}, ${pt.y}) scale(${markerScale})`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  soundEngine.playClick();
+                  onSelectOwnBusiness(biz.id);
+                }}
+                className="cursor-pointer"
+              >
+                <circle
+                  r={isSel ? 10 : 7.8}
+                  fill="#7A9E7E"
+                  stroke="#C8AE7D"
+                  strokeWidth={isSel ? 2.4 : 1.6}
+                />
+                <text
+                  y="2.6"
+                  textAnchor="middle"
+                  fill="#181F29"
+                  fontSize="6.8"
+                  fontWeight="800"
+                  pointerEvents="none"
+                >
+                  ★
+                </text>
+                <title>
+                  {biz.customName} (S{biz.level}) · {biz.cityName}/{biz.districtName}
+                </title>
+              </g>
+            );
+          })}
+
+          {/* DROPPED PIN INDICATOR */}
+          {droppedPin && (
+            <g
+              transform={`translate(${projectLatLngToSvg(droppedPin.lat, droppedPin.lng).x}, ${
+                projectLatLngToSvg(droppedPin.lat, droppedPin.lng).y
+              }) scale(${markerScale})`}
+            >
+              <circle r="11" fill="#C8AE7D" opacity="0.25" />
+              <circle r="6" fill="#C8AE7D" stroke="#181F29" strokeWidth="1.8" />
+            </g>
+          )}
+        </svg>
+      </div>
+
+      {/* Bottom-Left Compact Legend + Unlocked Counter */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-[480] flex flex-wrap items-center gap-2">
+        <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-[#334155] bg-[#222B38]/95 px-3.5 py-1.5 text-[11px] text-slate-300">
+          <span className="font-semibold text-[#C8AE7D]">
+            Açık İl: {unlockedCityPlates.length} / 81
+          </span>
+          <span aria-hidden="true" className="text-[#334155]">·</span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#7A9E7E]" />
+            Şubelerin ({ownBusinesses.length})
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#B86B5E]" />
+            Rakipler ({competitorBusinesses.filter((c) => isRealPlayerBusiness(c)).length})
+          </span>
+          <span className="hidden items-center gap-1 text-[#7A9E7E] sm:inline-flex">
+            <Radio className="h-3 w-3" strokeWidth={1.5} />
+            {roomStatus === 'live' ? 'Canlı Senkron' : 'Bağlanıyor'}
+          </span>
+        </div>
+      </div>
+
+      {/* Left Vertical Zoom Controls */}
+      <div className="absolute left-3 top-1/2 z-[480] flex -translate-y-1/2 flex-col gap-1.5">
         <button
           type="button"
-          onClick={handleZoomIn}
+          onClick={() => setZoomScale((z) => Math.min(3.2, Number((z + 0.35).toFixed(2))))}
           aria-label="Haritayı Yakınlaştır"
-          className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#334155] bg-[#222B38] text-slate-100 transition-colors hover:bg-[#2A3444]"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] bg-[#222B38] text-slate-200 hover:bg-[#2A3444]"
         >
           <Plus className="h-4 w-4" strokeWidth={1.5} />
         </button>
         <button
           type="button"
-          onClick={handleZoomOut}
+          onClick={() => setZoomScale((z) => Math.max(1, Number((z - 0.35).toFixed(2))))}
           aria-label="Haritayı Uzaklaştır"
-          className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#334155] bg-[#222B38] text-slate-100 transition-colors hover:bg-[#2A3444]"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] bg-[#222B38] text-slate-200 hover:bg-[#2A3444]"
         >
           <Minus className="h-4 w-4" strokeWidth={1.5} />
         </button>
         <button
           type="button"
-          onClick={handleResetTurkey}
-          aria-label="Tüm Türkiye Haritasını Göster"
-          title="Türkiye Geneli"
-          className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#334155] bg-[#222B38] text-[#C8AE7D] transition-colors hover:bg-[#2A3444]"
+          onClick={() => setZoomScale(1)}
+          aria-label="Görünümü Sıfırla"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-[#334155] bg-[#222B38] text-slate-200 hover:bg-[#2A3444]"
         >
-          <Compass className="h-4 w-4" strokeWidth={1.5} />
+          <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
         </button>
       </div>
+
+      {/* LOCKED PROVINCE UNLOCK REQUIREMENTS MODAL */}
+      {lockedInspectReq && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          data-testid="locked-province-modal"
+          className="absolute inset-0 z-[540] flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="w-full max-w-sm rounded-[20px] border border-[#334155] bg-[#222B38] p-5 text-slate-100">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#334155] bg-[#181F29] text-[#C8AE7D]">
+                  <Lock className="h-5 w-5" strokeWidth={1.5} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">
+                    {String(lockedInspectReq.plate).padStart(2, '0')} {lockedInspectReq.cityName}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {lockedInspectReq.region} · Kilitli Ticaret Bölgesi
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Kapat"
+                onClick={() => setLockedInspectPlate(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#334155] bg-[#181F29] text-slate-300"
+              >
+                <X className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2 rounded-[14px] border border-[#334155] bg-[#181F29] p-3.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Gereken Seviye</span>
+                <span
+                  className={`font-mono-num font-bold ${
+                    playerLevel >= lockedInspectReq.requiredLevel
+                      ? 'text-[#7A9E7E]'
+                      : 'text-[#B86B5E]'
+                  }`}
+                >
+                  Seviye {lockedInspectReq.requiredLevel} (Mevcut: {playerLevel})
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">İl Ticaret Lisansı Bedeli</span>
+                <span
+                  className={`font-mono-num font-bold ${
+                    playerCash >= lockedInspectReq.licenseCost
+                      ? 'text-[#C8AE7D]'
+                      : 'text-[#B86B5E]'
+                  }`}
+                >
+                  {formatTL(lockedInspectReq.licenseCost)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setLockedInspectPlate(null)}
+                className="min-h-[40px] rounded-[12px] border border-[#334155] bg-[#181F29] px-4 text-xs font-semibold text-slate-300"
+              >
+                Kapat
+              </button>
+              <button
+                type="button"
+                data-testid="unlock-province-confirm-btn"
+                disabled={
+                  playerLevel < lockedInspectReq.requiredLevel ||
+                  playerCash < lockedInspectReq.licenseCost
+                }
+                onClick={() => {
+                  onUnlockProvince?.(lockedInspectReq.plate);
+                  setLockedInspectPlate(null);
+                  setViewMode('city');
+                }}
+                className="flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-[12px] bg-[#C8AE7D] px-4 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E] disabled:opacity-45"
+              >
+                <Unlock className="h-4 w-4" strokeWidth={1.75} />
+                <span>İl Lisansını Aç</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SELECTED DISTRICT OPPORTUNITIES PANEL (IN "Sadece Seçili Şehir" MODE) */}
+      {viewMode === 'city' && selectedDistrict && (
+        <aside
+          data-testid="district-opportunities-panel"
+          className="absolute right-3 top-14 z-[530] w-[min(360px,calc(100%-24px))] rounded-[20px] border border-[#334155] bg-[#222B38] p-4 text-slate-100"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C8AE7D]">
+                {activeProvInfo.name} · İlçe Fırsatları
+              </p>
+              <h3 className="text-base font-bold text-slate-100">{selectedDistrict.name}</h3>
+            </div>
+            <button
+              type="button"
+              aria-label="İlçe Panelini Kapat"
+              onClick={() => setSelectedDistrict(null)}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-[#334155] bg-[#181F29] text-slate-300"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </button>
+          </div>
+
+          <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-[12px] border border-[#334155] bg-[#181F29] p-2.5">
+              <div className="text-[10px] text-slate-400">Yaya Trafiği</div>
+              <div className="mt-0.5 font-mono-num font-bold text-[#7A9E7E]">
+                {selectedDistrict.footTraffic}x
+              </div>
+            </div>
+            <div className="rounded-[12px] border border-[#334155] bg-[#181F29] p-2.5">
+              <div className="text-[10px] text-slate-400">Ticari Talep</div>
+              <div className="mt-0.5 font-mono-num font-bold text-[#C8AE7D]">
+                {selectedDistrict.businessDemand}x
+              </div>
+            </div>
+          </div>
+
+          {/* District Job Listings Preview */}
+          <div className="mt-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
+              <Briefcase className="h-3.5 w-3.5 text-[#7E96B0]" strokeWidth={1.5} />
+              <span>Öne Çıkan İş İlanları</span>
+            </div>
+            {districtJobs.map((job) => (
+              <div
+                key={job.id}
+                className="flex items-center justify-between rounded-[10px] border border-[#334155] bg-[#181F29] px-2.5 py-1.5 text-[11px]"
+              >
+                <span className="truncate text-slate-200">{job.title}</span>
+                <span className="font-mono-num font-bold text-[#7A9E7E]">
+                  {formatTL(job.dailyWage)}/gün
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3.5 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              data-testid="district-open-jobs-btn"
+              onClick={() => {
+                soundEngine.playClick();
+                onOpenDistrictJobs?.(activePlate, selectedDistrict.name);
+              }}
+              className="flex min-h-[38px] items-center justify-center gap-1.5 rounded-[12px] border border-[#7E96B0]/60 bg-[#181F29] px-3 text-xs font-semibold text-slate-100 hover:bg-[#2A3444]"
+            >
+              <Briefcase className="h-3.5 w-3.5 text-[#C8AE7D]" strokeWidth={1.5} />
+              <span>İş İlanları</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="district-invest-branch-btn"
+              onClick={() => handleInvestInDistrict(selectedDistrict)}
+              className="flex min-h-[38px] items-center justify-center gap-1.5 rounded-[12px] bg-[#C8AE7D] px-3 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E]"
+            >
+              <Store className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <span>Şube Kur</span>
+            </button>
+          </div>
+        </aside>
+      )}
     </div>
   );
 }

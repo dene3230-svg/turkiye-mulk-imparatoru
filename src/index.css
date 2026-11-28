@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
-@import "leaflet/dist/leaflet.css";
 
 :root {
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -161,43 +160,73 @@ button:not(:disabled):active {
   display: none;
 }
 
-/* Leaflet map refinements */
-.leaflet-container {
-  width: 100%;
-  height: 100%;
-  background: #181F29;
-  font-family: var(--font-sans);
+/* Vector SVG 2D Onboarding & Shift Scene Animations (Compositor-Only) */
+@keyframes onboardingBob {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2.5px);
+  }
 }
 
-.dark .leaflet-container {
-  background: #181F29;
+@keyframes onboardingFloat {
+  0%, 100% {
+    transform: translateY(0px);
+    opacity: 0.92;
+  }
+  50% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
 }
 
-.dark .map-dark-osm .leaflet-tile-pane {
-  filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(86%) saturate(65%);
+@keyframes onboardingWalk {
+  0%, 100% {
+    transform: translateX(0px);
+  }
+  50% {
+    transform: translateX(-6px);
+  }
 }
 
-.leaflet-control-attribution {
-  font-size: 9px !important;
-  opacity: 0.72;
-  background: rgba(24, 31, 41, 0.85) !important;
-  color: #94a3b8 !important;
-  padding: 1px 6px !important;
-  border-radius: 4px 0 0 0;
+@keyframes shiftSteam {
+  0% {
+    transform: translateY(2px);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(-9px);
+    opacity: 0;
+  }
 }
 
-.dark .leaflet-control-attribution {
-  background: rgba(24, 31, 41, 0.88) !important;
-  color: #94a3b8 !important;
+.animate-onboarding-bob {
+  animation: onboardingBob 2.4s ease-in-out infinite;
 }
 
-.leaflet-control-attribution a {
-  color: inherit !important;
+.animate-onboarding-float-1 {
+  animation: onboardingFloat 2.6s ease-in-out infinite;
 }
 
-.leaflet-div-icon {
-  background: transparent !important;
-  border: none !important;
+.animate-onboarding-float-2 {
+  animation: onboardingFloat 3.1s ease-in-out 0.4s infinite;
+}
+
+.animate-onboarding-float-3 {
+  animation: onboardingFloat 2.9s ease-in-out 0.8s infinite;
+}
+
+.animate-onboarding-walk {
+  animation: onboardingWalk 3.2s ease-in-out infinite;
+}
+
+.animate-shift-steam {
+  animation: shiftSteam 1.9s ease-in-out infinite;
 }
 
 /* Pin drop ring animation */
@@ -274,7 +303,13 @@ button:not(:disabled):active {
   .pin-pulse-ring,
   .animate-rotate-phone,
   .animate-float-cash,
-  .animate-bottom-sheet {
+  .animate-bottom-sheet,
+  .animate-onboarding-bob,
+  .animate-onboarding-float-1,
+  .animate-onboarding-float-2,
+  .animate-onboarding-float-3,
+  .animate-onboarding-walk,
+  .animate-shift-steam {
     animation: none;
   }
 }

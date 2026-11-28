@@ -7,10 +7,12 @@ import {
 } from './safeStartup';
 import {
   clearStoredPlayerSession,
+  createGuestProfile,
   loadStoredPlayerSession,
   loginPlayerAccountWithAdapter,
   registerPlayerAccountWithAdapter,
   saveStoredPlayerSession,
+  upgradeGuestToAccountWithAdapter,
   type AuthActionResult,
   type PlayerAccountRow,
   type PlayerAccountsDbAdapter,
@@ -106,6 +108,17 @@ export async function loginPlayerAccount(input: {
   password: string;
 }): Promise<AuthActionResult> {
   return loginPlayerAccountWithAdapter(input, supabaseAccountsAdapter, true);
+}
+
+export function startGuestPlayerSession(displayName: string): AuthActionResult {
+  return createGuestProfile(displayName, true);
+}
+
+export async function upgradeGuestToSupabaseAccount(
+  guest: UserProfile,
+  input: { username: string; password: string; displayName?: string }
+): Promise<AuthActionResult> {
+  return upgradeGuestToAccountWithAdapter(guest, input, supabaseAccountsAdapter, true);
 }
 
 export {

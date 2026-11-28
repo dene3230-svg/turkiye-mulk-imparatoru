@@ -31,11 +31,14 @@ import type {
 } from '../types/game';
 import { BUSINESS_BLUEPRINTS, MIN_BUSINESS_DISTANCE_METERS } from '../game/catalog';
 import {
-  calculateEstablishmentCost,
   formatTL,
   getAffinityMultiplier,
   type DistanceCheckResult,
 } from '../game/economy';
+import {
+  getEffectiveEstablishmentCost,
+  isEligibleForFirstShopGrant,
+} from '../game/careerEngine';
 import { suggestBusinessName } from '../game/provinces81';
 
 interface PinDropPanelProps {
@@ -157,12 +160,14 @@ export function PinDropPanel({
     }
   }, [location.districtName, selectedBlueprint.shortName, selectedFranchise, nameEdited, chainCloneDraft]);
 
-  const baseCost = calculateEstablishmentCost(selectedBlueprint, location);
+  const baseCost = getEffectiveEstablishmentCost(selectedBlueprint, location, ownBranchCount);
+  const firstShopGrantApplied = isEligibleForFirstShopGrant(ownBranchCount, selectedBlueprint.id);
   const totalCost = baseCost + (selectedFranchise?.licenseFee ?? 0);
   const affinity = getAffinityMultiplier(selectedBlueprint, location);
   const franchiseBonus = selectedFranchise ? 1.35 * (1 - selectedFranchise.royaltyRate) : 1.0;
   const estHourly =
     Math.round((selectedBlueprint.baseHourlyIncome * affinity * franchiseBonus) / 50) * 50;
+  void firstShopGrantApplied;
 
   const isChecking = location.landStatus === 'checking';
   const isWaterOrInvalid =
@@ -368,7 +373,7 @@ export function PinDropPanel({
             {mode === 'independent' ? (
               <div className="grid grid-cols-2 gap-1.5">
                 {BUSINESS_BLUEPRINTS.map((bp) => {
-                  const bpCost = calculateEstablishmentCost(bp, location);
+                  const bpCost = getEffectiveEstablishmentCost(bp, location, ownBranchCount);
                   const bpAff = getAffinityMultiplier(bp, location);
                   const bpHourly = Math.round((bp.baseHourlyIncome * bpAff) / 50) * 50;
                   const locked = companyLevel < bp.minCompanyLevel;
@@ -444,7 +449,8 @@ export function PinDropPanel({
                   const bp =
                     BUSINESS_BLUEPRINTS.find((b) => b.id === brand.businessType) ??
                     BUSINESS_BLUEPRINTS[0];
-                  const fullCost = calculateEstablishmentCost(bp, location) + brand.licenseFee;
+                  const fullCost =
+                    getEffectiveEstablishmentCost(bp, location, ownBranchCount) + brand.licenseFee;
                   const affordable = cash >= fullCost;
                   const isSel = selectedFranchise?.id === brand.id;
 

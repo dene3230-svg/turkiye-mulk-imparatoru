@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Briefcase,
   Building2,
   CalendarCheck2,
   Crown,
@@ -29,6 +30,7 @@ import type {
   GameSettings,
   GameSpeed,
   HoldingPromoTierId,
+  JobListing,
   MissionDef,
   NotificationItem,
   OfficeEquipmentId,
@@ -157,7 +159,17 @@ import {
   registerPlayerAccount,
   saveEmpireStateLocal,
   signOutAccount,
+  startGuestPlayerSession,
+  upgradeGuestToSupabaseAccount,
 } from './lib/supabase';
+import {
+  collectShiftTip,
+  completeCareerShift,
+  createInitialCareerState,
+  getUnlockedCityPlates,
+  isProvinceUnlocked,
+  unlockProvinceLicense,
+} from './game/careerEngine';
 import {
   runInBackground,
   safeReadStorageJson,
@@ -263,8 +275,9 @@ import {
   upgradeBranchEquipment,
 } from './game/hardcoreEconomyEngine';
 import type { MegaProjectId } from './types/game';
+import { CareerWorkspace } from './components/CareerWorkspace';
 
-type ExecutiveNavId = 'overview' | 'map' | 'finance' | 'businesses' | 'office';
+type ExecutiveNavId = 'overview' | 'career' | 'map' | 'finance' | 'businesses' | 'office';
 
 const SETTINGS_STORAGE_KEY = 'tmi_settings_v1';
 const TUTORIAL_STORAGE_KEY = 'tmi_tutorial_done_v122';
@@ -524,6 +537,32 @@ function migrateSavedEmpire(
           ? saved.supplyDiscountPct
           : undefined,
       storePurchasedIds: Array.isArray(saved.storePurchasedIds) ? saved.storePurchasedIds : [],
+      unlockedCityPlates: (() => {
+        const set = new Set<number>();
+        if (Array.isArray(saved.unlockedCityPlates)) {
+          for (const p of saved.unlockedCityPlates) {
+            if (typeof p === 'number' && Number.isInteger(p) && p >= 1 && p <= 81) {
+              set.add(p);
+            }
+          }
+        }
+        set.add(derivedHq.cityPlate);
+        for (const biz of migratedBusinesses) {
+          set.add(biz.cityPlate);
+        }
+        return Array.from(set).sort((a, b) => a - b);
+      })(),
+      career:
+        saved.career && typeof saved.career === 'object'
+          ? {
+              ...createInitialCareerState(),
+              ...saved.career,
+              shiftsCompleted: Math.max(0, finiteOr(saved.career.shiftsCompleted, 0)),
+              totalWagesEarned: Math.max(0, finiteOr(saved.career.totalWagesEarned, 0)),
+              totalTipsEarned: Math.max(0, finiteOr(saved.career.totalTipsEarned, 0)),
+              careerXp: Math.max(0, finiteOr(saved.career.careerXp, 0)),
+            }
+          : createInitialCareerState(),
       lastSavedAt: finiteOr(saved.lastSavedAt, nowTs),
     };
 
@@ -655,6 +694,10 @@ export default function App() {
   const [strategicHubOpen, setStrategicHubOpen] = useState(false);
 
   const [activeNav, setActiveNav] = useState<ExecutiveNavId>('overview');
+  const [careerDistrictFilter, setCareerDistrictFilter] = useState<{
+    plate: number;
+    district: string;
+  } | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DrawerTab | null>(null);
   const [pinDropMode, setPinDropMode] = useState<boolean>(true);
   const [flyTarget, setFlyTarget] = useState<{
@@ -666,9 +709,9 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
     {
-      id: 'welcome-v173',
-      title: 'Mülk İmparatorluğu v1.7.3',
-      body: 'Supabase şema uyumu, canlı harita Realtime + 10 sn senkronizasyon ve tam sıfırlama veritabanı temizliği aktif.',
+      id: 'welcome-v180',
+      title: 'Mülk İmparatorluğu v1.8.0',
+      body: '₺2.500 ile çalışan olarak başla, vardiyalardan sermaye biriktir, vektörel 81 il haritasında kendi holdingini kur!',
       category: 'system',
       timestamp: Date.now(),
       read: false,
@@ -1515,11 +1558,12 @@ export default function App() {
   }, []);
 
   const enterEmpireForUser = useCallback(
-    (profile: UserProfile) => {
+    (profile: UserProfile, explicitCityPlate?: number) => {
+      const targetPlate = explicitCityPlate ?? startingCityPlate;
       const loaded = migrateSavedEmpire(
         loadEmpireStateLocal(profile.id),
         profile,
-        startingCityPlate
+        targetPlate
       );
       setUser(profile);
       setEmpire(loaded);
@@ -1528,6 +1572,33 @@ export default function App() {
     },
     [focusHeadquarters, startingCityPlate]
   );
+
+  const handleStartGuest = (characterName: string, cityPlate: number) => {
+    soundEngine.playClick();
+    setAuthError(null);
+    const guestRes = startGuestPlayerSession(characterName);
+    if (!guestRes.ok || !guestRes.user) {
+      setAuthError(guestRes.error ?? 'Lütfen geçerli bir karakter adı girin.');
+      return;
+    }
+    const guestProfile = guestRes.user;
+    handleSelectStartingCity(cityPlate);
+    const fresh = createInitialEmpireState(Date.now(), cityPlate);
+    saveEmpireStateLocal(guestProfile.id, fresh);
+    setUser(guestProfile);
+    setEmpire(fresh);
+    setActiveNav('overview');
+    setCareerDistrictFilter(null);
+    focusHeadquarters(fresh);
+    setScreen('playing');
+    const prov = getProvinceByPlate(cityPlate);
+    pushNotification(
+      `Hoş Geldin, ${guestProfile.name}!`,
+      `${prov.code} ${prov.name} ilinde ₺2.500 ile Çalışan olarak kariyerine başladın. İlk dükkanın için İş Hayatı sekmesinde vardiya çalışabilirsin.`,
+      'milestone',
+      false
+    );
+  };
 
   const handleLoginAccount = async (username: string, password: string) => {
     soundEngine.playClick();
@@ -1548,21 +1619,108 @@ export default function App() {
   const handleRegisterAccount = async (
     username: string,
     password: string,
-    displayName: string
+    displayName: string,
+    cityPlate: number
   ) => {
     soundEngine.playClick();
     setAuthLoading(true);
     setAuthError(null);
     try {
+      handleSelectStartingCity(cityPlate);
       const res = await registerPlayerAccount({ username, password, displayName });
       if (!res.ok || !res.user) {
         setAuthError(res.error ?? 'Hesap oluşturulamadı. Lütfen bilgilerinizi kontrol edin.');
         return;
       }
-      enterEmpireForUser(res.user);
+      const fresh = createInitialEmpireState(Date.now(), cityPlate);
+      saveEmpireStateLocal(res.user.id, fresh);
+      setUser(res.user);
+      setEmpire(fresh);
+      setActiveNav('overview');
+      setCareerDistrictFilter(null);
+      focusHeadquarters(fresh);
+      setScreen('playing');
     } finally {
       setAuthLoading(false);
     }
+  };
+
+  const handleUpgradeGuestAccount = async (input: {
+    username: string;
+    password: string;
+    displayName: string;
+  }): Promise<{ ok: boolean; error?: string }> => {
+    if (!user || user.provider !== 'guest') {
+      return { ok: false, error: 'Zaten kalıcı bir hesapla oturum açtınız.' };
+    }
+    const res = await upgradeGuestToSupabaseAccount(user, input);
+    if (!res.ok || !res.user) {
+      return { ok: false, error: res.error ?? 'Hesap bağlanamadı.' };
+    }
+    // Keep all current cash, unlocked provinces, career progress & branches seamlessly
+    saveEmpireStateLocal(res.user.id, empireRef.current);
+    setUser(res.user);
+    soundEngine.playUpgrade();
+    pushNotification(
+      'Hesabınız Kalıcı Olarak Kaydedildi!',
+      `@${res.user.username} kullanıcı adıyla tüm ilerlemeniz (nakit, şehirler, kariyer ve şubeler) güvenle bağlandı.`,
+      'milestone',
+      true
+    );
+    return { ok: true };
+  };
+
+  const handleUnlockProvince = (plate: number) => {
+    const res = unlockProvinceLicense(empire, plate, companyTier.level, Date.now());
+    if (!res.ok) {
+      if (res.error) {
+        pushNotification('İl Kilidi Açılamadı', res.error, 'finance', false);
+      }
+      return;
+    }
+    soundEngine.playUpgrade();
+    setEmpire(res.state);
+    const prov = getProvinceByPlate(plate);
+    setActivePlate(plate);
+    pushNotification(
+      `${prov.code} ${prov.name} Kilidi Açıldı!`,
+      `${formatTL(res.costPaid)} lisans ücretiyle ${prov.name} ilinde iş ilanları ve şube yatırımları açıldı.`,
+      'milestone',
+      true
+    );
+  };
+
+  const handleCollectCareerTip = (amount: number) => {
+    if (amount <= 0) return;
+    soundEngine.playCashCollect();
+    setEmpire((prev) => collectShiftTip(prev, amount, Date.now()));
+    spawnCashPopup(amount);
+  };
+
+  const handleCompleteCareerShift = (job: JobListing, uncollectedTips: number) => {
+    const outcome = completeCareerShift(empireRef.current, job, uncollectedTips, Date.now());
+    soundEngine.playUpgrade();
+    setEmpire(outcome.state);
+    const totalEarned = outcome.wagePaid + outcome.tipsIncluded + outcome.promotionBonus;
+    spawnCashPopup(totalEarned);
+    if (outcome.promotedTo) {
+      pushNotification(
+        `Terfi Ettiniz: ${outcome.promotedTo.title}!`,
+        `Vardiya maaş çarpanınız x${outcome.promotedTo.wageMultiplier.toFixed(2)} oldu ve +${formatTL(
+          outcome.promotionBonus
+        )} terfi ikramiyesi kazandınız!`,
+        'milestone',
+        true
+      );
+    } else {
+      pushNotification(
+        'Vardiya Tamamlandı',
+        `${job.workplaceName} (${job.districtName}): +${formatTL(totalEarned)} ve +${outcome.xpEarned} XP hesabınıza işlendi.`,
+        'revenue',
+        false
+      );
+    }
+    return outcome;
   };
 
   const closeAllInGameOverlays = useCallback(() => {
@@ -1649,36 +1807,55 @@ export default function App() {
 
   const handleSelectProvince = (prov: ProvinceInfo) => {
     soundEngine.playClick();
+    if (!isProvinceUnlocked(empireRef.current, prov.plate)) {
+      pushNotification(
+        `${prov.code} ${prov.name} Kilitli`,
+        'Bu ili açmak için Türkiye haritasında üzerine tıklayıp il lisansını satın alabilirsiniz.',
+        'system',
+        false
+      );
+      return;
+    }
     setActivePlate(prov.plate);
     setDroppedPin(null);
     setSelectedBusinessId(null);
     setSelectedCompetitorId(null);
-    if (empire.businesses.length === 0) {
-      setEmpire((prev) => ({ ...prev, hq: createHeadquartersForCity(prov.plate) }));
-      handleSelectStartingCity(prov.plate);
-    }
     setFlyTarget({ lat: prov.lat, lng: prov.lng, zoom: prov.zoom, nonce: Date.now() });
     pushNotification(
       `${prov.code} ${prov.name} Odasına Geçildi`,
-      `${prov.region} bölgesi canlı harita odası yüklendi.`,
+      `${prov.region} bölgesi vektörel harita ve ilçe odası yüklendi.`,
       'system',
       false
     );
   };
 
   const handleMapClick = useCallback(
-    (lat: number, lng: number) => {
+    (lat: number, lng: number, explicitDistrictName?: string) => {
       landCheckAbortRef.current?.abort();
       const abort = new AbortController();
       landCheckAbortRef.current = abort;
 
-      const info = resolvePinLocation(lat, lng, activePlate);
+      const baseInfo = resolvePinLocation(lat, lng, activePlate);
+      // Vector district clicks are guaranteed inside the province's real land district polygon
+      const info: PinLocationInfo = explicitDistrictName
+        ? {
+            ...baseInfo,
+            districtName: explicitDistrictName,
+            landStatus: 'valid',
+            landMessage: `${baseInfo.cityName} / ${explicitDistrictName} ticari imar bölgesi doğrulandı.`,
+          }
+        : baseInfo;
+
       setDroppedPin(info);
       setSelectedBusinessId(null);
       setSelectedCompetitorId(null);
       setActiveDrawer(null);
       setPinDropMode(true);
       soundEngine.playPinDrop();
+
+      if (explicitDistrictName) {
+        return;
+      }
 
       validateLandCoordinate(lat, lng, abort.signal).then((validation) => {
         if (abort.signal.aborted) return;
@@ -3242,7 +3419,7 @@ export default function App() {
     }
     pushNotification(
       'İmparatorluk Sıfırlandı',
-      'Yeni bir başlangıç yapıldı. ₺3.000.000 başlangıç sermayesi ve 1100 kredi puanı hesabınızda.',
+      'Yeni bir başlangıç yapıldı. ₺2.500 başlangıç sermayesi ile Çalışan olarak kariyerinize yeniden başlayın!',
       'system',
       false
     );
@@ -3277,7 +3454,8 @@ export default function App() {
 
   const activeNavSubtitle: Record<ExecutiveNavId, string> = {
     overview: 'FİNANSAL GENEL BAKIŞ',
-    map: `CANLI TÜRKİYE HARİTASI · ${activeProvince.code} ${activeProvince.name.toLocaleUpperCase('tr-TR')}`,
+    career: 'KİŞİSEL & İŞ HAYATI · VARDİYA VE KARİYER',
+    map: `VEKTÖREL TÜRKİYE HARİTASI · ${activeProvince.code} ${activeProvince.name.toLocaleUpperCase('tr-TR')}`,
     finance: 'FİNANS, BANKALAR & BORSA',
     businesses: 'İŞLETMELER & ŞUBE OPERASYONLARI',
     office: 'OFİSİM & PRESTİJ YÖNETİMİ',
@@ -3333,6 +3511,7 @@ export default function App() {
           onClearAuthError={() => setAuthError(null)}
           startingCityPlate={startingCityPlate}
           onSelectStartingCity={handleSelectStartingCity}
+          onStartGuest={handleStartGuest}
           onLogin={handleLoginAccount}
           onRegister={handleRegisterAccount}
           onContinueLoggedIn={() => {
@@ -3351,6 +3530,7 @@ export default function App() {
           onCheckUpdate={handleManualOtaCheck}
           checkingUpdate={checkingOta}
           savedBusinessCount={menuSavedCount}
+          savedCash={empire.cash}
         />
       )}
 
@@ -3532,10 +3712,11 @@ export default function App() {
               data-testid="left-nav-rail"
               className="z-[550] flex w-[76px] shrink-0 flex-col items-center justify-between bg-[#181F29] px-1.5 py-3 lg:w-[92px] lg:px-2 lg:py-4"
             >
-              <div className="flex w-full flex-col items-center gap-2 lg:gap-3">
+              <div className="flex w-full flex-col items-center gap-1.5 lg:gap-2.5">
                 {(
                   [
                     { id: 'overview' as const, label: 'Genel Bakış', icon: Home },
+                    { id: 'career' as const, label: 'İş Hayatı', icon: Briefcase },
                     { id: 'map' as const, label: 'Harita', icon: MapIcon },
                     { id: 'finance' as const, label: 'Finans', icon: Wallet },
                     { id: 'businesses' as const, label: 'İşletmeler', icon: Store },
@@ -3549,6 +3730,7 @@ export default function App() {
                       key={item.id}
                       type="button"
                       data-testid={`nav-rail-${item.id}`}
+                      aria-label={item.id === 'career' ? 'Kişisel & İş Hayatı' : item.label}
                       aria-current={isActive ? 'page' : undefined}
                       onClick={() => handleSelectExecutiveNav(item.id)}
                       className={`group flex w-full flex-col items-center justify-center gap-1 rounded-[16px] px-1 py-2 text-center transition-colors lg:py-2.5 ${
@@ -3586,7 +3768,7 @@ export default function App() {
 
             {/* Main Content Viewport */}
             <main className="relative min-w-0 flex-1 overflow-hidden">
-              {/* Persistent Mounted TurkeyMap so Supabase Realtime public.businesses sync runs continuously */}
+              {/* Persistent Mounted Vector TurkeyMap so Supabase Realtime public.businesses sync runs continuously */}
               <div
                 className={
                   activeNav === 'map'
@@ -3599,6 +3781,9 @@ export default function App() {
                   theme={settings.theme}
                   mapStyle={settings.mapStyle}
                   activePlate={activePlate}
+                  unlockedCityPlates={getUnlockedCityPlates(empire)}
+                  playerLevel={companyTier.level}
+                  playerCash={empire.cash}
                   currentUserId={user?.id}
                   ownBusinesses={empire.businesses}
                   localSyncRecords={localSyncRecords}
@@ -3613,6 +3798,12 @@ export default function App() {
                   flyTarget={flyTarget}
                   isVisible={activeNav === 'map'}
                   onMapClick={handleMapClick}
+                  onSelectProvince={handleSelectProvince}
+                  onUnlockProvince={handleUnlockProvince}
+                  onOpenDistrictJobs={(plate, districtName) => {
+                    setCareerDistrictFilter({ plate, district: districtName });
+                    setActiveNav('career');
+                  }}
                   onSelectOwnBusiness={handleSelectOwnBusiness}
                   onSelectCompetitor={handleSelectCompetitor}
                   onWorldSyncUpdate={handleWorldSyncUpdate}
@@ -3641,6 +3832,11 @@ export default function App() {
                     setActiveNav('map');
                     setPinDropMode(true);
                   }}
+                  onOpenCareer={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setActiveNav('career');
+                  }}
                   onOpenSettings={() => {
                     soundEngine.playClick();
                     setSettingsOpen(true);
@@ -3656,6 +3852,25 @@ export default function App() {
                   onOpenStrategicHub={() => {
                     soundEngine.playClick();
                     setStrategicHubOpen(true);
+                  }}
+                />
+              )}
+
+              {/* VIEW 1B: Kişisel & İş Hayatı (Job Listings + 2D Shift Scene) */}
+              {activeNav === 'career' && (
+                <CareerWorkspace
+                  state={empire}
+                  playerLevel={companyTier.level}
+                  characterName={user?.name ?? 'Çalışan'}
+                  initialCityPlate={careerDistrictFilter?.plate ?? activePlate}
+                  initialDistrictName={careerDistrictFilter?.district ?? null}
+                  onCollectTip={handleCollectCareerTip}
+                  onCompleteShift={handleCompleteCareerShift}
+                  onGoOpenFirstShop={() => {
+                    soundEngine.playClick();
+                    closeAllInGameOverlays();
+                    setActiveNav('map');
+                    setPinDropMode(true);
                   }}
                 />
               )}
@@ -3767,11 +3982,11 @@ export default function App() {
                     !preselectedFranchise &&
                     !droppedPin &&
                     !selectedCompetitor && (
-                      <div className="pointer-events-none absolute bottom-3 left-1/2 z-[500] w-[min(90%,430px)] -translate-x-1/2 rounded-[16px] border border-[#334155] bg-[#222B38] px-3.5 py-2 text-center text-xs text-slate-200">
+                      <div className="pointer-events-none absolute bottom-3 left-1/2 z-[500] w-[min(90%,470px)] -translate-x-1/2 rounded-[16px] border border-[#334155] bg-[#222B38] px-3.5 py-2 text-center text-xs text-slate-200">
                         <strong className="text-[#C8AE7D]">
                           {activeProvince.code} {activeProvince.name}:
                         </strong>{' '}
-                        Kara üzerinde bir caddeye tıklayıp pin bırakın; ilk işletmeniz Merkez Üssünüz olur.
+                        İlçeleri görmek, iş ilanlarına ulaşmak veya şube kurmak için şehre tıklayın ya da &quot;Sadece Seçili Şehir&quot; moduna geçin.
                       </div>
                     )}
 
@@ -4023,6 +4238,7 @@ export default function App() {
       <CityPickerModal
         open={cityPickerOpen}
         activePlate={activePlate}
+        unlockedCityPlates={getUnlockedCityPlates(empire)}
         ownBusinesses={empire.businesses}
         onSelectProvince={handleSelectProvince}
         onClose={() => setCityPickerOpen(false)}
@@ -4370,6 +4586,7 @@ export default function App() {
           setSettingsOpen(false);
           setOtaModalOpen(true);
         }}
+        onUpgradeGuestAccount={handleUpgradeGuestAccount}
         onReplayTutorial={user ? handleReplayTutorial : undefined}
         onReturnToMainMenu={screen === 'playing' ? handleReturnToMainMenu : undefined}
         onSignOut={user ? handleSignOut : undefined}

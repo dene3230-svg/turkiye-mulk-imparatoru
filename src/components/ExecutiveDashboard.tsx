@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
+  Briefcase,
   Building2,
   CheckCircle2,
   Coffee,
@@ -39,6 +40,8 @@ import {
   FORECLOSURE_STREAK_DAYS,
   hasBranchManager,
 } from '../game/hardcoreEconomyEngine';
+import { getCareerStatusBadgeLabel } from '../game/careerEngine';
+import { FIRST_SHOP_ENTRY_COST } from '../game/catalog';
 
 export type QuickActionId =
   | 'ads'
@@ -63,6 +66,7 @@ interface ExecutiveDashboardProps {
   onOpenCrisis?: () => void;
   onOpenRaiseRequests?: () => void;
   onOpenStrategicHub?: () => void;
+  onOpenCareer?: () => void;
 }
 
 function buildSmoothCurvePath(points: Array<{ x: number; y: number }>): string {
@@ -209,6 +213,7 @@ export function ExecutiveDashboard({
   onOpenCrisis,
   onOpenRaiseRequests,
   onOpenStrategicHub,
+  onOpenCareer,
 }: ExecutiveDashboardProps) {
   const dailyRevenue = Math.max(0, Math.round(metrics.dailyEstimatedRevenue));
   const monthlyProjected = Math.round(dailyRevenue * 30);
@@ -346,9 +351,18 @@ export function ExecutiveDashboard({
           className="flex flex-col gap-3 min-[760px]:col-span-8 min-[1024px]:min-h-0 lg:gap-4"
         >
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold tracking-wider text-slate-100 lg:text-lg">
-              GENEL BAKIŞ
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold tracking-wider text-slate-100 lg:text-lg">
+                GENEL BAKIŞ
+              </h2>
+              <span
+                data-testid="overview-career-status-badge"
+                className="inline-flex items-center gap-1 rounded-lg border border-[#334155] bg-[#222B38] px-2 py-0.5 text-[10.5px] font-semibold text-[#C8AE7D]"
+              >
+                <Briefcase className="h-3 w-3" strokeWidth={1.5} />
+                <span>{getCareerStatusBadgeLabel(state)}</span>
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {metrics.negativeCashStreakDays > 0 && (
                 <span
@@ -715,6 +729,40 @@ export function ExecutiveDashboard({
                   </div>
                 );
               })}
+
+              {/* Starter Career Guidance Card when player has 0 branches */}
+              {state.businesses.length === 0 && onOpenCareer && (
+                <button
+                  type="button"
+                  data-testid="overview-start-career-tile"
+                  onClick={onOpenCareer}
+                  className="flex min-w-[230px] flex-[1.5] flex-col justify-between rounded-[14px] border border-[#C8AE7D]/45 bg-[#1C2430] p-3 text-left transition-colors hover:border-[#C8AE7D] hover:bg-[#222B38]"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#C8AE7D]/45 bg-[#222B38] text-[#C8AE7D]">
+                        <Briefcase className="h-4 w-4" strokeWidth={1.5} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-100">
+                          Çalışan Olarak Sermaye Biriktir
+                        </div>
+                        <div className="text-[10.5px] text-slate-400">
+                          İlk dükkan hedefi: {formatTL(FIRST_SHOP_ENTRY_COST)}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-slate-300">
+                      Vardiyalı işlerde çalış, bahşiş topla ve terfi alarak ilk işletmeni açacak
+                      sermayeye ulaş.
+                    </p>
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between border-t border-[#334155]/70 pt-2 text-[11px] font-semibold text-[#C8AE7D]">
+                    <span>İş Hayatı Ekranına Git</span>
+                    <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </div>
+                </button>
+              )}
 
               {/* Dashed "+ Yeni İşletme / Şube Kur" Tile */}
               <button

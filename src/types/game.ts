@@ -2,7 +2,7 @@ export type ThemeMode = 'light' | 'dark';
 
 export type ScreenState = 'intro' | 'menu' | 'playing';
 
-export type AuthProvider = 'account';
+export type AuthProvider = 'account' | 'guest';
 
 export interface UserProfile {
   id: string;
@@ -798,6 +798,8 @@ export interface EmpireState {
   companyXp: number;
   gameMinutes: number; // In-game clock in minutes (starts at 540 = Day 1 09:00)
   hq?: HeadquartersInfo | null; // Permanent HQ city & first business coordinates
+  unlockedCityPlates?: number[]; // v1.8.0: Starts with ONLY 1 chosen starting province; remaining 80 locked
+  career?: CareerState; // v1.8.0: Employee -> Shift Work -> Promotion -> Entrepreneur loop
   businesses: OwnedBusiness[];
   cityManagers: HiredStaff[]; // bolge_sorumlusu & genel_mudur executives
   candidatePool: StaffCandidate[]; // Renewable 1-5 star HR pool
@@ -1035,4 +1037,52 @@ export interface BoardContract {
   rewardXp: number;
   status: 'active' | 'completed' | 'claimed' | 'failed';
 }
+
+// ── v1.8.0 Career, Shift Work, Promotions & 81-Province Unlock Types ──────────
+
+export type CareerRankId = 'barista_kasiyer' | 'vardiya_amiri' | 'sube_muduru';
+
+export type JobCategoryId = 'kafe_restoran' | 'magaza' | 'ofis' | 'otel_turizm';
+
+export interface JobListing {
+  id: string;
+  title: string;
+  workplaceName: string;
+  category: JobCategoryId;
+  categoryLabel: string;
+  cityPlate: number;
+  cityName: string;
+  districtName: string;
+  dailyWage: number; // Base shift salary in TL
+  tipRange: [number, number]; // Per-customer tip range in TL
+  xpReward: number;
+  shiftHoursLabel: string; // e.g. '09:00 - 17:00'
+  shiftDurationSec: number; // Real-time interactive 2D shift length (18..24s)
+  requiredLevel: number;
+  requiredRank?: CareerRankId;
+  description: string;
+  perks: string[];
+}
+
+export interface CareerState {
+  rankId: CareerRankId;
+  shiftsCompleted: number;
+  careerXp: number;
+  totalWagesEarned: number;
+  totalTipsEarned: number;
+  activeJobId: string | null;
+  activeJobCityPlate: number | null;
+  activeJobDistrict: string | null;
+  lastShiftAt?: number;
+}
+
+export interface ProvinceUnlockRequirement {
+  plate: number;
+  cityName: string;
+  region: GeographicRegion;
+  requiredLevel: number;
+  licenseCost: number;
+  alreadyUnlocked: boolean;
+}
+
 

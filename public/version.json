@@ -1,10 +1,10 @@
 {
-  "version": "1.7.3",
-  "buildDate": "2026-11-27",
+  "version": "1.8.0",
+  "buildDate": "2026-11-28",
   "mandatory": false,
   "notes": [
-    "Supabase public.businesses tablo şeması ve veri tipleri birebir eşitlendi; 400 yazma/silme hataları giderildi",
-    "Şube kurma, kapatma, haciz ve Oyunu Sıfırla işlemlerinde Supabase veritabanı kayıtları gerçek sorgularla güncellenip temizlenir",
-    "Harita için Supabase Realtime (INSERT/UPDATE/DELETE) aboneliği ve 10 saniyelik sessiz arka plan rakip yenileme (polling) aktif edildi"
+    "Yeni 3 adımlı animasyonlu giriş ekranı, Misafir olarak başlama ve Ayarlar üzerinden kayıpsız hesap bağlama sistemi eklendi",
+    "₺2.500 başlangıç sermayesi, 81 ilden 1 başlangıç ili seçimi ve Kişisel & İş Hayatı 2D animasyonlu vardiya çalışma mekaniği eklendi",
+    "Leaflet haritası kaldırıldı; 81 il ve gerçek ilçe sınırlarını gösteren vektörel (SVG) karanlık arduvaz harita ve Supabase Realtime senkronizasyonu aktif edildi"
   ]
 }

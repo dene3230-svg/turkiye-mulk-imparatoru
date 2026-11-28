@@ -473,6 +473,7 @@ test('BIST Devleri (8 exact tickers) and Player Holding IPO (>=250M & 1 factory 
   assert.deepEqual(tickers, ['THYL', 'ASLS', 'BIMX', 'TOGR', 'TUPR', 'GRNT', 'ERCL', 'TRKC']);
 
   let state = createInitialEmpireState(10_000);
+  state.cash = 3_000_000;
   const quotes = createInitialStockQuotes();
 
   // Buy & sell THYL
@@ -658,8 +659,8 @@ test('AVM synergy, 1.5x takeover, and v1.4.1 OTA semver work', () => {
   assert.equal(calculateTakeoverPrice(rival.valuation), 150_000);
   assert.equal(takeoverCompetitorBusiness(avm.state, rival, owner, now).ok, true);
 
-  assert.equal(APP_VERSION, '1.7.3');
-  assert.equal(compareSemver('1.7.2', '1.7.3'), 1);
+  assert.equal(APP_VERSION, '1.8.0');
+  assert.equal(compareSemver('1.7.3', '1.8.0'), 1);
   assert.equal(compareSemver('1.3.2', '1.4.0'), 1);
   assert.equal(compareSemver('1.4.0', '1.4.0-fix'), 1);
   assert.equal(compareSemver('1.4.0-fix', '1.4.0-fix'), 0);
@@ -681,6 +682,7 @@ test('v1.6.0 Strict 2-State Time Control (Pause / Normal 30s = 1 Day): 48 min/se
   assert.equal(startClock.dayProgressPct, 37.5);
 
   const owner = { id: 'p1', name: 'Patron' };
+  state.cash = 3_000_000;
   const built = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Saat Kafe', owner, [], now);
   assert.equal(built.ok, true);
   state = openAllBranches(built.state);
@@ -811,6 +813,7 @@ test('v1.2.2 Accounting P&L Report calculates itemized revenues, factory supply 
 test('v1.2.2 Self-Renewing Dynamic Missions award Cash + XP and immediately replace claimed mission', () => {
   const now = 600_000;
   let state = createInitialEmpireState(now);
+  state.cash = 3_000_000;
   const initialMissions = ensureDynamicMissions(state, now);
   assert.equal(initialMissions.length, ACTIVE_MISSION_SLOTS);
   assert.equal(initialMissions[0].id, 'dyn-starter-kafe-1');
@@ -938,6 +941,7 @@ test('v1.2.6 Calendar Day-End Summary, 7-Day Weekly Dividend, 30-Day Monthly Clo
 
   // Test day-end transition (Day 1 -> Day 2)
   let state = createInitialEmpireState(now);
+  state.cash = 3_000_000;
   const quotes = createInitialStockQuotes();
   const boughtStock = buyStockShares(state, quotes[0], 50, now);
   assert.equal(boughtStock.ok, true);
@@ -1332,7 +1336,8 @@ test('v1.3.0 Monthly 30-Day Credit Installments, Timely +40 Score Boost, Default
 
 test('v1.3.0 Level-1 Muhasebe Departmanı auto-pays due monthly loan installments & tax bills before overdue', () => {
   const now = 1_400_000;
-  let state = createInitialEmpireState(now, 34); // Level 1 starter with 250k cash!
+  let state = createInitialEmpireState(now, 34);
+  state.cash = 3_000_000;
   const owner = { id: 'p1', name: 'Patron' };
 
   // Hire 1-star Muhasebeci right at Level 1 (no Holding lock!)
@@ -1420,6 +1425,7 @@ test('v1.3.0 Realistic Progressive Tax Curve (KDV, SGK, Kurumlar, Belediye) scal
   assert.ok(starterRates.sgkRate < holdingRates.sgkRate);
 
   let state = createInitialEmpireState(now, 34);
+  state.cash = 3_000_000;
   const owner = { id: 'p1', name: 'Patron' };
   const b1 = purchaseBusiness(state, 'kafe', landPin(41.0422, 29.0067, 34), 'Vergi Kafe', owner, [], now);
   state = openAllBranches(b1.state);
@@ -1450,6 +1456,7 @@ test('v1.3.0 Realistic Progressive Tax Curve (KDV, SGK, Kurumlar, Belediye) scal
 test('v1.3.1 Multiplayer Shared Map Sync: nationwide real-player merge, idempotent Realtime INSERT/UPDATE/DELETE, and owner+holding formatting', () => {
   const now = 1_700_000;
   let state = createInitialEmpireState(now, 34);
+  state.cash = 3_000_000;
   const playerA = { id: 'player-a-uuid', name: 'Ahmet Yılmaz' };
   const built = purchaseBusiness(
     state,
@@ -1837,7 +1844,7 @@ test('v1.4.1 Realistic Turkish Pricing (₺200 coffee / 70-80% expense ratio), M
   const now = 2_200_000;
   const fresh = createInitialEmpireState(now, 34);
   assert.equal(fresh.cash, STARTING_CASH);
-  assert.equal(fresh.cash, 3_000_000);
+  assert.equal(fresh.cash, 2_500);
   assert.equal(fresh.brandRecognition, STARTING_BRAND_RECOGNITION);
   assert.equal(fresh.officeTierId, 'home_office');
 
@@ -1976,6 +1983,7 @@ test('v1.4.1 Strict Bank Credit Audit rejects brand-new/low-brand/low-prestige/l
 test('v1.4.1 Ofisim System: 4 Office Tiers, Equipment Upgrades, Personal Assets, B2B Supply Discount & Executive HR Gate', () => {
   const now = 2_500_000;
   let state = createInitialEmpireState(now, 34);
+  state.cash = 3_000_000;
   assert.equal(OFFICE_TIERS.length, 4);
   assert.equal(OFFICE_UPGRADES.length, 6);
   assert.equal(PERSONAL_ASSETS.length, 5);

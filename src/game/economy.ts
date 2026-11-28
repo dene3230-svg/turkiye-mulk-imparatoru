@@ -103,6 +103,11 @@ import {
   processHardcoreDailySettlement,
   type HardcoreDailySettlementResult,
 } from './hardcoreEconomyEngine';
+import {
+  createInitialCareerState,
+  getEffectiveEstablishmentCost,
+  getUnlockedCityPlates,
+} from './careerEngine';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
@@ -241,6 +246,8 @@ export function createInitialEmpireState(
     companyXp: 0,
     gameMinutes: STARTING_GAME_MINUTES,
     hq: createHeadquartersForCity(startingCityPlate),
+    unlockedCityPlates: [startingCityPlate],
+    career: createInitialCareerState(),
     businesses: [],
     cityManagers: [],
     candidatePool: generateCandidatePool(now, 'kafe'),
@@ -872,7 +879,7 @@ export function purchaseBusiness(
     };
   }
 
-  const baseCost = calculateEstablishmentCost(bp, location);
+  const baseCost = getEffectiveEstablishmentCost(bp, location, state.businesses.length);
   const licenseFee = franchiseBrand ? franchiseBrand.licenseFee : 0;
   const totalCost = baseCost + licenseFee;
   if (state.cash < totalCost) {
@@ -971,6 +978,11 @@ export function purchaseBusiness(
         }
       : state.hq;
 
+  const existingUnlocked = getUnlockedCityPlates(state);
+  const nextUnlocked = existingUnlocked.includes(location.cityPlate)
+    ? existingUnlocked
+    : [...existingUnlocked, location.cityPlate].sort((a, b) => a - b);
+
   return {
     ok: true,
     business: newBusiness,
@@ -978,6 +990,7 @@ export function purchaseBusiness(
       ...state,
       cash: state.cash - totalCost,
       hq: nextHq,
+      unlockedCityPlates: nextUnlocked,
       businesses: [newBusiness, ...existingUpdated],
       lastSavedAt: now,
     },

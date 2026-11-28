@@ -289,7 +289,7 @@ export function isValidStoredSession(value: unknown): value is UserProfile {
     v.username.trim().length >= 3 &&
     typeof v.name === 'string' &&
     v.name.trim().length >= 2 &&
-    v.provider === 'account'
+    (v.provider === 'account' || v.provider === 'guest')
   );
 }
 
@@ -306,7 +306,7 @@ export function loadStoredPlayerSession(): UserProfile | null {
     username: normalizeUsername(session.username),
     name: displayName,
     displayName,
-    provider: 'account',
+    provider: session.provider === 'guest' ? 'guest' : 'account',
   };
 }
 
@@ -316,9 +316,29 @@ export function saveStoredPlayerSession(profile: UserProfile): void {
     username: normalizeUsername(profile.username),
     name: sanitizeDisplayName(profile.displayName || profile.name),
     displayName: sanitizeDisplayName(profile.displayName || profile.name),
-    provider: 'account',
+    provider: profile.provider === 'guest' ? 'guest' : 'account',
   };
   safeStorageSetItem(PLAYER_SESSION_STORAGE_KEY, JSON.stringify(safeSession));
+}
+
+export function createGuestProfile(displayNameInput: string, persistSession = true): AuthActionResult {
+  const cleanName = sanitizeDisplayName(displayNameInput);
+  if (cleanName.length < 2) {
+    return { ok: false, error: 'Lütfen en az 2 karakterli bir karakter adı girin.' };
+  }
+  const guestId = generateAccountId();
+  const suffix = guestId.replace(/[^a-z0-9]/gi, '').slice(0, 6).toLowerCase() || '001';
+  const profile: UserProfile = {
+    id: guestId,
+    username: `misafir_${suffix}`,
+    name: cleanName,
+    displayName: cleanName,
+    provider: 'guest',
+  };
+  if (persistSession) {
+    saveStoredPlayerSession(profile);
+  }
+  return { ok: true, user: profile, source: 'local' };
 }
 
 export function clearStoredPlayerSession(): void {
@@ -362,7 +382,7 @@ export function rowToUserProfile(row: Pick<PlayerAccountRow, 'id' | 'username' |
 // ============================================================================
 
 export async function registerPlayerAccountWithAdapter(
-  input: { username: string; password: string; displayName: string },
+  input: { username: string; password: string; displayName: string; preferredId?: string },
   adapter: PlayerAccountsDbAdapter,
   persistSession = true
 ): Promise<AuthActionResult> {
@@ -373,7 +393,10 @@ export async function registerPlayerAccountWithAdapter(
 
   const { username, displayName } = validation;
   const passwordHash = await hashPassword(input.password);
-  const newId = generateAccountId();
+  const newId =
+    input.preferredId && input.preferredId.trim().length > 0
+      ? input.preferredId.trim()
+      : generateAccountId();
 
   // 1) Check Supabase for existing username (with safe timeout)
   const lookup = await withSafeTimeout(
@@ -518,3 +541,28 @@ export async function loginPlayerAccountWithAdapter(
   if (persistSession) saveStoredPlayerSession(profile);
   return { ok: true, user: profile, source: 'local' };
 }
+
+/**
+ * Upgrades an active guest profile into a permanent Supabase account while keeping the
+ * exact same UUID (`preferredId`) so all cash, unlocked cities, XP, career progress, and
+ * multiplayer `public.businesses` rows remain intact without resetting anything.
+ */
+export async function upgradeGuestToAccountWithAdapter(
+  guest: UserProfile,
+  input: { username: string; password: string; displayName?: string },
+  adapter: PlayerAccountsDbAdapter,
+  persistSession = true
+): Promise<AuthActionResult> {
+  const effectiveDisplayName = sanitizeDisplayName(input.displayName || guest.displayName || guest.name);
+  return registerPlayerAccountWithAdapter(
+    {
+      username: input.username,
+      password: input.password,
+      displayName: effectiveDisplayName,
+      preferredId: guest.id,
+    },
+    adapter,
+    persistSession
+  );
+}
+
