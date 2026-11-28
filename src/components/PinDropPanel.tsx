@@ -51,6 +51,7 @@ interface PinDropPanelProps {
   availableFranchises: FranchiseBrand[];
   chainCloneDraft?: ChainCloneDraft | null;
   preselectedFranchise?: FranchiseBrand | null;
+  rentDiscountRate?: number;
   onCancelSpecialMode?: () => void;
   onEstablish: (
     blueprintId: BusinessTypeId,
@@ -101,6 +102,7 @@ export function PinDropPanel({
   availableFranchises,
   chainCloneDraft,
   preselectedFranchise,
+  rentDiscountRate = 0,
   onCancelSpecialMode,
   onEstablish,
   onClose,
@@ -160,7 +162,12 @@ export function PinDropPanel({
     }
   }, [location.districtName, selectedBlueprint.shortName, selectedFranchise, nameEdited, chainCloneDraft]);
 
-  const baseCost = getEffectiveEstablishmentCost(selectedBlueprint, location, ownBranchCount);
+  const baseCost = getEffectiveEstablishmentCost(
+    selectedBlueprint,
+    location,
+    ownBranchCount,
+    rentDiscountRate
+  );
   const firstShopGrantApplied = isEligibleForFirstShopGrant(ownBranchCount, selectedBlueprint.id);
   const totalCost = baseCost + (selectedFranchise?.licenseFee ?? 0);
   const affinity = getAffinityMultiplier(selectedBlueprint, location);
@@ -373,7 +380,12 @@ export function PinDropPanel({
             {mode === 'independent' ? (
               <div className="grid grid-cols-2 gap-1.5">
                 {BUSINESS_BLUEPRINTS.map((bp) => {
-                  const bpCost = getEffectiveEstablishmentCost(bp, location, ownBranchCount);
+                  const bpCost = getEffectiveEstablishmentCost(
+                    bp,
+                    location,
+                    ownBranchCount,
+                    rentDiscountRate
+                  );
                   const bpAff = getAffinityMultiplier(bp, location);
                   const bpHourly = Math.round((bp.baseHourlyIncome * bpAff) / 50) * 50;
                   const locked = companyLevel < bp.minCompanyLevel;
@@ -450,7 +462,12 @@ export function PinDropPanel({
                     BUSINESS_BLUEPRINTS.find((b) => b.id === brand.businessType) ??
                     BUSINESS_BLUEPRINTS[0];
                   const fullCost =
-                    getEffectiveEstablishmentCost(bp, location, ownBranchCount) + brand.licenseFee;
+                    getEffectiveEstablishmentCost(
+                      bp,
+                      location,
+                      ownBranchCount,
+                      rentDiscountRate
+                    ) + brand.licenseFee;
                   const affordable = cash >= fullCost;
                   const isSel = selectedFranchise?.id === brand.id;
 
@@ -522,7 +539,15 @@ export function PinDropPanel({
                 </div>
                 <div className="font-mono-num text-[9.5px] text-amber-700 dark:text-[#C8AE7D]">
                   🏗️ {selectedBlueprint.constructionDays}g tadilat · Kira{' '}
-                  {formatTL(Math.round(selectedBlueprint.dailyRentBase * location.landMultiplier), true)}/g
+                  {formatTL(
+                    Math.round(
+                      selectedBlueprint.dailyRentBase *
+                        location.landMultiplier *
+                        Math.max(0.5, 1 - rentDiscountRate)
+                    ),
+                    true
+                  )}
+                  /g
                 </div>
               </div>
             </div>

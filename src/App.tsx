@@ -24,6 +24,7 @@ import type {
   BranchUpgradeTrackId,
   BusinessTypeId,
   ChainCloneDraft,
+  CharacterProfile,
   ChatMessage,
   EmpireState,
   FranchiseBrand,
@@ -170,6 +171,7 @@ import {
   isProvinceUnlocked,
   unlockProvinceLicense,
 } from './game/careerEngine';
+import { getCharacterTraitModifiers } from './game/characterEngine';
 import {
   runInBackground,
   safeReadStorageJson,
@@ -1573,17 +1575,17 @@ export default function App() {
     [focusHeadquarters, startingCityPlate]
   );
 
-  const handleStartGuest = (characterName: string, cityPlate: number) => {
+  const handleStartGuest = (character: CharacterProfile, cityPlate: number) => {
     soundEngine.playClick();
     setAuthError(null);
-    const guestRes = startGuestPlayerSession(characterName);
+    const guestRes = startGuestPlayerSession(character.name);
     if (!guestRes.ok || !guestRes.user) {
       setAuthError(guestRes.error ?? 'Lütfen geçerli bir karakter adı girin.');
       return;
     }
     const guestProfile = guestRes.user;
     handleSelectStartingCity(cityPlate);
-    const fresh = createInitialEmpireState(Date.now(), cityPlate);
+    const fresh = createInitialEmpireState(Date.now(), cityPlate, character);
     saveEmpireStateLocal(guestProfile.id, fresh);
     setUser(guestProfile);
     setEmpire(fresh);
@@ -1619,7 +1621,7 @@ export default function App() {
   const handleRegisterAccount = async (
     username: string,
     password: string,
-    displayName: string,
+    character: CharacterProfile,
     cityPlate: number
   ) => {
     soundEngine.playClick();
@@ -1627,12 +1629,16 @@ export default function App() {
     setAuthError(null);
     try {
       handleSelectStartingCity(cityPlate);
-      const res = await registerPlayerAccount({ username, password, displayName });
+      const res = await registerPlayerAccount({
+        username,
+        password,
+        displayName: character.name,
+      });
       if (!res.ok || !res.user) {
         setAuthError(res.error ?? 'Hesap oluşturulamadı. Lütfen bilgilerinizi kontrol edin.');
         return;
       }
-      const fresh = createInitialEmpireState(Date.now(), cityPlate);
+      const fresh = createInitialEmpireState(Date.now(), cityPlate, character);
       saveEmpireStateLocal(res.user.id, fresh);
       setUser(res.user);
       setEmpire(fresh);
@@ -1693,8 +1699,10 @@ export default function App() {
   const handleCollectCareerTip = (amount: number) => {
     if (amount <= 0) return;
     soundEngine.playCashCollect();
+    const mult = getCharacterTraitModifiers(empireRef.current).tipMultiplier;
+    const credited = Math.round(amount * mult);
     setEmpire((prev) => collectShiftTip(prev, amount, Date.now()));
-    spawnCashPopup(amount);
+    spawnCashPopup(credited);
   };
 
   const handleCompleteCareerShift = (job: JobListing, uncollectedTips: number) => {
@@ -3531,6 +3539,7 @@ export default function App() {
           checkingUpdate={checkingOta}
           savedBusinessCount={menuSavedCount}
           savedCash={empire.cash}
+          savedCharacter={empire.character}
         />
       )}
 
@@ -4007,6 +4016,7 @@ export default function App() {
                           availableFranchises={allFranchises}
                           chainCloneDraft={chainCloneDraft}
                           preselectedFranchise={preselectedFranchise}
+                          rentDiscountRate={getCharacterTraitModifiers(empire).rentDiscountRate}
                           onCancelSpecialMode={() => {
                             setChainCloneDraft(null);
                             setPreselectedFranchise(null);

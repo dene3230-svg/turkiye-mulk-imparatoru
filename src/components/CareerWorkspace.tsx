@@ -30,8 +30,15 @@ import {
 } from '../game/careerEngine';
 import { FIRST_SHOP_ENTRY_COST } from '../game/catalog';
 import { formatTL } from '../game/economy';
+import {
+  OUTFIT_OPTIONS,
+  createDefaultCharacterProfile,
+  getTraitOption,
+  resolveEffectiveCharacterOutfit,
+} from '../game/characterEngine';
 import { getProvinceByPlate } from '../game/provinces81';
 import { soundEngine } from '../services/soundEngine';
+import { CharacterAvatar2D } from './CharacterAvatar2D';
 import { ShiftScene2D } from './ShiftScene2D';
 
 interface CareerWorkspaceProps {
@@ -100,6 +107,23 @@ export function CareerWorkspace({
 
   const firstShopPct = Math.min(100, Math.round((state.cash / FIRST_SHOP_ENTRY_COST) * 100));
 
+  const resolvedCharacter = useMemo(
+    () => state.character ?? createDefaultCharacterProfile(characterName, 'male'),
+    [state.character, characterName]
+  );
+  const effectiveOutfit = useMemo(
+    () => resolveEffectiveCharacterOutfit(resolvedCharacter, state),
+    [resolvedCharacter, state]
+  );
+  const activeTrait = useMemo(
+    () => (state.character ? getTraitOption(state.character.traitId) : null),
+    [state.character]
+  );
+  const effectiveOutfitLabel =
+    effectiveOutfit === 'takim_elbise'
+      ? 'Takım Elbise (Yönetici)'
+      : OUTFIT_OPTIONS.find((o) => o.id === effectiveOutfit)?.label ?? 'Başlangıç Kıyafeti';
+
   if (activeShiftJob) {
     return (
       <ShiftScene2D
@@ -108,6 +132,8 @@ export function CareerWorkspace({
         playerCash={state.cash}
         ownBusinessCount={state.businesses.length}
         characterName={characterName}
+        character={resolvedCharacter}
+        effectiveOutfit={effectiveOutfit}
         onCollectTip={onCollectTip}
         onCompleteShift={onCompleteShift}
         onExitShift={() => setActiveShiftJob(null)}
@@ -338,7 +364,29 @@ export function CareerWorkspace({
               <span>Kariyer Özeti</span>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            {/* Character Identity & Active Trait Strip */}
+            <div className="mt-3 flex items-center gap-3 rounded-[14px] border border-[#334155] bg-[#181F29] p-2.5">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[12px] border border-[#334155] bg-[#222B38]">
+                <CharacterAvatar2D
+                  profile={resolvedCharacter}
+                  effectiveOutfit={effectiveOutfit}
+                  mode="bust"
+                />
+              </div>
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="truncate font-bold text-slate-100">{characterName}</div>
+                <div className="mt-0.5 truncate text-[11px] text-[#C8AE7D]">
+                  Kıyafet: {effectiveOutfitLabel}
+                </div>
+                {activeTrait && (
+                  <div className="mt-0.5 truncate text-[11px] text-[#7A9E7E]">
+                    Yetenek: {activeTrait.title} ({activeTrait.bonusBadge})
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-[14px] border border-[#334155] bg-[#181F29] p-3">
                 <div className="text-[11px] text-slate-400">Tamamlanan Vardiya</div>
                 <div className="mt-1 font-mono-num text-base font-bold text-slate-100">

@@ -11,16 +11,27 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import type { CareerState, JobCategoryId, JobListing } from '../types/game';
+import type {
+  CareerState,
+  CharacterOutfitId,
+  CharacterProfile,
+  JobCategoryId,
+  JobListing,
+} from '../types/game';
 import {
   CAREER_RANKS,
   getCareerRankDef,
   getNextCareerRank,
   type ShiftCompletionOutcome,
 } from '../game/careerEngine';
+import {
+  createDefaultCharacterProfile,
+  getTraitOption,
+} from '../game/characterEngine';
 import { FIRST_SHOP_ENTRY_COST } from '../game/catalog';
 import { formatTL } from '../game/economy';
 import { soundEngine } from '../services/soundEngine';
+import { CharacterAvatar2D } from './CharacterAvatar2D';
 
 interface ShiftScene2DProps {
   job: JobListing;
@@ -28,6 +39,8 @@ interface ShiftScene2DProps {
   playerCash: number;
   ownBusinessCount: number;
   characterName: string;
+  character?: CharacterProfile;
+  effectiveOutfit?: CharacterOutfitId;
   onCollectTip: (amount: number) => void;
   onCompleteShift: (job: JobListing, uncollectedTips: number) => ShiftCompletionOutcome;
   onExitShift: () => void;
@@ -47,11 +60,15 @@ function CutawayInteriorSvg({
   servingPulse,
   customerStep,
   workplaceName,
+  character,
+  effectiveOutfit,
 }: {
   category: JobCategoryId;
   servingPulse: boolean;
   customerStep: number;
   workplaceName: string;
+  character: CharacterProfile;
+  effectiveOutfit?: CharacterOutfitId;
 }) {
   const customerOffsetX = customerStep % 2 === 0 ? 0 : -14;
 
@@ -198,39 +215,28 @@ function CutawayInteriorSvg({
         </g>
       )}
 
-      {/* PLAYER CHARACTER (Working behind Counter / Desk) */}
+      {/* CUSTOMIZED PLAYER CHARACTER (Working behind Counter / Desk) */}
       <g
-        transform={`translate(248, ${servingPulse ? 114 : 118})`}
+        transform={`translate(0, ${servingPulse ? -4 : 0})`}
         className="transition-transform duration-150"
       >
-        {/* Head */}
-        <circle cx="0" cy="0" r="16" fill="#E6C9A8" stroke="#181F29" strokeWidth="2" />
-        {/* Hair */}
-        <path d="M -15 -4 Q -10 -20 4 -18 Q 16 -16 15 -2 Q 8 -10 -15 -4 Z" fill="#1F2937" />
-        {/* Eyes & Smile */}
-        <circle cx="-5" cy="1" r="1.8" fill="#181F29" />
-        <circle cx="5" cy="1" r="1.8" fill="#181F29" />
-        <path d="M -4 7 Q 0 11 4 7" fill="none" stroke="#181F29" strokeWidth="1.6" strokeLinecap="round" />
-        {/* Torso & Uniform/Apron */}
-        <path d="M -22 22 Q 0 16 22 22 L 26 76 L -26 76 Z" fill="#334155" stroke="#181F29" strokeWidth="2" />
-        <rect x="-14" y="28" width="28" height="48" rx="4" fill="#C8AE7D" stroke="#181F29" strokeWidth="1.5" />
-        {/* Serving Arm */}
-        <path
-          d={servingPulse ? 'M 20 34 L 54 22' : 'M 20 34 L 46 34'}
-          stroke="#E6C9A8"
-          strokeWidth="8"
-          strokeLinecap="round"
-        />
-        {/* Served Item (Cup / Package / Document) */}
+        <svg x="192" y="72" width="112" height="128" overflow="visible">
+          <CharacterAvatar2D
+            profile={character}
+            effectiveOutfit={effectiveOutfit}
+            mode="bust"
+          />
+        </svg>
+        {/* Served Item (Cup / Package / Document) sliding across counter */}
         <rect
-          x={servingPulse ? 50 : 42}
-          y={servingPulse ? 10 : 22}
-          width="16"
+          x={servingPulse ? 300 : 290}
+          y={servingPulse ? 166 : 174}
+          width="18"
           height="18"
           rx="3"
           fill="#7A9E7E"
           stroke="#181F29"
-          strokeWidth="1.5"
+          strokeWidth="1.6"
         />
       </g>
 
@@ -283,11 +289,23 @@ export function ShiftScene2D({
   playerCash,
   ownBusinessCount,
   characterName,
+  character,
+  effectiveOutfit,
   onCollectTip,
   onCompleteShift,
   onExitShift,
   onGoOpenFirstShop,
 }: ShiftScene2DProps) {
+  const resolvedCharacter = useMemo(
+    () => character ?? createDefaultCharacterProfile(characterName, 'male'),
+    [character, characterName]
+  );
+  const activeTrait = useMemo(
+    () => (character ? getTraitOption(character.traitId) : null),
+    [character]
+  );
+  const tipMultiplier = character?.traitId === 'sosyal' ? 1.2 : 1;
+
   const [elapsedSec, setElapsedSec] = useState(0);
   const [customersServed, setCustomersServed] = useState(0);
   const [tipJarAmount, setTipJarAmount] = useState(0);
@@ -375,12 +393,13 @@ export function ShiftScene2D({
 
   const handleCollectTipJar = () => {
     if (tipJarAmount <= 0 || outcome) return;
-    const collected = tipJarAmount;
+    const rawCollected = tipJarAmount;
+    const credited = Math.round(rawCollected * tipMultiplier);
     setTipJarAmount(0);
-    setTipsCollectedInShift((prev) => prev + collected);
-    onCollectTip(collected);
+    setTipsCollectedInShift((prev) => prev + credited);
+    onCollectTip(rawCollected);
     soundEngine.playCashCollect();
-    spawnBubble(`+₺${collected.toLocaleString('tr-TR')} Bahşiş!`, 'tip', 48, 42);
+    spawnBubble(`+₺${credited.toLocaleString('tr-TR')} Bahşiş!`, 'tip', 48, 42);
   };
 
   const handleStartAnotherShift = () => {
@@ -434,7 +453,13 @@ export function ShiftScene2D({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {activeTrait && (
+            <div className="rounded-[14px] border border-[#C8AE7D]/45 bg-[#181F29] px-3 py-1.5">
+              <span className="font-semibold text-[#C8AE7D]">{activeTrait.title}</span>
+              <span className="ml-1 font-mono-num text-slate-300">({activeTrait.bonusBadge})</span>
+            </div>
+          )}
           <div className="rounded-[14px] border border-[#334155] bg-[#181F29] px-3 py-1.5">
             <span className="text-slate-400">Hizmet Edilen: </span>
             <span className="font-mono-num font-bold text-slate-100">{customersServed} Müşteri</span>
@@ -456,6 +481,8 @@ export function ShiftScene2D({
               servingPulse={servingPulse}
               customerStep={customersServed}
               workplaceName={job.workplaceName}
+              character={resolvedCharacter}
+              effectiveOutfit={effectiveOutfit}
             />
 
             {/* Floating +₺ and +XP Bubbles */}

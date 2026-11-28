@@ -10,6 +10,7 @@ import type {
 } from '../types/game';
 import { FIRST_SHOP_ENTRY_COST } from './catalog';
 import { getProvinceByPlate } from './provinces81';
+import { getCharacterTraitModifiers } from './characterEngine';
 
 export interface CareerRankDef {
   id: CareerRankId;
@@ -329,10 +330,11 @@ export function completeCareerShift(
   const promotedTo = nextRank.index > prevRank.index ? nextRank : null;
   const promotionBonus = promotedTo ? promotedTo.promotionBonusCash : 0;
 
+  const traitMods = getCharacterTraitModifiers(state);
   const safeWage = Math.max(0, Math.round(job.dailyWage));
-  const safeTips = Math.max(0, Math.round(uncollectedTips));
+  const safeTips = Math.max(0, Math.round(uncollectedTips * traitMods.tipMultiplier));
   const totalCashDelta = safeWage + safeTips + promotionBonus;
-  const xpEarned = Math.max(10, Math.round(job.xpReward));
+  const xpEarned = Math.max(10, Math.round(job.xpReward * traitMods.xpMultiplier));
 
   const nextCareer: CareerState = {
     ...prevCareer,
@@ -372,7 +374,8 @@ export function collectShiftTip(
   tipAmount: number,
   now = Date.now()
 ): EmpireState {
-  const safeTip = Math.max(0, Math.round(tipAmount));
+  const traitMods = getCharacterTraitModifiers(state);
+  const safeTip = Math.max(0, Math.round(tipAmount * traitMods.tipMultiplier));
   if (safeTip <= 0) return state;
   const prevCareer = state.career ?? createInitialCareerState();
   return {
@@ -481,6 +484,7 @@ export function unlockProvinceLicense(
     };
   }
 
+  const traitMods = getCharacterTraitModifiers(state);
   return {
     ok: true,
     costPaid: req.licenseCost,
@@ -488,7 +492,7 @@ export function unlockProvinceLicense(
       ...state,
       cash: Math.round(state.cash - req.licenseCost),
       unlockedCityPlates: [...unlocked, plate].sort((a, b) => a - b),
-      companyXp: Math.round((state.companyXp ?? 0) + 120),
+      companyXp: Math.round((state.companyXp ?? 0) + Math.round(120 * traitMods.xpMultiplier)),
       lastSavedAt: now,
     },
   };
@@ -508,10 +512,13 @@ export function isEligibleForFirstShopGrant(
 export function getEffectiveEstablishmentCost(
   blueprint: BusinessBlueprint,
   location: Pick<PinLocationInfo, 'landMultiplier'>,
-  ownBusinessCount: number
+  ownBusinessCount: number,
+  rentDiscountRate = 0
 ): number {
+  const safeDiscount = Math.max(0, Math.min(0.35, rentDiscountRate));
   if (isEligibleForFirstShopGrant(ownBusinessCount, blueprint.id)) {
-    return FIRST_SHOP_ENTRY_COST;
+    return Math.round((FIRST_SHOP_ENTRY_COST * (1 - safeDiscount)) / 500) * 500;
   }
-  return Math.round((blueprint.baseCost * location.landMultiplier) / 1000) * 1000;
+  const base = Math.round((blueprint.baseCost * location.landMultiplier) / 1000) * 1000;
+  return Math.round((base * (1 - safeDiscount)) / 1000) * 1000;
 }

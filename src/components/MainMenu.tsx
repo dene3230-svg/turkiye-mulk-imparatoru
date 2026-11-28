@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   AlertCircle,
   Briefcase,
-  Check,
   Crown,
   Eye,
   EyeOff,
@@ -10,21 +9,19 @@ import {
   Loader2,
   LogIn,
   LogOut,
-  MapPin,
   Play,
   RefreshCw,
-  Search,
   Settings,
-  User,
   UserPlus,
   X,
 } from 'lucide-react';
-import type { ThemeMode, UserProfile } from '../types/game';
-import { TURKEY_PROVINCES, getProvinceByPlate } from '../game/provinces81';
+import type { CharacterProfile, ThemeMode, UserProfile } from '../types/game';
 import { APP_VERSION } from '../services/otaUpdate';
 import { validateLoginInput, validateRegistrationInput } from '../lib/playerAuth';
 import { STARTING_CASH } from '../game/catalog';
 import { formatTL } from '../game/economy';
+import { CharacterCreatorScreen } from './CharacterCreatorScreen';
+import { CharacterAvatar2D } from './CharacterAvatar2D';
 
 interface MainMenuProps {
   theme: ThemeMode;
@@ -35,12 +32,12 @@ interface MainMenuProps {
   onClearAuthError: () => void;
   startingCityPlate: number;
   onSelectStartingCity: (plate: number) => void;
-  onStartGuest: (characterName: string, cityPlate: number) => void;
+  onStartGuest: (character: CharacterProfile, cityPlate: number) => void;
   onLogin: (username: string, password: string) => Promise<void>;
   onRegister: (
     username: string,
     password: string,
-    displayName: string,
+    character: CharacterProfile,
     cityPlate: number
   ) => Promise<void>;
   onContinueLoggedIn: () => void;
@@ -50,10 +47,15 @@ interface MainMenuProps {
   checkingUpdate: boolean;
   savedBusinessCount: number;
   savedCash?: number;
+  savedCharacter?: CharacterProfile;
 }
 
-type ModalMode = null | 'guest_setup' | 'auth' | 'help';
+type ModalMode = null | 'auth' | 'help';
 type AuthTab = 'login' | 'register';
+type CreatorFlowState =
+  | null
+  | { kind: 'guest' }
+  | { kind: 'register'; username: string; password: string; defaultName?: string };
 
 /** Card 1: Animated 2D Cafe Barista Scene — ÇALIŞ VE BİRİKTİR */
 function Step1WorkArt() {
@@ -281,12 +283,11 @@ export function MainMenu({
   checkingUpdate,
   savedBusinessCount,
   savedCash,
+  savedCharacter,
 }: MainMenuProps) {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [activeTab, setActiveTab] = useState<AuthTab>('register');
-  const [characterName, setCharacterName] = useState('');
-  const [citySearch, setCitySearch] = useState('');
-  const [selectedPlate, setSelectedPlate] = useState<number>(startingCityPlate);
+  const [creatorFlow, setCreatorFlow] = useState<CreatorFlowState>(null);
 
   // Account auth fields
   const [username, setUsername] = useState('');
@@ -296,12 +297,8 @@ export function MainMenu({
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedPlate(startingCityPlate);
-  }, [startingCityPlate]);
-
-  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Enter' || e.key === ' ') && user && !modalMode) {
+      if ((e.key === 'Enter' || e.key === ' ') && user && !modalMode && !creatorFlow) {
         const activeTag = document.activeElement?.tagName;
         if (activeTag === 'BUTTON' || activeTag === 'INPUT' || activeTag === 'SELECT') return;
         e.preventDefault();
@@ -310,46 +307,20 @@ export function MainMenu({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [user, modalMode, onContinueLoggedIn]);
+  }, [user, modalMode, creatorFlow, onContinueLoggedIn]);
 
-  const filteredProvinces = useMemo(() => {
-    const q = citySearch.trim().toLocaleLowerCase('tr-TR');
-    if (!q) return TURKEY_PROVINCES;
-    return TURKEY_PROVINCES.filter(
-      (p) =>
-        p.name.toLocaleLowerCase('tr-TR').includes(q) ||
-        p.code.includes(q) ||
-        p.region.toLocaleLowerCase('tr-TR').includes(q)
-    );
-  }, [citySearch]);
-
-  const selectedProvince = getProvinceByPlate(selectedPlate);
-
-  const openGuestSetup = () => {
+  const openGuestCreator = () => {
     setLocalError(null);
     onClearAuthError();
-    setCitySearch('');
-    setModalMode('guest_setup');
+    setModalMode(null);
+    setCreatorFlow({ kind: 'guest' });
   };
 
   const openAuthModal = (tab: AuthTab = 'login') => {
     setLocalError(null);
     onClearAuthError();
     setActiveTab(tab);
-    setCitySearch('');
     setModalMode('auth');
-  };
-
-  const handleGuestSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const clean = characterName.trim();
-    if (clean.length < 2) {
-      setLocalError('Lütfen en az 2 karakterli bir karakter adı girin.');
-      return;
-    }
-    setLocalError(null);
-    onSelectStartingCity(selectedPlate);
-    onStartGuest(clean, selectedPlate);
   };
 
   const handleAuthSubmit = async (e: FormEvent) => {
@@ -366,17 +337,55 @@ export function MainMenu({
       }
       await onLogin(check.username, password);
     } else {
-      const check = validateRegistrationInput({ username, password, displayName });
+      const check = validateRegistrationInput({
+        username,
+        password,
+        displayName: displayName.trim() || username.trim(),
+      });
       if (!check.ok) {
-        setLocalError(check.error ?? 'Lütfen tüm zorunlu alanları eksiksiz doldurun.');
+        setLocalError(check.error ?? 'Lütfen kullanıcı adı ve şifre alanlarını eksiksiz doldurun.');
         return;
       }
-      onSelectStartingCity(selectedPlate);
-      await onRegister(check.username, password, check.displayName, selectedPlate);
+      setModalMode(null);
+      setCreatorFlow({
+        kind: 'register',
+        username: check.username,
+        password,
+        defaultName: displayName.trim() || undefined,
+      });
     }
   };
 
   const displayedError = localError || authError;
+
+  if (creatorFlow) {
+    return (
+      <CharacterCreatorScreen
+        modeLabel={
+          creatorFlow.kind === 'register'
+            ? `Yeni Hesap (@${creatorFlow.username})`
+            : 'Misafir Kariyer'
+        }
+        initialName={creatorFlow.kind === 'register' ? creatorFlow.defaultName : undefined}
+        initialCityPlate={startingCityPlate}
+        submitting={authLoading}
+        externalError={authError}
+        onBack={() => {
+          onClearAuthError();
+          setCreatorFlow(null);
+        }}
+        onOpenSettings={onOpenSettings}
+        onComplete={(profile, cityPlate) => {
+          onSelectStartingCity(cityPlate);
+          if (creatorFlow.kind === 'guest') {
+            onStartGuest(profile, cityPlate);
+          } else {
+            void onRegister(creatorFlow.username, creatorFlow.password, profile, cityPlate);
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <main
@@ -465,9 +474,15 @@ export function MainMenu({
             className="mt-4 flex w-full max-w-2xl flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[#7A9E7E]/50 bg-[#222B38] px-4 py-3"
           >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8AE7D]/60 bg-[#181F29] text-sm font-bold text-[#C8AE7D]">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
+              {savedCharacter ? (
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border border-[#C8AE7D]/60 bg-[#181F29]">
+                  <CharacterAvatar2D profile={savedCharacter} mode="bust" />
+                </div>
+              ) : (
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8AE7D]/60 bg-[#181F29] text-sm font-bold text-[#C8AE7D]">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <p data-testid="menu-patron-name" className="truncate text-sm font-bold text-slate-100">
@@ -515,7 +530,7 @@ export function MainMenu({
             type="button"
             data-start={!user ? 'true' : undefined}
             data-testid="start-guest-btn"
-            onClick={openGuestSetup}
+            onClick={openGuestCreator}
             className="flex min-h-[48px] min-w-[230px] items-center justify-center gap-2 rounded-full bg-[#C8AE7D] px-7 py-2.5 text-sm font-bold text-[#181F29] hover:bg-[#D2BB8E] whitespace-nowrap"
           >
             <Play className="h-4 w-4" strokeWidth={1.75} />
@@ -572,170 +587,7 @@ export function MainMenu({
         </div>
       </footer>
 
-      {/* MODAL 1: Guest Character Creation & 1-of-81 Starting Province Picker */}
-      {modalMode === 'guest_setup' && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          data-testid="guest-setup-modal"
-          className="fixed inset-0 z-[1260] flex items-center justify-center bg-black/75 p-4"
-        >
-          <form
-            onSubmit={handleGuestSubmit}
-            noValidate
-            className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-[20px] border border-[#334155] bg-[#222B38] p-5 text-slate-100"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C8AE7D]">
-                  Yeni Kariyer · Misafir Girişi
-                </p>
-                <h2 className="mt-0.5 text-base font-bold text-slate-100">
-                  Karakterini Oluştur ve Başlangıç İlini Seç
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  81 ilden yalnızca 1 başlangıç ili açık başlar; cebinde {formatTL(STARTING_CASH)} ile
-                  Çalışan olarak serüvene başlarsın.
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Kapat"
-                onClick={() => setModalMode(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#334155] bg-[#181F29] text-slate-300 hover:bg-[#2A3444]"
-              >
-                <X className="h-4 w-4" strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3 overflow-y-auto panel-scroll pr-1">
-              <div>
-                <label htmlFor="guest-character-name" className="block text-xs font-semibold text-slate-200">
-                  Karakter Adı <span className="text-[#B86B5E]">*</span>
-                </label>
-                <div className="relative mt-1">
-                  <User
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                    strokeWidth={1.5}
-                  />
-                  <input
-                    id="guest-character-name"
-                    data-testid="guest-character-name-input"
-                    type="text"
-                    value={characterName}
-                    onChange={(e) => {
-                      setCharacterName(e.target.value);
-                      if (localError) setLocalError(null);
-                    }}
-                    placeholder="Örn: Emre Kaya"
-                    maxLength={28}
-                    autoFocus
-                    className="min-h-[42px] w-full rounded-[14px] border border-[#334155] bg-[#181F29] pl-9 pr-3 text-sm font-medium text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <label htmlFor="city-search-input" className="block text-xs font-semibold text-slate-200">
-                    Başlangıç İli (1 / 81 Açık İl)
-                  </label>
-                  <span className="text-xs font-semibold text-[#C8AE7D]">
-                    Seçili: {selectedProvince.code} {selectedProvince.name}
-                  </span>
-                </div>
-
-                <div className="relative mt-1.5">
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
-                    strokeWidth={1.5}
-                  />
-                  <input
-                    id="city-search-input"
-                    type="text"
-                    value={citySearch}
-                    onChange={(e) => setCitySearch(e.target.value)}
-                    placeholder="Plaka, il veya bölge ara (ör. 34, Ankara, Ege)..."
-                    className="min-h-[36px] w-full rounded-[12px] border border-[#334155] bg-[#181F29] pl-8 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
-                  />
-                </div>
-
-                <div
-                  data-testid="province-picker-grid"
-                  className="mt-2 grid max-h-44 grid-cols-2 gap-1.5 overflow-y-auto rounded-[14px] border border-[#334155] bg-[#181F29] p-2 sm:grid-cols-3 panel-scroll"
-                >
-                  {filteredProvinces.map((prov) => {
-                    const isSelected = prov.plate === selectedPlate;
-                    return (
-                      <button
-                        key={prov.plate}
-                        type="button"
-                        data-testid={`pick-province-${prov.plate}`}
-                        onClick={() => setSelectedPlate(prov.plate)}
-                        className={`flex items-center justify-between rounded-[10px] border px-2.5 py-1.5 text-left text-xs transition-colors ${
-                          isSelected
-                            ? 'border-[#C8AE7D] bg-[#C8AE7D]/20 font-bold text-slate-100'
-                            : 'border-[#334155]/70 bg-[#222B38] text-slate-300 hover:border-[#7E96B0]'
-                        }`}
-                      >
-                        <span className="truncate">
-                          <span className="mr-1 font-mono-num text-[10px] text-slate-400">
-                            {prov.code}
-                          </span>
-                          {prov.name}
-                        </span>
-                        {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-[#C8AE7D]" strokeWidth={2} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[#334155] bg-[#181F29] px-3.5 py-2.5 text-xs">
-                <span className="text-slate-400">
-                  Statü: <strong className="text-slate-100">Çalışan</strong>
-                </span>
-                <span className="text-slate-400">
-                  Başlangıç Parası: <strong className="font-mono-num text-[#7A9E7E]">{formatTL(STARTING_CASH)}</strong>
-                </span>
-                <span className="text-slate-400">
-                  Açık İl: <strong className="font-mono-num text-[#C8AE7D]">1 / 81</strong>
-                </span>
-              </div>
-
-              {displayedError && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-[12px] border border-[#B86B5E]/50 bg-[#B86B5E]/15 px-3 py-2 text-xs text-[#E8B4AA]"
-                >
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#B86B5E]" strokeWidth={1.5} />
-                  <span>{displayedError}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setModalMode(null)}
-                className="min-h-[42px] rounded-[14px] border border-[#334155] bg-[#181F29] px-4 text-xs font-semibold text-slate-300 hover:bg-[#2A3444]"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                data-testid="confirm-guest-start-btn"
-                className="flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-[14px] bg-[#C8AE7D] px-4 text-xs font-bold text-[#181F29] hover:bg-[#D2BB8E]"
-              >
-                <MapPin className="h-4 w-4" strokeWidth={1.75} />
-                <span>{selectedProvince.name} İlinde Başla ({formatTL(STARTING_CASH)})</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* MODAL 2: Account Login / Register Modal */}
+      {/* MODAL: Account Login / Register Modal */}
       {modalMode === 'auth' && (
         <div
           role="dialog"
@@ -860,10 +712,10 @@ export function MainMenu({
               </div>
 
               {activeTab === 'register' && (
-                <>
+                <div className="space-y-2">
                   <div>
                     <label htmlFor="auth-displayname" className="block text-xs font-semibold text-slate-300">
-                      Karakter Adı <span className="text-[#B86B5E]">*</span>
+                      Karakter Adı <span className="text-slate-500">(İsteğe bağlı)</span>
                     </label>
                     <input
                       id="auth-displayname"
@@ -875,31 +727,16 @@ export function MainMenu({
                         setLocalError(null);
                         onClearAuthError();
                       }}
-                      placeholder="Örn: Kemal Demir"
+                      placeholder="Bir sonraki adımda özelleştirebilirsin"
                       maxLength={32}
                       className="mt-1 min-h-[38px] w-full rounded-[12px] border border-[#334155] bg-[#181F29] px-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-[#C8AE7D] focus:outline-none"
                     />
                   </div>
-
-                  <div>
-                    <label htmlFor="hq-city-select" className="block text-xs font-semibold text-slate-300">
-                      Başlangıç İli (Diğer 80 İl Kilitli Başlar)
-                    </label>
-                    <select
-                      id="hq-city-select"
-                      data-testid="starting-city-select"
-                      value={selectedPlate}
-                      onChange={(e) => setSelectedPlate(Number(e.target.value))}
-                      className="mt-1 min-h-[38px] w-full rounded-[12px] border border-[#334155] bg-[#181F29] px-3 text-xs font-medium text-slate-100 focus:border-[#C8AE7D] focus:outline-none"
-                    >
-                      {TURKEY_PROVINCES.map((prov) => (
-                        <option key={prov.plate} value={prov.plate}>
-                          {prov.code} {prov.name} ({prov.region})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
+                  <p className="rounded-[12px] border border-[#334155] bg-[#181F29] px-3 py-2 text-[11px] text-slate-400">
+                    Devam ettiğinde karakterini (görünüm, kıyafet, başlangıç yeteneği) tasarlayıp
+                    81 ilden başlangıç şehrini seçeceksin.
+                  </p>
+                </div>
               )}
 
               {displayedError && (
@@ -923,7 +760,7 @@ export function MainMenu({
               {authLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
-                  <span>{activeTab === 'login' ? 'Giriş Yapılıyor...' : 'Hesap Oluşturuluyor...'}</span>
+                  <span>{activeTab === 'login' ? 'Giriş Yapılıyor...' : 'Yönlendiriliyor...'}</span>
                 </>
               ) : activeTab === 'login' ? (
                 <>
@@ -933,7 +770,7 @@ export function MainMenu({
               ) : (
                 <>
                   <UserPlus className="h-4 w-4" strokeWidth={1.75} />
-                  <span>Hesap Oluştur ve Başla ({formatTL(STARTING_CASH)})</span>
+                  <span>Karakterini Tasarla →</span>
                 </>
               )}
             </button>

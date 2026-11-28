@@ -800,6 +800,7 @@ export interface EmpireState {
   hq?: HeadquartersInfo | null; // Permanent HQ city & first business coordinates
   unlockedCityPlates?: number[]; // v1.8.0: Starts with ONLY 1 chosen starting province; remaining 80 locked
   career?: CareerState; // v1.8.0: Employee -> Shift Work -> Promotion -> Entrepreneur loop
+  character?: CharacterProfile; // v1.8.0: Customizable 2D character appearance, outfit & permanent starting trait
   businesses: OwnedBusiness[];
   cityManagers: HiredStaff[]; // bolge_sorumlusu & genel_mudur executives
   candidatePool: StaffCandidate[]; // Renewable 1-5 star HR pool
@@ -1084,5 +1085,46 @@ export interface ProvinceUnlockRequirement {
   licenseCost: number;
   alreadyUnlocked: boolean;
 }
+
+// ── v1.8.0 Character Creator & Starting Trait Types ───────────────────────────
+
+export type CharacterGender = 'male' | 'female';
+
+export type CharacterHairStyleId =
+  | 'kisa'
+  | 'dalgali'
+  | 'uzun'
+  | 'topuz'
+  | 'kut'
+  | 'yan_ayrik'
+  | 'daginik';
+
+export type CharacterAccessoryId = 'yok' | 'gozluk' | 'kupe' | 'sakal_biyik';
+
+export type CharacterOutfitId =
+  | 'barista_onlugu'
+  | 'gunluk_kiyafet'
+  | 'ofis_gomlegi'
+  | 'isci_tulumu'
+  | 'takim_elbise';
+
+export type CharacterTraitId =
+  | 'sosyal'
+  | 'hizli_ogrenen'
+  | 'pazarlikci'
+  | 'hesap_uzmani';
+
+export interface CharacterProfile {
+  name: string;
+  gender: CharacterGender;
+  hairStyle: CharacterHairStyleId;
+  hairColor: string;
+  skinTone: string;
+  accessory: CharacterAccessoryId;
+  outfit: Exclude<CharacterOutfitId, 'takim_elbise'>;
+  outfitColor: string;
+  traitId: CharacterTraitId;
+}
+
 
 

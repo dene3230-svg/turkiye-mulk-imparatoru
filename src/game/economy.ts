@@ -1,6 +1,7 @@
 import type {
   BusinessBlueprint,
   BusinessTypeId,
+  CharacterProfile,
   CompanyTier,
   DayEndBranchLine,
   DayEndSummary,
@@ -108,6 +109,7 @@ import {
   getEffectiveEstablishmentCost,
   getUnlockedCityPlates,
 } from './careerEngine';
+import { getCharacterTraitModifiers } from './characterEngine';
 
 export const HIGH_VAULT_NOTIFY_RATIO = 0.75;
 export const STARTING_GAME_MINUTES = 9 * 60; // Gün 1 • 09:00
@@ -237,7 +239,8 @@ export function resolveInitialFocusTarget(state: EmpireState): {
 
 export function createInitialEmpireState(
   now = Date.now(),
-  startingCityPlate = DEFAULT_PROVINCE_PLATE
+  startingCityPlate = DEFAULT_PROVINCE_PLATE,
+  character?: CharacterProfile
 ): EmpireState {
   const initialTemplate = MARKET_EVENT_TEMPLATES[2]; // Ticari Emlak Canlanması
   return {
@@ -248,6 +251,7 @@ export function createInitialEmpireState(
     hq: createHeadquartersForCity(startingCityPlate),
     unlockedCityPlates: [startingCityPlate],
     career: createInitialCareerState(),
+    character,
     businesses: [],
     cityManagers: [],
     candidatePool: generateCandidatePool(now, 'kafe'),
@@ -879,7 +883,13 @@ export function purchaseBusiness(
     };
   }
 
-  const baseCost = getEffectiveEstablishmentCost(bp, location, state.businesses.length);
+  const traitMods = getCharacterTraitModifiers(state);
+  const baseCost = getEffectiveEstablishmentCost(
+    bp,
+    location,
+    state.businesses.length,
+    traitMods.rentDiscountRate
+  );
   const licenseFee = franchiseBrand ? franchiseBrand.licenseFee : 0;
   const totalCost = baseCost + licenseFee;
   if (state.cash < totalCost) {
@@ -1357,10 +1367,14 @@ export function tickEconomy(
       (cityDailyPayrollByPlate.get(b.cityPlate) ?? 0) /
         Math.max(1, cityBranchCountByPlate.get(b.cityPlate) ?? 1)
     );
-    const branchStaffWagesTotal = Math.round((ownStaffDaily + sharedCityDaily) * daysPassed);
+    const traitMods = getCharacterTraitModifiers(state);
+    const branchStaffWagesTotal = Math.round(
+      (ownStaffDaily + sharedCityDaily) * daysPassed * (1 - traitMods.expenseDiscountRate)
+    );
     const currentInflation = Math.max(1.0, state.inflationIndex ?? 1.0);
+    const rentMultiplier = (1 - traitMods.rentDiscountRate) * (1 - traitMods.expenseDiscountRate);
     const branchRentAndUtil = Math.round(
-      calculateDailyRentAndUtilities(b) * currentInflation * daysPassed
+      calculateDailyRentAndUtilities(b) * currentInflation * daysPassed * rentMultiplier
     );
 
     let branchGross = 0;
@@ -1374,7 +1388,8 @@ export function tickEconomy(
         automation.bulkSupplyDiscount +
         chainStatus.supplyDiscount +
         officeBenefits.supplyDiscountRate +
-        getMegaProjectSupplyDiscountBonus(state);
+        getMegaProjectSupplyDiscountBonus(state) +
+        traitMods.expenseDiscountRate;
       if (hasFactorySupplySynergy(b, state.businesses)) {
         discountPct += FACTORY_SUPPLY_DISCOUNT;
       }

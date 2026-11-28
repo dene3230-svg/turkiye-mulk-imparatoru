@@ -34,6 +34,7 @@ import {
   getCompletedMegaProjectsDailyIncome,
   getMegaProjectSupplyDiscountBonus,
 } from './hardcoreEconomyEngine';
+import { getCharacterTraitModifiers } from './characterEngine';
 
 export type AccountCardId = 'cash' | 'credit' | 'investments' | 'expenses';
 export type OperationCardId = 'businesses' | 'office' | 'growth';
@@ -283,15 +284,25 @@ export function computeExecutiveDashboardMetrics(
   const completedMegaProjectsDailyIncome = getCompletedMegaProjectsDailyIncome(state);
   dailyEstimatedRevenue += dailyRentalIncome + completedMegaProjectsDailyIncome;
 
+  const traitMods = getCharacterTraitModifiers(state);
   const currentInflation = Math.max(1.0, safeNum(state.inflationIndex, 1.0));
   const megaSupplyBonus = getMegaProjectSupplyDiscountBonus(state);
-  dailyRentUtilities = Math.round(dailyRentUtilities * currentInflation) + dailyRentalMaintenance;
+  const rentTraitFactor = (1 - traitMods.rentDiscountRate) * (1 - traitMods.expenseDiscountRate);
+  dailyRentUtilities =
+    Math.round(dailyRentUtilities * currentInflation * rentTraitFactor) +
+    Math.round(dailyRentalMaintenance * (1 - traitMods.expenseDiscountRate));
   dailyEstimatedSupply = Math.round(
-    dailyEstimatedSupply * currentInflation * Math.max(0.5, 1 - megaSupplyBonus)
+    dailyEstimatedSupply *
+      currentInflation *
+      Math.max(0.5, 1 - megaSupplyBonus - traitMods.expenseDiscountRate)
   );
 
-  const dailyPayrollWithSgk = computeDailyPayrollWithSgk(state);
-  const dailyHqBureaucracyCost = calculateHqBureaucracyDailyCost(businesses.length);
+  const dailyPayrollWithSgk = Math.round(
+    computeDailyPayrollWithSgk(state) * (1 - traitMods.expenseDiscountRate)
+  );
+  const dailyHqBureaucracyCost = Math.round(
+    calculateHqBureaucracyDailyCost(businesses.length) * (1 - traitMods.expenseDiscountRate)
+  );
   const preTaxDailyNet =
     dailyEstimatedRevenue -
     (dailyPayrollWithSgk + dailyRentUtilities + dailyEstimatedSupply + dailyHqBureaucracyCost);
